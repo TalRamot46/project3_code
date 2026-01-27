@@ -1,10 +1,10 @@
 import numpy as np
-from geometry import Geometry
-from eos import pressure_ideal_gas, sound_speed
-from viscosity import artificial_viscosity
-from grid import cell_volumes
-from state import HydroState
-from boundary import apply_velocity_bc
+from .geometry import Geometry
+from .eos import pressure_ideal_gas, sound_speed
+from .viscosity import artificial_viscosity
+from .grid import cell_volumes
+from .state import HydroState
+from .boundary import apply_velocity_bc
 
 def compute_acceleration_nodes(x_nodes: np.ndarray,
                                p_cells: np.ndarray,
@@ -38,23 +38,6 @@ def compute_acceleration_nodes(x_nodes: np.ndarray,
     a[0] = 0.0
     a[-1] = 0.0
     return a
-
-
-def compute_dt_cfl(x_nodes, u_nodes, rho_cells, p_cells, gamma, CFL):
-    # 1) acoustic CFL
-    c = sound_speed(rho_cells, p_cells, gamma)           # cell-centered
-    dx = x_nodes[1:] - x_nodes[:-1]
-    dt_sound = CFL * np.min(dx / (c + 1e-30))
-
-    # 2) mesh-crossing limiter (prevents x_{i+1} < x_i after update)
-    # cell is collapsing if u_left > u_right
-    du = u_nodes[:-1] - u_nodes[1:]                     # per cell
-    collapsing = du > 0.0
-    if np.any(collapsing):
-        dt_cross = CFL * np.min(dx[collapsing] / (du[collapsing] + 1e-30))
-    else:
-        dt_cross = np.inf
-    return min(dt_sound, dt_cross)
 
 def step_lagrangian(state: HydroState,
                     m_cells: np.ndarray,

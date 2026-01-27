@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import numpy as np
-from geometry import Geometry
+from .geometry import Geometry
 
 @dataclass
 class Grid1D:

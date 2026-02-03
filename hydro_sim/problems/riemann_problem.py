@@ -18,7 +18,7 @@ class RiemannCase:
     sigma_visc: float = 1.0
     title: str = ""
 
-RIEMANN_CASES = {
+RIEMANN_TEST_CASES = {
     1: RiemannCase(1, (1.0,0.0,1.0), (0.125,0.0,0.1), 0.25, sigma_visc=1.0, title="Sod-like"),
     2: RiemannCase(2, (1.0,0.0,1000.0), (1.0,0.0,0.01), 0.012, sigma_visc=1.0, title="Strong pressure jump"),
     3: RiemannCase(3, (1.0,0.0,0.01), (1.0,0.0,100.0), 0.035, sigma_visc=1.0, title="Reverse pressure jump"),

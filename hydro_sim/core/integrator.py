@@ -5,6 +5,7 @@ from .viscosity import artificial_viscosity
 from .grid import cell_volumes
 from .state import HydroState
 from .boundary import apply_velocity_bc, apply_pressure_bc
+import matplotlib.pyplot as plt
 
 def compute_acceleration_nodes(x_nodes, p_cells, q_cells, m_cells, geom,
                                *, p_left=None, q_left=0.0, p_right=None, q_right=0.0):
@@ -84,6 +85,12 @@ def step_lagrangian(state: HydroState,
     # p_left = p_left * t_bc**gamma
     a_new = compute_acceleration_nodes(x_new, p_new, q_new, m_cells, geom, p_left=p_left)
 
+    # print(f"dt={dt:.4e} \t p_left | p_new[1:10]={p_left}|{p_new[0:10]}")
+    # plt.plot(1/2 * (x_new[1:] + x_new[:-1]) , p_new)
+    # plt.xlabel("Position")
+    # plt.ylabel("Pressure")
+    # plt.title(f"Pressure profile at t={state.t + dt:.4e}")
+    # plt.show()
 
     # (19) full-step velocity
     u_new = u_half + 0.5 * dt * a_new

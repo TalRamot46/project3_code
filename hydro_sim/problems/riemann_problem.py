@@ -2,27 +2,53 @@
 import numpy as np
 from dataclasses import dataclass
 
+from problems.base_problem import ProblemCase
 from core.eos import internal_energy_from_prho
 from core.grid import cell_volumes, masses_from_initial_rho
 from core.state import HydroState
 
+
 @dataclass(frozen=True)
-class RiemannCase:
-    test_id: int
-    left: tuple      # (rho,u,p)
-    right: tuple     # (rho,u,p)
-    t_end: float
+class RiemannCase(ProblemCase):
+    """
+    Configuration for Riemann (shock tube) problems.
+    
+    Defines left and right states separated by a discontinuity at x0.
+    
+    Attributes:
+        test_id: Identifier for the test case
+        left: Left state tuple (rho, u, p)
+        right: Right state tuple (rho, u, p)
+        x0: Initial discontinuity position
+        sigma_visc: Artificial viscosity coefficient
+    """
+    test_id: int = 0
+    left: tuple = (1.0, 0.0, 1.0)      # (rho,u,p)
+    right: tuple = (0.125, 0.0, 0.1)   # (rho,u,p)
     x_min: float = -1.0
-    x_max: float =  1.0
+    x_max: float = 1.0
+    t_end: float = 0.25
     x0: float = 0.0
     sigma_visc: float = 1.0
     title: str = ""
 
 RIEMANN_TEST_CASES = {
-    1: RiemannCase(1, (1.0,0.0,1.0), (0.125,0.0,0.1), 0.25, sigma_visc=1.0, title="Sod-like"),
-    2: RiemannCase(2, (1.0,0.0,1000.0), (1.0,0.0,0.01), 0.012, sigma_visc=1.0, title="Strong pressure jump"),
-    3: RiemannCase(3, (1.0,0.0,0.01), (1.0,0.0,100.0), 0.035, sigma_visc=1.0, title="Reverse pressure jump"),
-    4: RiemannCase(4, (5.99924,19.5975,460.894), (5.99242,-6.19633,46.0950), 0.035, sigma_visc=3.0, title="Colliding streams"),
+    1: RiemannCase(
+        test_id=1, left=(1.0, 0.0, 1.0), right=(0.125, 0.0, 0.1),
+        x_min=-1.0, x_max=1.0, t_end=0.25, sigma_visc=1.0, title="Sod-like"
+    ),
+    2: RiemannCase(
+        test_id=2, left=(1.0, 0.0, 1000.0), right=(1.0, 0.0, 0.01),
+        x_min=-1.0, x_max=1.0, t_end=0.012, sigma_visc=1.0, title="Strong pressure jump"
+    ),
+    3: RiemannCase(
+        test_id=3, left=(1.0, 0.0, 0.01), right=(1.0, 0.0, 100.0),
+        x_min=-1.0, x_max=1.0, t_end=0.035, sigma_visc=1.0, title="Reverse pressure jump"
+    ),
+    4: RiemannCase(
+        test_id=4, left=(5.99924, 19.5975, 460.894), right=(5.99242, -6.19633, 46.0950),
+        x_min=-1.0, x_max=1.0, t_end=0.035, sigma_visc=3.0, title="Colliding streams"
+    ),
 }
 
 def init_planar_riemann_case(x_nodes, geom, gamma, case: RiemannCase, x0=0.0):

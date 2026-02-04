@@ -2,42 +2,36 @@
 from dataclasses import dataclass
 import numpy as np
 
+from problems.base_problem import ProblemCase
 from core.state import HydroState
 from core.eos import internal_energy_from_prho
 from core.grid import cell_volumes, masses_from_initial_rho
-from core.state import HydroState
 
-@dataclass
-class DrivenShockCase:
-    name: str
-    x_min: float
-    x_max: float
-    t_end: float
-    rho0: float
-    p0: float
-    u0: float
-    gamma: float
+
+@dataclass(frozen=True)
+class DrivenShockCase(ProblemCase):
+    """
+    Configuration for driven shock problems.
+    
+    Models a shock driven by a time-dependent boundary condition
+    (pressure or velocity) at the left boundary.
+    
+    Attributes:
+        rho0: Initial uniform density
+        p0: Initial uniform pressure
+        u0: Initial uniform velocity
+        gamma: Adiabatic index
+    """
+    rho0: float = 1.0
+    p0: float = 1.0
+    u0: float = 0.0
+    gamma: float = 5.0/3.0
+    tau: float = 0.0
+    P0: float = 1.0
 
     # Boundary driving
     def p_left(self, t):
-        raise NotImplementedError
-
-    def u_left(self, t):
-        return 0.0  # default: pressure-driven piston
-
-class PowerLawPressureDrive(DrivenShockCase):
-    def __init__(self, *, tau, P0, **kwargs):
-        super().__init__(**kwargs)
-        self.tau = tau
-        self.P0 = P0
-
-    def p_left(self, t):
         return self.P0 * t**self.tau
-
-# problems/driven_shock_init.py
-import numpy as np
-
-import numpy as np
 
 def init_planar_driven_shock_case(x_nodes, geom, gamma, case):
     x_nodes = np.asarray(x_nodes, dtype=float)

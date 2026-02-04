@@ -59,6 +59,7 @@ def compute_shock_profiles(mat: Material, P0: float, Pw, times=None, *, save_npz
         "Pw": Pw,
         "meta": dict(m0=m0, mw=mw, e0=e0, ew=ew, u0=u0, uw=uw, xsi=xsi, z=z, utilda=utilda, ufront=ufront),
         "m_shock": [],
+        "x_shock": [],
         "P_shock": [],
         "u_shock": [],
         "rho_shock": [],
@@ -97,6 +98,14 @@ def compute_shock_profiles(mat: Material, P0: float, Pw, times=None, *, save_npz
             / 11605.0
         )
 
+        # integrate 1/rho over m to get x
+        x_prof = np.zeros_like(m_prof)
+        x_prof[0] = 1/rho_prof[0] 
+        for i in range(1, len(m_prof)):
+            dm = m_prof[i] - m_prof[i - 1]
+            x_prof[i] = x_prof[i - 1] + dm / ((rho_prof[i] + rho_prof[i - 1]) / 2.0)
+        
+
         # numeric d/dm then convert to d/dx using mid(rho)
         dm = np.diff(m_prof)
         rho_mid = mid(rho_prof)
@@ -106,6 +115,7 @@ def compute_shock_profiles(mat: Material, P0: float, Pw, times=None, *, save_npz
         dTdx = (np.diff(T_prof) / dm) * rho_mid
 
         out["m_shock"].append(m_prof)
+        out["x_shock"].append(x_prof)   
         out["P_shock"].append(P_prof)
         out["u_shock"].append(u_prof)
         out["rho_shock"].append(rho_prof)

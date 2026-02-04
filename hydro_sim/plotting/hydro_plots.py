@@ -141,16 +141,16 @@ def plot_shock_results(
     u_cells = 0.5 * (state.u[:-1] + state.u[1:])
     m_cells = x_cells * case.rho0
 
-    axes[0].plot(m_cells, state.rho, lw=2)
+    axes[0].plot(x_cells, state.rho, lw=2)
     _style_axis(axes[0], r"$\rho$")
     
-    axes[1].plot(m_cells, state.p, lw=2)
+    axes[1].plot(x_cells, state.p, lw=2)
     _style_axis(axes[1], r"$p$")
     
-    axes[2].plot(m_cells, u_cells, lw=2)
+    axes[2].plot(x_cells, u_cells, lw=2)
     _style_axis(axes[2], r"$u$")
     
-    axes[3].plot(m_cells, state.e, lw=2)
+    axes[3].plot(x_cells, state.e, lw=2)
     _style_axis(axes[3], r"$e$")
     axes[3].set_xlabel(r"$x$")
     

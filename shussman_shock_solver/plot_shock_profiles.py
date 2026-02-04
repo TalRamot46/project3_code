@@ -98,8 +98,13 @@ def plot_profiles(npz_path: str | Path, *, quantity: str, xaxis: str,
         # same xi grid for all times
         x_list = [xi_grid for _ in range(len(y_list))]
         xlabel = r"Self-similar coordinate $\xi$"
+    elif xa in ("x", "position"):
+        if "x_shock" not in D:
+            raise KeyError("Requested xaxis='x' but NPZ is missing 'x_shock'.")
+        x_list = _as_list(D["x_shock"])
+        xlabel = r"Position $x$"
     else:
-        raise ValueError("xaxis must be one of: m, xi")
+        raise ValueError("xaxis must be one of: m, xi, x")
 
     # Basic sanity: align counts
     nt = min(len(times), len(y_list), len(x_list))
@@ -197,7 +202,7 @@ def main():
         class Args:
             npz = "project_3/shussman_shock_solver/shock_profiles.npz"
             quantity = "P"
-            xaxis = "m"
+            xaxis = "x"
             save = None
             no_show = False
             title = None
@@ -216,8 +221,8 @@ def main():
     plot_profiles(
         args.npz,
         quantity="P",
-        xaxis="m",
-        save="project_3/shussman_shock_solver/shock_profiles_P_vs_m.png",
+        xaxis="x",
+        save="project_3/shussman_shock_solver/shock_profiles_P_vs_x.png",
         show=False,
         title="Pressure profiles at multiple times",
     )

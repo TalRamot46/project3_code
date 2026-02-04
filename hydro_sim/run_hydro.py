@@ -113,7 +113,7 @@ def get_default_args(problem: ProblemType):
     args.sigma = 1.0
     args.save = None
     args.no_show = False
-    args.gif = 'project_3/shussman_shock_solver/figures/driven_shock/shock.gif'
+    args.gif = 'project_3/hydro_sim/figures/shock1.gif'
     args.slider = True
     
     if problem == ProblemType.RIEMANN:
@@ -124,13 +124,13 @@ def get_default_args(problem: ProblemType):
     elif problem == ProblemType.SHOCK:
         args.problem = "shock"
         args.gamma = 1.25
-        args.t_end = 4e-9
+        args.t_end = 100e-9
         args.rho0 = 19.32
         args.p0 = 1e-3
         args.u0 = 0.0
         args.x_min = 0.0
-        args.x_max = 1 / 19.32 * 1e-7
-        args.P0 = 30.0
+        args.x_max = 3e-6 / args.rho0
+        args.P0 = 10.0
         args.tau = 0
         args.N = 1001
         args.CFL = 0.2

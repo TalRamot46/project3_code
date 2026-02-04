@@ -46,6 +46,9 @@ def simulate_driven_shock(case, *, Ncells, CFL, sigma_visc, store_every=10):
 
         # your stabilizers (fine)
         dt = min(dt, 0.05 * case.t_end, dt_prev * 1.1, case.t_end - state.t)
+        # if dt is nan choose 
+        if np.isnan(dt):
+            dt = min(0.05 * case.t_end, dt_prev * 1.1, case.t_end - state.t)
         dt_prev = dt
 
         state = step_lagrangian(

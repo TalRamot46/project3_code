@@ -48,17 +48,17 @@ def main():
     else:
         class Args:
             N = 1000
-            t_end = 0.1
+            t_end = 1e-6
             CFL = 0.2
-            sigma = 1.0
-            gamma = 1.4
-            rho0 = 1.0
-            p0 = 1e-3
+            sigma =1.0
+            gamma = 0.25
+            rho0 = 19.32
+            p0 = 1e-9
             u0 = 0.0
             x_min = 0.0
-            x_max = 1.0
-            P0 = 2.85
-            tau = 1.5
+            x_max = 1 / (19.32) * 1e-5
+            P0 = 1e-6
+            tau = 0
             save = None
             no_show = False
         args = Args()

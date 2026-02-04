@@ -124,16 +124,18 @@ def plot_driven_shock_slider(history: ShockHistory, case, savepath=None, show=Tr
 def plot_driven_shock_profiles(x_cells, rho, p, u, e, case, t, savepath=None, show=True):
     fig, axs = plt.subplots(4, 1, figsize=(7, 10), sharex=True)
 
-    axs[0].plot(x_cells, rho, lw=2)
+    m = x_cells * 1.932e1
+
+    axs[0].plot(m, rho, lw=2)
     axs[0].set_ylabel(r"$\rho$")
 
-    axs[1].plot(x_cells, p, lw=2)
+    axs[1].plot(m, p, lw=2)
     axs[1].set_ylabel(r"$p$")
 
-    axs[2].plot(x_cells, u, lw=2)
+    axs[2].plot(m, u, lw=2)
     axs[2].set_ylabel(r"$u$")
 
-    axs[3].plot(x_cells, e, lw=2)
+    axs[3].plot(m, e, lw=2)
     axs[3].set_ylabel(r"$e$")
     axs[3].set_xlabel(r"$x$")
 

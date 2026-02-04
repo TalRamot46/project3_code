@@ -21,7 +21,7 @@ def compute_acceleration_nodes(x_nodes, p_cells, q_cells, m_cells, geom,
 
     # left boundary node
     if p_left is not None:
-        a[0] = -2.0 * geom.beta * (x_nodes[0] ** geom.alpha) * (pq[0] - (p_left + q_left)) / (m_cells[0])
+        a[0] = -2.0 * geom.beta * (x_nodes[0] ** geom.alpha) * (pq[0] - (p_left + q_left)) / (2 * m_cells[0])
     else:
         a[0] = 0.0  # transmissive
 
@@ -75,10 +75,13 @@ def step_lagrangian(state: HydroState,
 
     # (17) pressure EOS
     p_new = pressure_ideal_gas(rho_new, e_new, gamma)
+    if not np.all(p_new >= 0):
+        pass
 
     # (18) acceleration from new (p,q)
     p_left = bc_left["p"] if isinstance(bc_left, dict) and bc_left["type"]=="pressure" else None
-
+    t_bc = state.t + dt
+    # p_left = p_left * t_bc**gamma
     a_new = compute_acceleration_nodes(x_new, p_new, q_new, m_cells, geom, p_left=p_left)
 
 

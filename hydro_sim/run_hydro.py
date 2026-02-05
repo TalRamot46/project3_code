@@ -37,7 +37,7 @@ class ProblemType(str, Enum):
     RIEMANN = "riemann"
     SHOCK = "shock"
     SEDOV = "sedov"
-
+    CONTINUOUS_SHOCK = "continuous_shock"  # alias for shock with tau=0
 
 # ============================================================================
 # Argument Parsing
@@ -131,10 +131,24 @@ def get_default_args(problem: ProblemType):
         args.x_min = 0.0
         args.x_max = 3e-6 / args.rho0
         args.P0 = 10.0
-        args.tau = 0
+        args.tau = 0.0
         args.N = 1001
         args.CFL = 0.2
-        
+    
+    elif problem == ProblemType.CONTINUOUS_SHOCK:
+        args.problem = "shock"
+        args.gamma = 1.25
+        args.t_end = 5e-3
+        args.rho0 = 19.32
+        args.p0 = 1e-3
+        args.u0 = 0.0
+        args.x_min = 0.0
+        args.x_max = 3e-3 / args.rho0
+        args.P0 = 10.0
+        args.tau = 1.0
+        args.N = 2001
+        args.CFL = 0.2
+
     elif problem == ProblemType.SEDOV:
         args.problem = "sedov"
         args.case = "standard_spherical"
@@ -301,7 +315,7 @@ def main():
         args = parser.parse_args()
     else:
         # Default to Riemann for testing
-        args = get_default_args(ProblemType.SHOCK)
+        args = get_default_args(ProblemType.CONTINUOUS_SHOCK)
     
     # Dispatch to appropriate runner
     if args.problem == "riemann":

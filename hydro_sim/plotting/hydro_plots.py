@@ -277,10 +277,10 @@ def plot_history_slider(
     
     # Initial lines
     lines = []
-    lines.append(axes[0].plot(history.x[k0], history.rho[k0], lw=2)[0])
-    lines.append(axes[1].plot(history.x[k0], history.p[k0], lw=2)[0])
-    lines.append(axes[2].plot(history.x[k0], history.u[k0], lw=2)[0])
-    lines.append(axes[3].plot(history.x[k0], history.e[k0], lw=2)[0])
+    lines.append(axes[0].plot(history.m[k0], history.rho[k0], lw=2)[0])
+    lines.append(axes[1].plot(history.m[k0], history.p[k0], lw=2)[0])
+    lines.append(axes[2].plot(history.m[k0], history.u[k0], lw=2)[0])
+    lines.append(axes[3].plot(history.m[k0], history.e[k0], lw=2)[0])
     
     axes[0].set_ylabel(r"$\rho$")
     axes[1].set_ylabel(r"$p$")
@@ -312,10 +312,10 @@ def plot_history_slider(
     
     def update(val):
         k = int(slider.val)
-        lines[0].set_data(history.x[k], history.rho[k])
-        lines[1].set_data(history.x[k], history.p[k])
-        lines[2].set_data(history.x[k], history.u[k])
-        lines[3].set_data(history.x[k], history.e[k])
+        lines[0].set_data(history.m[k], history.rho[k])
+        lines[1].set_data(history.m[k], history.p[k])
+        lines[2].set_data(history.m[k], history.u[k])
+        lines[3].set_data(history.m[k], history.e[k])
         set_title(k)
         
         for ax in axes:
@@ -365,10 +365,10 @@ def save_history_gif(
     
     k0 = 0
     lines = []
-    lines.append(axes[0].plot(history.x[k0], history.rho[k0], lw=2)[0])
-    lines.append(axes[1].plot(history.x[k0], history.p[k0], lw=2)[0])
-    lines.append(axes[2].plot(history.x[k0], history.u[k0], lw=2)[0])
-    lines.append(axes[3].plot(history.x[k0], history.e[k0], lw=2)[0])
+    lines.append(axes[0].plot(history.m[k0], history.rho[k0], lw=2)[0])
+    lines.append(axes[1].plot(history.m[k0], history.p[k0], lw=2)[0])
+    lines.append(axes[2].plot(history.m[k0], history.u[k0], lw=2)[0])
+    lines.append(axes[3].plot(history.m[k0], history.e[k0], lw=2)[0])
     
     axes[0].set_ylabel(r"$\rho$")
     axes[1].set_ylabel(r"$p$")
@@ -387,10 +387,10 @@ def save_history_gif(
     
     def update(frame_idx):
         k = int(frame_ids[frame_idx])
-        lines[0].set_data(history.x[k], history.rho[k])
-        lines[1].set_data(history.x[k], history.p[k])
-        lines[2].set_data(history.x[k], history.u[k])
-        lines[3].set_data(history.x[k], history.e[k])
+        lines[0].set_data(history.m[k], history.rho[k])
+        lines[1].set_data(history.m[k], history.p[k])
+        lines[2].set_data(history.m[k], history.u[k])
+        lines[3].set_data(history.m[k], history.e[k])
         
         t = history.t[k]
         case_title = case.title if hasattr(case, 'title') else "Simulation"

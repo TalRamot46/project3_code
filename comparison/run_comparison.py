@@ -138,29 +138,53 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--t_end", type=float, default=100e-9, help="End time (s)")
     parser.add_argument("--N", type=int, default=501, help="Number of cells")
     parser.add_argument("--rho0", type=float, default=19.32, help="Initial density")
-    
+    parser.add_argument("--x_min", type=float, default=0.0, help="Minimum x value")
     return parser
 
 
-def get_default_args():
+def get_default_args_tau0():
     """Return default arguments for direct execution."""
     class Args:
-        mode = "single"
+        mode = "slider"
         xaxis = "m"
         time = None
         save = None
-        output = "comparison.gif"
+        output = "comparison_tau_0.gif"
+        no_show = False
+        skip_sim = False
+        skip_solver = False
+        npz = None
+        P0 = 10.0
+        tau = 0.0
+        t_end = 100e-9
+        N = 500
+        rho0 = 19.32
+        x_min = 0.0
+        x_max = 3e-6 / 19.32
+        Pw = (2.0, 0.0, 0.0)  # Use tau as Pw2 for self-similar solver
+    return Args()
+
+def get_default_args_tau1():
+    """Return default arguments for direct execution."""
+    class Args:
+        mode = "slider"
+        xaxis = "m"
+        time = None
+        save = None
+        output = "comparison_tau_1.gif"
         no_show = False
         skip_sim = False
         skip_solver = False
         npz = None
         P0 = 10.0
         tau = 1.0
-        t_end = 100e-9
+        t_end = 5e-3
         N = 500
         rho0 = 19.32
+        Pw = (2.0, 0.0, 1.0)  # Use tau as Pw2 for self-similar solver
+        x_min = 0.0
+        x_max = 3e-3 / 19.32
     return Args()
-
 
 def main():
     USE_PARSER = False
@@ -169,7 +193,7 @@ def main():
         parser = create_parser()
         args = parser.parse_args()
     else:
-        args = get_default_args()
+        args = get_default_args_tau0()
     
     # Create configuration
     from shussman_shock_solver.materials_shock import au_supersonic_variant_1
@@ -179,9 +203,14 @@ def main():
         material=au_supersonic_variant_1(),
         P0=args.P0,
         tau=args.tau,
+        Pw=args.Pw,
+
 
         # initial conditions
         rho0=args.rho0,
+        # domain
+        x_min = args.x_min,
+        x_max = args.x_max,
 
         # time
         t_end=args.t_end,

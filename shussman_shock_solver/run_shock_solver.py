@@ -30,7 +30,7 @@ def compute_shock_profiles(mat: Material, P0: float, Pw, times=None, *, save_npz
     Pw = np.asarray(Pw, float)
 
     if times is None:
-        times = np.array([0.1, 0.15, 0.25, 0.5, 0.75, 1.0], float) * 100.0e-9
+        times = np.array([0.1, 0.15, 0.25, 0.5, 0.75, 1.0], float) * 5.0e-3
     else:
         times = np.asarray(times, float)
 
@@ -63,6 +63,7 @@ def compute_shock_profiles(mat: Material, P0: float, Pw, times=None, *, save_npz
         "P_shock": [],
         "u_shock": [],
         "rho_shock": [],
+        "e_shock": [],
         "T_shock": [],
         "dPdx": [],
         "drhodx": [],
@@ -79,12 +80,6 @@ def compute_shock_profiles(mat: Material, P0: float, Pw, times=None, *, save_npz
 
         m_prof = (m0 * (P0_eff ** mw0) * (ti ** mw2)) * (t / xsi)
         P_prof = (P0_eff * (ti ** Pw2)) * P_tilde
-
-
-        # My version of m_prof and P_prof
-        m_prof = t * P0**(1/2) * mat.V0**(-1/2) * (ti)**(1+Pw2)
-        P_prof = P0 * (ti**Pw2) * P_tilde
-
         u_prof = (ufront * ((P0_eff * 1e12) ** uw0) * (ti ** uw2)) * (u_tilde / utilda / 1e5)
         rho_prof = 1.0 / (float(mat.V0) * V_tilde)
 
@@ -97,6 +92,13 @@ def compute_shock_profiles(mat: Material, P0: float, Pw, times=None, *, save_npz
             ** (1.0 / float(mat.beta))
             / 11605.0
         )
+
+        # My version of m_prof and P_prof
+        m_prof = t * P0**(1/2) * mat.V0**(-1/2) * (ti)**(1+Pw2/2)
+        P_prof = P0 * (ti**Pw2) * P_tilde
+        u_prof = P0**(1/2) * mat.V0**(1/2) * ti**(Pw2/2) * u_tilde
+        e_prof = P_prof / (rho_prof * mat.r)
+
 
         # integrate 1/rho over m to get x
         x_prof = np.zeros_like(m_prof)
@@ -119,6 +121,7 @@ def compute_shock_profiles(mat: Material, P0: float, Pw, times=None, *, save_npz
         out["P_shock"].append(P_prof)
         out["u_shock"].append(u_prof)
         out["rho_shock"].append(rho_prof)
+        out["e_shock"].append(e_prof)
         out["T_shock"].append(T_prof)
         out["dPdx"].append(dPdx)
         out["drhodx"].append(drhodx)
@@ -146,6 +149,6 @@ if __name__ == "__main__":
     # from materials import Au, P0, Pw
     Au = au_supersonic_variant_1()
     P0 = 10.0 # units = dyne / cm^2
-    Pw = [2.0, 0.0, 0.0]  # example parameters
+    Pw = [1.0, 0.0, 1.0]  # example parameters
     data = compute_shock_profiles(Au, P0, Pw)
     pass

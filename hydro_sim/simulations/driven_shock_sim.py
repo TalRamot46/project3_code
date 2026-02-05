@@ -57,7 +57,7 @@ def simulate_driven_shock(case, *, Ncells, CFL, sigma_visc, store_every=1000):
 
             state = step_lagrangian(
                 state, m_cells, geom, case.gamma, sigma_visc,
-                bc_left={"type": "pressure", "p": case.P0},   # keep constant drive for now
+                bc_left={"type": "pressure", "p": case.P0*state.t**case.tau},   # keep constant drive for now
                 bc_right="outflow",
                 dt=dt
             )

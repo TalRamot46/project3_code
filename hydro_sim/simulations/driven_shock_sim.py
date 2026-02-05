@@ -10,6 +10,7 @@ from dataclasses import dataclass
 class ShockHistory:
     t: np.ndarray          # (K,)
     x: np.ndarray          # (K, Ncells) cell centers
+    m: np.ndarray          # (K, Ncells) mass coordinate
     rho: np.ndarray        # (K, Ncells)
     p: np.ndarray          # (K, Ncells)
     u: np.ndarray          # (K, Ncells)
@@ -24,20 +25,21 @@ def simulate_driven_shock(case, *, Ncells, CFL, sigma_visc, store_every=1000):
 
     # ---- history buffers ----
     times = []
-    Xs, RHOs, Ps, Us, Es = [], [], [], [], []
+    Xs, Ms, RHOs, Ps, Us, Es = [], [], [], [], [], []
 
     def store_frame():
         x_cells = 0.5 * (state.x[:-1] + state.x[1:])
         u_cells = 0.5 * (state.u[:-1] + state.u[1:])
+        m_coordinate = np.cumsum(m_cells)
         times.append(state.t)
         Xs.append(x_cells.copy())
+        Ms.append(m_coordinate.copy())
         RHOs.append(state.rho.copy())
         Ps.append(state.p.copy())
         Us.append(u_cells.copy())
         Es.append(state.e.copy())
-
+    
     store_frame()
-
     dt_prev = np.inf
     step = 0
     # use a tqdl progress bar
@@ -73,6 +75,7 @@ def simulate_driven_shock(case, *, Ncells, CFL, sigma_visc, store_every=1000):
     history = ShockHistory(
         t=np.array(times),
         x=np.stack(Xs, axis=0),
+        m=np.stack(Ms, axis=0),
         rho=np.stack(RHOs, axis=0),
         p=np.stack(Ps, axis=0),
         u=np.stack(Us, axis=0),

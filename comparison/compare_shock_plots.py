@@ -91,12 +91,7 @@ def load_hydro_history(history) -> SimulationData:
     for k in range(nt):
         x = history.x[k]
         rho = history.rho[k]
-        
-        # Compute mass coordinate (cumulative mass from left)
-        dx = np.diff(np.concatenate([[0], x, [x[-1]]]))
-        dx = 0.5 * (dx[:-1] + dx[1:])  # approximate cell widths
-        dm = rho * dx
-        m = np.cumsum(dm) - 0.5 * dm  # cell-centered mass coordinate
+        m = history.m[k]
         
         m_list.append(m)
         x_list.append(x)
@@ -162,6 +157,9 @@ def plot_comparison_single_time(
         x_ref = ref_data.x[ref_idx]
         xlabel = r"Position $x$ [cm]"
     
+    print(ref_data.times[ref_idx])
+    print(sim_data.times[sim_idx])
+
     # Create figure
     fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True)
     ax_rho, ax_p = axes[0, 0], axes[0, 1]

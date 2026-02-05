@@ -202,28 +202,19 @@ def main():
         class Args:
             npz = "project_3/shussman_shock_solver/shock_profiles.npz"
             quantity = "P"
-            xaxis = "x"
-            save = None
+            xaxis = "m"
+            save = "project_3/shussman_shock_solver/shock_profiles_P_vs_m.png"
             no_show = False
-            title = None
+            title = "Pressure profiles at multiple times"
         args = Args()
-
-    plot_profiles(
-        args.npz,
-        quantity=args.quantity,
-        xaxis=args.xaxis,
-        save=args.save,
-        show=(not args.no_show),
-        title=args.title,
-    )
 
     # save a test figure
     plot_profiles(
         args.npz,
         quantity="P",
-        xaxis="x",
-        save="project_3/shussman_shock_solver/shock_profiles_P_vs_x.png",
-        show=False,
+        xaxis="m",
+        save="project_3/shussman_shock_solver/shock_profiles_P_vs_m.png",
+        show=(not args.no_show),
         title="Pressure profiles at multiple times",
     )
 

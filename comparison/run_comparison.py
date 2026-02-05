@@ -155,9 +155,9 @@ def get_default_args():
         skip_solver = False
         npz = None
         P0 = 10.0
-        tau = 0.0
+        tau = 1.0
         t_end = 100e-9
-        N = 501
+        N = 500
         rho0 = 19.32
     return Args()
 

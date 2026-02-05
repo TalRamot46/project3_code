@@ -30,7 +30,7 @@ def compute_shock_profiles(mat: Material, P0: float, Pw, times=None, *, save_npz
     Pw = np.asarray(Pw, float)
 
     if times is None:
-        times = np.array([0.1, 0.15, 0.25, 0.5, 0.75, 1.0], float) * 100.0
+        times = np.array([0.1, 0.15, 0.25, 0.5, 0.75, 1.0], float) * 100.0e-9
     else:
         times = np.asarray(times, float)
 
@@ -82,7 +82,7 @@ def compute_shock_profiles(mat: Material, P0: float, Pw, times=None, *, save_npz
 
 
         # My version of m_prof and P_prof
-        m_prof = t * P0**(1/2) * mat.V0**(-1/2) * (ti*(10**(-9)))**(1+Pw2)
+        m_prof = t * P0**(1/2) * mat.V0**(-1/2) * (ti)**(1+Pw2)
         P_prof = P0 * (ti**Pw2) * P_tilde
 
         u_prof = (ufront * ((P0_eff * 1e12) ** uw0) * (ti ** uw2)) * (u_tilde / utilda / 1e5)

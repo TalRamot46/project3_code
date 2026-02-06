@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.state import HydroState
-    from driven_shock_sim import ShockHistory
+    from simulations.driven_shock_sim import SimulationHistory
 
 
 # ============================================================================
@@ -256,7 +256,7 @@ def plot_sedov_results(
 # ============================================================================
 
 def plot_history_slider(
-    history: "ShockHistory",
+    history: "SimulationHistory",
     case,
     savepath: str | None = None,
     show: bool = True,
@@ -265,7 +265,7 @@ def plot_history_slider(
     Create an interactive slider plot for time-history data.
     
     Parameters:
-        history: ShockHistory object with time-series data
+        history: SimulationHistory object with time-series data
         case: Problem case (for title info)
         savepath: Optional path to save static figure
         show: Whether to display the figure
@@ -345,7 +345,7 @@ def plot_history_slider(
 # ============================================================================
 
 def save_history_gif(
-    history: "ShockHistory",
+    history: "SimulationHistory",
     case,
     gif_path: str = "simulation.gif",
     fps: int = 20,
@@ -355,7 +355,7 @@ def save_history_gif(
     Save an animated GIF of the time-history data.
     
     Parameters:
-        history: ShockHistory object with time-series data
+        history: SimulationHistory object with time-series data
         case: Problem case (for title info)
         gif_path: Output file path
         fps: Frames per second

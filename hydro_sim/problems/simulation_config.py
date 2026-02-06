@@ -1,0 +1,212 @@
+# problems/simulation_config.py
+"""
+Simulation configuration - parameters for the numerical solver.
+
+This module separates numerical/solver parameters from physical problem parameters.
+Physical parameters belong in ProblemCase subclasses (e.g., RiemannCase, SedovExplosionCase).
+
+Structure mirrors comparison/comparison_config.py:
+  - SimulationConfig: Numerical solver parameters (N, CFL, etc.)
+  - SIMULATION_CONFIGS: Predefined numerical configurations
+"""
+from dataclasses import dataclass, field
+from typing import Optional, Tuple, Dict
+from pathlib import Path
+from enum import Enum
+
+
+class ProblemType(str, Enum):
+    """Supported physical problem types."""
+    RIEMANN = "riemann"
+    DRIVEN_SHOCK = "driven_shock"
+    SEDOV = "sedov"
+
+
+# ============================================================================
+# Output Path Generation
+# ============================================================================
+
+def get_figures_dir() -> Path:
+    """Get the base figures directory for hydro_sim outputs."""
+    return Path(__file__).parent.parent / "figures"
+
+
+def make_output_paths(case_name: str) -> Tuple[Path, Path]:
+    """
+    Generate output paths for PNG and GIF files based on case name.
+    
+    Parameters:
+        case_name: Name or title of the simulation case
+        
+    Returns:
+        (png_path, gif_path) tuple with full paths
+    """
+    base_dir = get_figures_dir()
+    png_dir = base_dir / "png"
+    gif_dir = base_dir / "gif"
+    
+    # Ensure directories exist
+    png_dir.mkdir(parents=True, exist_ok=True)
+    gif_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Clean case name for filename
+    safe_name = (case_name
+                 .replace(" ", "_")
+                 .replace("=", "")
+                 .replace("(", "")
+                 .replace(")", "")
+                 .replace(",", "")
+                 .replace(":", ""))
+    
+    return png_dir / f"{safe_name}.png", gif_dir / f"{safe_name}.gif"
+
+
+# ============================================================================
+# Simulation Configuration
+# ============================================================================
+
+@dataclass
+class SimulationConfig:
+    """Configuration parameters for hydrodynamic simulations."""
+    # Numerical parameters
+    N: int = 1000
+    CFL: float = 1/3
+    sigma_visc: float = 1.0
+    store_every: int = 100
+    
+    # Output parameters
+    save_path: Optional[str] = None
+    gif_path: Optional[str] = None
+    show_plot: bool = True
+    show_slider: bool = False
+    
+    def with_output_paths(self, case_name: str) -> "SimulationConfig":
+        """
+        Return a new config with auto-generated output paths based on case name.
+        
+        Parameters:
+            case_name: Name/title of the case for generating filenames
+            
+        Returns:
+            New SimulationConfig with save_path and gif_path set
+        """
+        png_path, gif_path = make_output_paths(case_name)
+        return SimulationConfig(
+            N=self.N,
+            CFL=self.CFL,
+            sigma_visc=self.sigma_visc,
+            store_every=self.store_every,
+            save_path=str(png_path),
+            gif_path=str(gif_path),
+            show_plot=self.show_plot,
+            show_slider=self.show_slider,
+        )
+
+
+# ============================================================================
+# Predefined Simulation Configurations
+# ============================================================================
+
+SIMULATION_CONFIGS: Dict[str, SimulationConfig] = {
+    # Default configuration - good for most cases
+    "default": SimulationConfig(
+        N=500,
+        CFL=1/3,
+        sigma_visc=1.0,
+        store_every=100,
+        show_plot=True,
+    ),
+    
+    # High resolution configuration
+    "hires": SimulationConfig(
+        N=1000,
+        CFL=1/3,
+        sigma_visc=1.0,
+        store_every=100,
+        show_plot=True,
+    ),
+    
+    # Very high resolution (for publication quality)
+    "ultra": SimulationConfig(
+        N=2000,
+        CFL=1/3,
+        sigma_visc=1.0,
+        store_every=200,
+        show_plot=True,
+    ),
+    
+    # Fast configuration for testing
+    "fast": SimulationConfig(
+        N=200,
+        CFL=1/3,
+        sigma_visc=1.0,
+        store_every=50,
+        show_plot=True,
+    ),
+    
+    # Sedov-optimized (needs more viscosity)
+    "sedov": SimulationConfig(
+        N=500,
+        CFL=1/3,
+        sigma_visc=1.5,
+        store_every=50,
+        show_plot=True,
+    ),
+    
+    # Strong shock configuration (more viscosity)
+    "strong_shock": SimulationConfig(
+        N=1000,
+        CFL=1/3,
+        sigma_visc=2.0,
+        store_every=100,
+        show_plot=True,
+    ),
+    
+    # Slider mode (for interactive exploration)
+    "slider": SimulationConfig(
+        N=500,
+        CFL=1/3,
+        sigma_visc=1.0,
+        store_every=50,
+        show_plot=True,
+        show_slider=True,
+    ),
+    
+    # GIF output only (no display)
+    "gif_only": SimulationConfig(
+        N=500,
+        CFL=1/3,
+        sigma_visc=1.0,
+        store_every=50,
+        show_plot=False,
+    ),
+    
+    # All outputs (save PNG and GIF, show plot)
+    "all_outputs": SimulationConfig(
+        N=500,
+        CFL=1/3,
+        sigma_visc=1.0,
+        store_every=50,
+        show_plot=True,
+        show_slider=True,
+    ),
+}
+
+
+def get_config(name: str) -> SimulationConfig:
+    """
+    Get a predefined simulation configuration by name.
+    
+    Parameters:
+        name: Configuration name (see SIMULATION_CONFIGS)
+        
+    Returns:
+        SimulationConfig instance
+        
+    Raises:
+        ValueError: If name not found
+    """
+    if name not in SIMULATION_CONFIGS:
+        available = ", ".join(sorted(SIMULATION_CONFIGS.keys()))
+        raise ValueError(f"Unknown config '{name}'. Available: {available}")
+    return SIMULATION_CONFIGS[name]

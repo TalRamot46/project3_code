@@ -2,10 +2,7 @@
 """
 Simulation runners for hydrodynamic problems.
 """
-from .riemann_sim import simulate_riemann
 from .driven_shock_sim import (
-    simulate_driven_shock,
-    simulate_sedov,
     simulate_lagrangian,
     SimulationHistory,
     ShockHistory,  # Alias for backward compatibility
@@ -18,10 +15,6 @@ __all__ = [
     "simulate_lagrangian",
     "SimulationHistory",
     "SimulationType",
-    # Problem-specific wrappers
-    "simulate_riemann",
-    "simulate_driven_shock",
-    "simulate_sedov",
     # Backward compatibility
     "ShockHistory",
     # Exact solutions

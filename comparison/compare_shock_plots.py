@@ -76,7 +76,7 @@ def load_shussman_data(npz_path: str | Path) -> SimulationData:
 
 
 def load_hydro_history(history) -> SimulationData:
-    """Convert hydro_sim ShockHistory to SimulationData format."""
+    """Convert hydro_sim SimulationHistory to SimulationData format."""
     times = history.t
     nt = len(times)
     
@@ -211,7 +211,6 @@ def plot_comparison_single_time(
     if savepath:
         Path(savepath).parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(savepath, dpi=200, bbox_inches='tight')
-        print(f"Saved figure to {savepath}")
     
     if show:
         plt.show()

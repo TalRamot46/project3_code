@@ -12,9 +12,9 @@ from tqdm import tqdm
 from core.geometry import planar, spherical, cylindrical, Geometry
 from core.integrator import step_lagrangian, compute_acceleration_nodes
 from core.timestep import compute_dt_cfl
-from problems.driven_shock_problem import init_planar_driven_shock_case, DrivenShockCase
-from problems.riemann_problem import init_planar_riemann_case, RiemannCase
-from problems.sedov_problem import init_sedov_explosion, SedovExplosionCase
+from problems.driven_shock_problem import init_driven_shock, DrivenShockCase
+from problems.riemann_problem import init_riemann, RiemannCase
+from problems.sedov_problem import init_sedov, SedovExplosionCase
 from simulations.riemann_exact import sample_solution
 import numpy as np
 from dataclasses import dataclass
@@ -124,18 +124,17 @@ def _initialize_problem(
     """
     if sim_type == SimulationType.RIEMANN:
         x_nodes = np.linspace(case.x_min, case.x_max, Ncells + 1)
-        x0 = getattr(case, 'x0', 0.0)
-        state, m_cells = init_planar_riemann_case(x_nodes, geom, gamma, case, x0=x0)
+        state, m_cells = init_riemann(x_nodes, case)
         
     elif sim_type == SimulationType.DRIVEN_SHOCK:
         x_nodes = np.linspace(case.x_min, case.x_max, Ncells + 1)
-        state, m_cells = init_planar_driven_shock_case(x_nodes, geom, gamma, case)
+        state, m_cells = init_driven_shock(x_nodes, case)
         
     elif sim_type == SimulationType.SEDOV:
         # For Sedov, start slightly away from r=0 to avoid singularity
         r_min = case.x_min if case.x_min > 0 else 1e-6 * case.x_max
         x_nodes = np.linspace(r_min, case.x_max, Ncells + 1)
-        state, m_cells = init_sedov_explosion(x_nodes, geom, gamma, case)
+        state, m_cells = init_sedov(x_nodes, case)
         
     else:
         raise ValueError(f"Unknown simulation type: {sim_type}")
@@ -151,8 +150,8 @@ def simulate_lagrangian(
     gamma: float,
     CFL: float,
     sigma_visc: float,
-    store_every: int = 1000,
-    geom: Optional[Geometry] = None,
+    store_every: int,
+    geom: Geometry,
 ) -> tuple:
     """
     Unified Lagrangian hydrodynamics simulation.
@@ -166,8 +165,8 @@ def simulate_lagrangian(
         gamma: Adiabatic index (ratio of specific heats)
         CFL: CFL number for timestep control
         sigma_visc: Artificial viscosity coefficient
-        store_every: Store history every N steps (default: 1000)
-        geom: Optional geometry override (inferred from case if not provided)
+        store_every: Store history every N steps
+        geom: Geometry of the simulation domain
         
     Returns:
         x_cells: Final cell center positions
@@ -251,133 +250,3 @@ def simulate_lagrangian(
     meta = dict(case=case, sim_type=sim_type, geometry=geom)
     
     return x_cells, state, meta, history
-
-
-# ============================================================================
-# Convenience wrappers for specific problem types
-# ============================================================================
-
-def simulate_driven_shock(
-    case: DrivenShockCase,
-    *,
-    Ncells: int,
-    CFL: float,
-    sigma_visc: float,
-    store_every: int = 1000,
-) -> tuple:
-    """
-    Simulate a driven shock problem.
-    
-    Backward-compatible wrapper around simulate_lagrangian.
-    """
-    return simulate_lagrangian(
-        case,
-        SimulationType.DRIVEN_SHOCK,
-        Ncells=Ncells,
-        gamma=case.gamma,
-        CFL=CFL,
-        sigma_visc=sigma_visc,
-        store_every=store_every,
-    )
-
-
-def simulate_riemann(
-    test_id: int,
-    *,
-    Ncells: int,
-    gamma: float,
-    CFL: float,
-    sigma_visc: float,
-) -> tuple:
-    """
-    Simulate a Riemann shock tube problem.
-    
-    Backward-compatible with the original riemann_sim interface.
-    
-    Returns:
-        x_cells: Cell center positions
-        numeric: Dictionary with numerical results (rho, p, u, e)
-        exact: Dictionary with exact solution (rho, p, u, e)
-        meta: Dictionary with simulation metadata
-    """
-    from problems.riemann_problem import RIEMANN_TEST_CASES
-    
-    case = RIEMANN_TEST_CASES[test_id]
-    t_end = case.t_end
-    x0 = getattr(case, 'x0', 0.0)
-    
-    # Use unified simulation
-    x_cells, state, meta, history = simulate_lagrangian(
-        case,
-        SimulationType.RIEMANN,
-        Ncells=Ncells,
-        gamma=gamma,
-        CFL=CFL,
-        sigma_visc=sigma_visc,
-        store_every=max(1, Ncells),  # Only store final
-    )
-    
-    u_num_cells = 0.5 * (state.u[:-1] + state.u[1:])
-    
-    # Compute exact solution
-    rhoL, uL, pL = case.left
-    rhoR, uR, pR = case.right
-    rho_ex, u_ex, p_ex, e_ex = sample_solution(x_cells, t_end, (rhoL, uL, pL), (rhoR, uR, pR), gamma)
-    
-    numeric = dict(rho=state.rho, p=state.p, u=u_num_cells, e=state.e)
-    exact = dict(rho=rho_ex, p=p_ex, u=u_ex, e=e_ex)
-    meta = dict(
-        test_id=test_id,
-        t_end=t_end,
-        Ncells=Ncells,
-        gamma=gamma,
-        x_min=case.x_min,
-        x_max=case.x_max,
-        title_extra=case.title,
-    )
-    
-    return x_cells, numeric, exact, meta
-
-
-def simulate_sedov(
-    case: SedovExplosionCase,
-    *,
-    Ncells: int,
-    gamma: float,
-    CFL: float,
-    sigma_visc: float,
-    store_every: int = 1000,
-    geom: Optional[Geometry] = None,
-) -> tuple:
-    """
-    Simulate a Sedov-Taylor point explosion.
-    
-    The Sedov problem models a strong explosion from a point source
-    in a uniform ambient medium. Uses reflective BC at the origin
-    and outflow BC at the outer boundary.
-    
-    Parameters:
-        case: SedovExplosionCase configuration
-        Ncells: Number of computational cells
-        gamma: Adiabatic index
-        CFL: CFL number for timestep control
-        sigma_visc: Artificial viscosity coefficient
-        store_every: Store history every N steps
-        geom: Optional geometry (spherical, cylindrical, or planar)
-        
-    Returns:
-        x_cells: Final cell center positions (radii)
-        state: Final HydroState
-        meta: Dictionary with simulation metadata
-        history: SimulationHistory with time evolution data
-    """
-    return simulate_lagrangian(
-        case,
-        SimulationType.SEDOV,
-        Ncells=Ncells,
-        gamma=gamma,
-        CFL=CFL,
-        sigma_visc=sigma_visc,
-        store_every=store_every,
-        geom=geom,
-    )

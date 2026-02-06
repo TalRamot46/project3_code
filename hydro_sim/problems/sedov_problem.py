@@ -7,13 +7,22 @@ point explosion in a uniform medium. It's an excellent test for
 spherical/cylindrical hydrodynamics codes.
 """
 import numpy as np
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
+from typing import Any
 
-from problems.base_problem import ProblemCase
-from core.eos import internal_energy_from_prho
-from core.grid import cell_volumes, masses_from_initial_rho
-from core.state import HydroState
+# Handle both package import and direct run cases
+try:
+    from .base_problem import ProblemCase
+    from ..core.eos import internal_energy_from_prho
+    from ..core.grid import cell_volumes, masses_from_initial_rho
+    from ..core.state import HydroState
+    from ..core.geometry import spherical, cylindrical, planar
+except ImportError:
+    from problems.base_problem import ProblemCase
+    from core.eos import internal_energy_from_prho
+    from core.grid import cell_volumes, masses_from_initial_rho
+    from core.state import HydroState
+    from core.geometry import spherical, cylindrical, planar
 
 
 @dataclass(frozen=True)
@@ -25,16 +34,13 @@ class SedovExplosionCase(ProblemCase):
     releasing energy E0 into a uniform ambient medium with density rho0
     and negligible initial pressure p0.
     
-    Attributes:
+    Unique Attributes:
         E0: Total explosion energy deposited at the origin
         rho0: Ambient (background) density
         p0: Ambient pressure (should be very small compared to explosion)
-        r_init: Radius within which initial energy is deposited
-        x_min: Inner boundary (typically 0 for spherical/cylindrical)
-        x_max: Outer boundary of the domain
-        t_end: Simulation end time
-        title: Descriptive name for the problem
+        r_init: Radius within which initial energy is deposited (0 = first cell)
     """
+    # Unique to Sedov problems
     E0: float = 1.0
     rho0: float = 1.0
     p0: float = 1e-6
@@ -43,72 +49,58 @@ class SedovExplosionCase(ProblemCase):
 
 # Pre-defined Sedov test cases
 SEDOV_TEST_CASES = {
-    "standard_spherical": SedovExplosionCase(
-        x_min=0.0,
-        x_max=1.2,
-        t_end=0.5,
-        E0=0.851072,
-        rho0=1.0,
-        p0=1e-6,
+    "spherical": SedovExplosionCase(
+        gamma=1.4,
+        x_min=0.0, x_max=1.2, t_end=0.5,
+        E0=0.851072, rho0=1.0, p0=1e-6,
+        geom=spherical(),
         title="Standard Spherical Sedov"
     ),
-    "standard_cylindrical": SedovExplosionCase(
-        x_min=0.0,
-        x_max=1.2,
-        t_end=0.5,
-        E0=0.311357,
-        rho0=1.0,
-        p0=1e-6,
+    "cylindrical": SedovExplosionCase(
+        gamma=1.4,
+        x_min=0.0, x_max=1.2, t_end=0.5,
+        E0=0.311357, rho0=1.0, p0=1e-6,
+        geom=cylindrical(),
         title="Standard Cylindrical Sedov"
     ),
-    "standard_planar": SedovExplosionCase(
-        x_min=0.0,
-        x_max=1.2,
-        t_end=0.5,
-        E0=0.311357,
-        rho0=1.0,
-        p0=1e-6,
+    "planar": SedovExplosionCase(
+        gamma=1.4,
+        x_min=0.0, x_max=1.2, t_end=0.5,
+        E0=0.5, rho0=1.0, p0=1e-6,
+        geom=planar(),
         title="Standard Planar Sedov"
     ),
-    "strong_explosion": SedovExplosionCase(
-        x_min=0.0,
-        x_max=2.0,
-        t_end=0.5,
-        E0=10.0,
-        rho0=1.0,
-        p0=1e-8,
+    "strong_spherical": SedovExplosionCase(
+        gamma=1.4,
+        x_min=0.0, x_max=2.0, t_end=0.5,
+        E0=10.0, rho0=1.0, p0=1e-8,
+        geom=spherical(),
         title="Strong Point Explosion"
     ),
 }
 
+# Legacy aliases
+SEDOV_TEST_CASES["standard_spherical"] = SEDOV_TEST_CASES["spherical"]
+SEDOV_TEST_CASES["standard_cylindrical"] = SEDOV_TEST_CASES["cylindrical"]
+SEDOV_TEST_CASES["standard_planar"] = SEDOV_TEST_CASES["planar"]
+SEDOV_TEST_CASES["strong_explosion"] = SEDOV_TEST_CASES["strong_spherical"]
 
-def init_sedov_explosion(
-    x_nodes: np.ndarray,
-    geom,
-    gamma: float,
-    case: SedovExplosionCase,
-) -> tuple:
+
+def init_sedov(x_nodes: np.ndarray, case: SedovExplosionCase) -> tuple:
     """
-    Initialize the hydro state for a Sedov explosion problem.
+    Initialize HydroState and cell masses for a Sedov explosion problem.
     
     The initial condition places all explosion energy E0 in the innermost
     cell(s) as thermal energy, with the rest of the domain at ambient
     conditions (rho0, p0).
-    
-    Parameters:
-        x_nodes: Node positions (N+1 values for N cells)
-        geom: Geometry object (spherical, cylindrical, or planar)
-        gamma: Adiabatic index (ratio of specific heats)
-        case: SedovExplosionCase instance with problem parameters
-        
-    Returns:
-        state: Initial HydroState
-        m: Cell masses (fixed in Lagrangian formulation)
     """
     x_nodes = np.asarray(x_nodes, dtype=float)
     N = x_nodes.size - 1
     if N < 2:
         raise ValueError("Need at least 2 cells.")
+    
+    geom = case.geom if case.geom is not None else spherical()
+    gamma = case.gamma
     
     # Cell centers
     x_cells = 0.5 * (x_nodes[:-1] + x_nodes[1:])
@@ -172,3 +164,7 @@ def init_sedov_explosion(
     )
     
     return state, m_cells
+
+
+# Legacy alias
+init_sedov_explosion = lambda x_nodes, geom, gamma, case: init_sedov(x_nodes, case)

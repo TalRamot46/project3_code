@@ -1,19 +1,19 @@
 # run_comparison.py
 """
-Run comparison between hydro_sim (Lagrangian simulation) and 
-shussman_shock_solver (self-similar solution).
+Unified runner for shock comparison simulations.
+
+Compares hydro_sim (Lagrangian simulation) with shussman_shock_solver (self-similar solution).
+All configuration is done through ComparisonCase and ComparisonConfig dataclasses.
 
 Usage:
-    python run_comparison.py --mode slider
-    python run_comparison.py --mode overlay --save figures/comparison.png
-    python run_comparison.py --mode gif --output figures/comparison.gif
+    # In main(), change the preset name to run different cases:
+    case, config = get_preset("gold_tau_0")
+    run_comparison(case, config)
 """
 from __future__ import annotations
 
-import argparse
 import sys
 from pathlib import Path
-import numpy as np
 
 # Add parent directories to path for imports
 _this_file = Path(__file__).resolve()
@@ -25,9 +25,11 @@ for p in [str(_project_root), str(_hydro_sim), str(_shussman)]:
     if p not in sys.path:
         sys.path.insert(0, p)
 
-project_root = _project_root
+# Configuration and presets
+from comparison.comparison_config import ComparisonCase, ComparisonConfig, PlotMode
+from comparison.presets import get_preset, list_presets, PRESETS
 
-from comparison.shock_config import ShockComparisonConfig, gold_constant_drive
+# Plotting
 from comparison.compare_shock_plots import (
     SimulationData,
     load_shussman_data,
@@ -39,44 +41,69 @@ from comparison.compare_shock_plots import (
 )
 
 
-def run_hydro_simulation(config: ShockComparisonConfig):
-    """Run the hydro_sim simulation with the given config."""
-    from simulations.driven_shock_sim import simulate_driven_shock
+# ============================================================================
+# Simulation Runners
+# ============================================================================
+
+def run_hydro_simulation(case: ComparisonCase, config: ComparisonConfig) -> SimulationData:
+    """
+    Run the hydro_sim simulation and return data in comparison format.
     
-    case = config.to_driven_shock_case()
+    Parameters:
+        case: Physical parameters (ComparisonCase)
+        config: Run configuration (ComparisonConfig)
+        
+    Returns:
+        SimulationData ready for comparison plotting
+    """
+    from hydro_sim.simulations.driven_shock_sim import simulate_lagrangian, SimulationType
     
-    print(f"Running hydro simulation...")
-    print(f"  Domain: [{config.x_min}, {config.x_max}] cm")
-    print(f"  t_end: {config.t_end:.2e} s")
-    print(f"  N cells: {config.Ncells}")
-    print(f"  P0: {config.P0}, tau: {config.tau}")
+    driven_case = case.to_driven_shock_case()
     
-    x_cells, state, meta, history = simulate_driven_shock(
-        case,
-        Ncells=config.Ncells,
+    print("Running hydro simulation...")
+    print(f"  Domain: [{case.x_min:.2e}, {case.x_max:.2e}] cm")
+    print(f"  t_end: {case.t_end:.2e} s")
+    print(f"  N cells: {config.N}")
+    print(f"  P0: {case.P0}, τ: {case.tau}")
+    
+    x_cells, state, meta, history = simulate_lagrangian(
+        driven_case,
+        sim_type=SimulationType.DRIVEN_SHOCK,
+        Ncells=config.N,
+        gamma=case.gamma,
         CFL=config.CFL,
         sigma_visc=config.sigma_visc,
-        store_every=max(1, config.Ncells // 100),  # ~100 frames
+        store_every=max(1, config.N // 100),  # ~100 frames
+        geom=driven_case.geom
     )
     
-    return history
+    return load_hydro_history(history)
 
 
-def run_shussman_solver(config: ShockComparisonConfig, save_path: str | None = None):
-    """Run the shussman_shock_solver and return the NPZ path."""
+def run_shussman_solver(case: ComparisonCase, save_path: str | None = None) -> SimulationData:
+    """
+    Run the shussman_shock_solver and return data in comparison format.
+    
+    Parameters:
+        case: Physical parameters (ComparisonCase)
+        save_path: Optional path to save NPZ file
+        
+    Returns:
+        SimulationData ready for comparison plotting
+    """
     from run_shock_solver import compute_shock_profiles
     
-    params = config.get_shussman_params()
+    params = case.get_shussman_params()
     
-    print(f"Running self-similar solver...")
+    print("Running self-similar solver...")
     print(f"  Material: {params['material'].name}")
     print(f"  P0: {params['P0']}")
     print(f"  Times: {len(params['times'])} snapshots")
     
     if save_path is None:
-        save_path = str(project_root / "comparison" / "shock_profiles.npz")
+        save_path = str(Path(__file__).parent / "shock_profiles.npz")
     
-    data = compute_shock_profiles(
+    compute_shock_profiles(
         mat=params['material'],
         P0=params['P0'],
         Pw=params['Pw'],
@@ -84,194 +111,52 @@ def run_shussman_solver(config: ShockComparisonConfig, save_path: str | None = N
         save_npz=save_path,
     )
     
-    return save_path
+    return load_shussman_data(save_path)
 
 
-def create_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Compare hydro_sim with shussman_shock_solver",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
+# ============================================================================
+# Unified Comparison Runner
+# ============================================================================
+
+def run_comparison(case: ComparisonCase, config: ComparisonConfig) -> None:
+    """
+    Run a full shock comparison simulation.
     
-    parser.add_argument(
-        "--mode", type=str, default="slider",
-        choices=["slider", "single", "overlay", "gif"],
-        help="Plotting mode"
-    )
-    parser.add_argument(
-        "--xaxis", type=str, default="m",
-        choices=["m", "x"],
-        help="X-axis variable: m (mass) or x (position)"
-    )
-    parser.add_argument(
-        "--time", type=float, default=None,
-        help="Time for single-time plot (default: last time)"
-    )
-    parser.add_argument(
-        "--save", type=str, default=None,
-        help="Save figure path"
-    )
-    parser.add_argument(
-        "--output", type=str, default="comparison.gif",
-        help="Output GIF path (for gif mode)"
-    )
-    parser.add_argument(
-        "--no-show", action="store_true",
-        help="Do not show interactive plots"
-    )
-    parser.add_argument(
-        "--skip-sim", action="store_true",
-        help="Skip running simulation, load existing data"
-    )
-    parser.add_argument(
-        "--skip-solver", action="store_true",
-        help="Skip running solver, load existing NPZ"
-    )
-    parser.add_argument(
-        "--npz", type=str, default=None,
-        help="Path to existing shussman NPZ file"
-    )
+    This is the main entry point for running any comparison.
     
-    # Config parameters
-    parser.add_argument("--P0", type=float, default=10.0, help="Pressure amplitude")
-    parser.add_argument("--tau", type=float, default=0.0, help="Power-law exponent")
-    parser.add_argument("--t_end", type=float, default=100e-9, help="End time (s)")
-    parser.add_argument("--N", type=int, default=501, help="Number of cells")
-    parser.add_argument("--rho0", type=float, default=19.32, help="Initial density")
-    parser.add_argument("--x_min", type=float, default=0.0, help="Minimum x value")
-    return parser
-
-
-def get_default_args_tau0():
-    """Return default arguments for direct execution."""
-    class Args:
-        mode = "slider"
-        xaxis = "m"
-        time = None
-        save = None
-        output = "comparison_tau_0.gif"
-        no_show = False
-        skip_sim = False
-        skip_solver = False
-        npz = None
-        P0 = 10.0
-        tau = 0.0
-        t_end = 100e-9
-        N = 500
-        rho0 = 19.32
-        x_min = 0.0
-        x_max = 3e-6 / 19.32
-        Pw = (2.0, 0.0, 0.0)  # Use tau as Pw2 for self-similar solver
-    return Args()
-
-def get_default_args_tau1():
-    """Return default arguments for direct execution."""
-    class Args:
-        mode = "slider"
-        xaxis = "m"
-        time = None
-        save = None
-        output = "comparison_tau_1.gif"
-        no_show = False
-        skip_sim = False
-        skip_solver = False
-        npz = None
-        P0 = 10
-        tau = 1
-        t_end = 5e-3
-        N = 500
-        rho0 = 19.32
-        Pw = (2.0, 0.0, tau)  # Use tau as Pw2 for self-similar solver
-        x_min = 0.0
-        x_max = 3e-3 / 19.32
-    return Args()
-
-def get_default_args_tau_minus_0447():
-    """Return default arguments for direct execution."""
-    class Args:
-        mode = "slider"
-        xaxis = "m"
-        time = None
-        save = None
-        output = "comparison_tau_-0.447.gif"
-        no_show = False
-        skip_sim = False
-        skip_solver = False
-        npz = None
-        P0 = 2.71e8
-        tau = -0.447
-        t_end = 1e-8
-        N = 500
-        rho0 = 19.32
-        Pw = (2.0, 0.0, tau)  # Use tau as Pw2 for self-similar solver
-        x_min = 0.0
-        x_max = 20e-3 / 19.32
-    return Args()
-
-def main():
-    USE_PARSER = False
-    
-    if USE_PARSER:
-        parser = create_parser()
-        args = parser.parse_args()
-    else:
-        args = get_default_args_tau_minus_0447()
-    
-    # Create configuration
-    from shussman_shock_solver.materials_shock import au_supersonic_variant_1
-    
-    config = ShockComparisonConfig(
-        # material and pressure drive
-        material=au_supersonic_variant_1(),
-        P0=args.P0,
-        tau=args.tau,
-        Pw=args.Pw,
-
-
-        # initial conditions
-        rho0=args.rho0,
-        # domain
-        x_min = args.x_min,
-        x_max = args.x_max,
-
-        # time
-        t_end=args.t_end,
-
-        # simulation parameters
-        Ncells=args.N,
-
-        # plot
-        title=f"Shock Comparison (P0={args.P0}, τ={args.tau})",
-    )
-    
+    Parameters:
+        case: Physical parameters (ComparisonCase)
+        config: Run configuration (ComparisonConfig)
+    """
     print("=" * 60)
     print("Shock Comparison: Hydro Simulation vs Self-Similar Solution")
     print("=" * 60)
-    print(f"Configuration:")
-    print(f"  P0: {config.P0}, tau: {config.tau}")
-    print(f"  rho0: {config.rho0} g/cm³")
-    print(f"  t_end: {config.t_end:.2e} s")
-    print(f"  Domain: [{config.x_min:.2e}, {config.x_max:.2e}] cm")
-    print(f"  N cells: {config.Ncells}")
+    print(f"Case: {case.title}")
+    print(f"  P0: {case.P0}, τ: {case.tau}")
+    print(f"  ρ0: {case.rho0} g/cm³")
+    print(f"  t_end: {case.t_end:.2e} s")
+    print(f"  Domain: [{case.x_min:.2e}, {case.x_max:.2e}] cm")
+    print(f"  N cells: {config.N}")
     print()
     
+    # Get output paths
+    png_path, gif_path = case.output_paths
+    
     # Run hydro simulation
-    if not args.skip_sim:
-        history = run_hydro_simulation(config)
-        sim_data = load_hydro_history(history)
+    if not config.skip_sim:
+        sim_data = run_hydro_simulation(case, config)
     else:
-        print("Skipping hydro simulation (--skip-sim)")
+        print("Skipping hydro simulation (skip_sim=True)")
         sim_data = None
     
     # Run shussman solver
-    if not args.skip_solver:
-        npz_path = run_shussman_solver(config)
-        ref_data = load_shussman_data(npz_path)
-    elif args.npz:
-        print(f"Loading existing NPZ: {args.npz}")
-        ref_data = load_shussman_data(args.npz)
+    if not config.skip_solver:
+        ref_data = run_shussman_solver(case)
+    elif config.npz_path:
+        print(f"Loading existing NPZ: {config.npz_path}")
+        ref_data = load_shussman_data(config.npz_path)
     else:
-        print("Skipping solver (--skip-solver)")
+        print("Skipping solver (skip_solver=True)")
         ref_data = None
     
     # Check we have data
@@ -283,50 +168,113 @@ def main():
     print(f"Simulation data: {len(sim_data.times)} time steps")
     print(f"Reference data: {len(ref_data.times)} time steps")
     print()
+
+    return sim_data, ref_data, case, config, png_path, gif_path
     
-    # Plot based on mode
-    if args.mode == "slider":
+
+
+def _plot_results(
+    sim_data: SimulationData,
+    ref_data: SimulationData,
+    case: ComparisonCase,
+    config: ComparisonConfig,
+    png_path: Path,
+    gif_path: Path,
+) -> None:
+    """
+    Handle all plotting based on configuration.
+    """
+    if config.mode == PlotMode.SLIDER:
         plot_comparison_slider(
             sim_data, ref_data,
-            xaxis=args.xaxis,
-            show=not args.no_show,
-            title=config.title,
+            xaxis=config.xaxis,
+            show=config.show_plot,
+            title=case.title,
         )
     
-    elif args.mode == "single":
-        time = args.time if args.time else config.t_end
+    elif config.mode == PlotMode.SINGLE:
+        time = config.time_for_single if config.time_for_single else case.t_end
+        savepath = str(png_path) if config.save_png else None
         plot_comparison_single_time(
             sim_data, ref_data,
             time=time,
-            xaxis=args.xaxis,
-            savepath=args.save,
-            show=not args.no_show,
-            title=config.title,
+            xaxis=config.xaxis,
+            savepath=savepath,
+            show=config.show_plot,
+            title=case.title,
         )
     
-    elif args.mode == "overlay":
+    elif config.mode == PlotMode.OVERLAY:
+        savepath = str(png_path) if config.save_png else None
         plot_comparison_overlay(
             sim_data, ref_data,
-            times=list(config.times),
-            xaxis=args.xaxis,
-            savepath=args.save,
-            show=not args.no_show,
-            title=config.title,
+            times=list(case.times),
+            xaxis=config.xaxis,
+            savepath=savepath,
+            show=config.show_plot,
+            title=case.title,
         )
     
-    elif args.mode == "gif":
-        gif_path = str(project_root / "comparison" / "figures" / args.output)
+    elif config.mode == PlotMode.GIF:
         save_comparison_gif(
             sim_data, ref_data,
-            gif_path=gif_path,
-            xaxis=args.xaxis,
+            gif_path=str(gif_path),
+            xaxis=config.xaxis,
             fps=10,
             stride=max(1, len(sim_data.times) // 50),
-            title=config.title,
+            title=case.title,
         )
+        print(f"Saved GIF to: {gif_path}")
+    
+    # Additional saves if requested
+    if config.save_png and config.mode != PlotMode.SINGLE:
+        # Save a single-time plot as well
+        plot_comparison_single_time(
+            sim_data, ref_data,
+            time=case.t_end,
+            xaxis=config.xaxis,
+            savepath=str(png_path),
+            show=False,
+            title=case.title,
+        )
+        print(f"Saved PNG to: {png_path}")
+    
+    if config.save_gif and config.mode != PlotMode.GIF:
+        save_comparison_gif(
+            sim_data, ref_data,
+            gif_path=str(gif_path),
+            xaxis=config.xaxis,
+            fps=10,
+            stride=max(1, len(sim_data.times) // 50),
+            title=case.title,
+        )
+        print(f"Saved GIF to: {gif_path}")
+
+
+# ============================================================================
+# Main Entry Point
+# ============================================================================
+
+def main():
+    """Run a comparison with a predefined preset."""
+    
+    # ===== SELECT YOUR PRESET HERE =====
+    PRESET = "gold_tau_neg"
+    # ===================================
+    
+    # List available presets for reference
+    # list_presets()
+    
+    # Get case and config
+    case, config = get_preset(PRESET)
+    
+    # Run comparison
+    sim_data, ref_data, case, config, png_path, gif_path = run_comparison(case, config)
+
+    # Plot based on mode
+    _plot_results(sim_data, ref_data, case, config, png_path, gif_path)
     
     print("Done!")
-
 
 if __name__ == "__main__":
     main()

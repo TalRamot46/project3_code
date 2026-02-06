@@ -1,60 +1,95 @@
 # problems/riemann_problem.py
+"""
+Riemann shock tube problem setup.
+
+Classic test problem for compressible gas dynamics: two uniform states
+separated by a discontinuity at t=0, with exact solution available.
+"""
 import numpy as np
 from dataclasses import dataclass
+from typing import Tuple
 
-from problems.base_problem import ProblemCase
-from core.eos import internal_energy_from_prho
-from core.grid import cell_volumes, masses_from_initial_rho
-from core.state import HydroState
+# Handle both package import and direct run cases
+try:
+    from .base_problem import ProblemCase
+    from ..core.eos import internal_energy_from_prho
+    from ..core.grid import cell_volumes, masses_from_initial_rho
+    from ..core.state import HydroState
+    from ..core.geometry import planar
+except ImportError:
+    from problems.base_problem import ProblemCase
+    from core.eos import internal_energy_from_prho
+    from core.grid import cell_volumes, masses_from_initial_rho
+    from core.state import HydroState
+    from core.geometry import planar
 
 
 @dataclass(frozen=True)
 class RiemannCase(ProblemCase):
     """
     Configuration for Riemann (shock tube) problems.
-    
     Defines left and right states separated by a discontinuity at x0.
     
-    Attributes:
-        test_id: Identifier for the test case
-        left: Left state tuple (rho, u, p)
-        right: Right state tuple (rho, u, p)
-        x0: Initial discontinuity position
-        sigma_visc: Artificial viscosity coefficient
+    Unique Attributes:
+        left: Tuple of (rho, u, p) for left state
+        right: Tuple of (rho, u, p) for right state
+        x0: Position of initial discontinuity
     """
-    test_id: int = 0
-    left: tuple = (1.0, 0.0, 1.0)      # (rho,u,p)
-    right: tuple = (0.125, 0.0, 0.1)   # (rho,u,p)
-    x_min: float = -1.0
-    x_max: float = 1.0
-    t_end: float = 0.25
+    # Unique to Riemann problems
+    left: Tuple[float, float, float] = (1.0, 0.0, 1.0)      # (rho, u, p)
+    right: Tuple[float, float, float] = (0.125, 0.0, 0.1)   # (rho, u, p)
     x0: float = 0.0
-    sigma_visc: float = 1.0
-    title: str = ""
 
+
+# Pre-defined Riemann test cases
 RIEMANN_TEST_CASES = {
-    1: RiemannCase(
-        test_id=1, left=(1.0, 0.0, 1.0), right=(0.125, 0.0, 0.1),
-        x_min=-1.0, x_max=1.0, t_end=0.25, sigma_visc=1.0, title="Sod-like"
+    "sod": RiemannCase(
+        gamma=1.4,
+        left=(1.0, 0.0, 1.0), 
+        right=(0.125, 0.0, 0.1),
+        x_min=-1.0, x_max=1.0, t_end=0.25,
+        geom=planar(),
+        title="Sod shock tube"
     ),
-    2: RiemannCase(
-        test_id=2, left=(1.0, 0.0, 1000.0), right=(1.0, 0.0, 0.01),
-        x_min=-1.0, x_max=1.0, t_end=0.012, sigma_visc=1.0, title="Strong pressure jump"
+    "strong_shock": RiemannCase(
+        gamma=1.4,
+        left=(1.0, 0.0, 1000.0), 
+        right=(1.0, 0.0, 0.01),
+        x_min=-1.0, x_max=1.0, t_end=0.012,
+        geom=planar(),
+        title="Strong pressure jump"
     ),
-    3: RiemannCase(
-        test_id=3, left=(1.0, 0.0, 0.01), right=(1.0, 0.0, 100.0),
-        x_min=-1.0, x_max=1.0, t_end=0.035, sigma_visc=1.0, title="Reverse pressure jump"
+    "reverse_shock": RiemannCase(
+        gamma=1.4,
+        left=(1.0, 0.0, 0.01), 
+        right=(1.0, 0.0, 100.0),
+        x_min=-1.0, x_max=1.0, t_end=0.035,
+        geom=planar(),
+        title="Reverse pressure jump"
     ),
-    4: RiemannCase(
-        test_id=4, left=(5.99924, 19.5975, 460.894), right=(5.99242, -6.19633, 46.0950),
-        x_min=-1.0, x_max=1.0, t_end=0.035, sigma_visc=3.0, title="Colliding streams"
+    "colliding": RiemannCase(
+        gamma=1.4,
+        left=(5.99924, 19.5975, 460.894), 
+        right=(5.99242, -6.19633, 46.0950),
+        x_min=-1.0, x_max=1.0, t_end=0.035,
+        geom=planar(),
+        title="Colliding streams"
     ),
 }
 
-def init_planar_riemann_case(x_nodes, geom, gamma, case: RiemannCase, x0=0.0):
-    """
-    Build initial HydroState + fixed cell masses for a planar Riemann problem.
-    """
+# Legacy integer-keyed access for backward compatibility
+RIEMANN_TEST_CASES[1] = RIEMANN_TEST_CASES["sod"]
+RIEMANN_TEST_CASES[2] = RIEMANN_TEST_CASES["strong_shock"]
+RIEMANN_TEST_CASES[3] = RIEMANN_TEST_CASES["reverse_shock"]
+RIEMANN_TEST_CASES[4] = RIEMANN_TEST_CASES["colliding"]
+
+
+def init_riemann(x_nodes: np.ndarray, case: RiemannCase) -> tuple:
+    """Initialize HydroState and cell masses for a Riemann problem. """
+    geom = case.geom if case.geom is not None else planar()
+    gamma = case.gamma
+    x0 = case.x0
+    
     x_cells = 0.5 * (x_nodes[:-1] + x_nodes[1:])
 
     rhoL, uL, pL = case.left
@@ -63,11 +98,11 @@ def init_planar_riemann_case(x_nodes, geom, gamma, case: RiemannCase, x0=0.0):
     left_mask = x_cells < x0
 
     rho = np.where(left_mask, rhoL, rhoR)
-    p   = np.where(left_mask, pL, pR)
-    e   = internal_energy_from_prho(p, rho, gamma)
-    q   = np.zeros_like(rho)
+    p = np.where(left_mask, pL, pR)
+    e = internal_energy_from_prho(p, rho, gamma)
+    q = np.zeros_like(rho)
 
-    # Node velocities: simplest consistent choice is piecewise constant using node position
+    # Node velocities: piecewise constant using node position
     u_nodes = np.where(x_nodes < x0, uL, uR)
 
     V = cell_volumes(x_nodes, geom)
@@ -77,3 +112,7 @@ def init_planar_riemann_case(x_nodes, geom, gamma, case: RiemannCase, x0=0.0):
 
     state = HydroState(t=0.0, x=x_nodes, u=u_nodes, a=a_nodes, V=V, rho=rho, e=e, p=p, q=q)
     return state, m
+
+
+# Legacy alias
+init_planar_riemann_case = lambda x_nodes, geom, gamma, case, x0=0.0: init_riemann(x_nodes, case)

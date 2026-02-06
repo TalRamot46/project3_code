@@ -54,7 +54,7 @@ class ShockComparisonConfig:
     # Time
     t_end: float = 100e-9  # 100 ns
     times: tuple = None  # Snapshot times, auto-generated if None
-    n_snapshots: int = 1000  # Number of snapshot times
+    n_snapshots: int = 10000  # Number of snapshot times
     
     # Simulation parameters
     Ncells: int = 1001

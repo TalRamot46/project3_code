@@ -176,14 +176,36 @@ def get_default_args_tau1():
         skip_sim = False
         skip_solver = False
         npz = None
-        P0 = 10.0
-        tau = 1.0
+        P0 = 10
+        tau = 1
         t_end = 5e-3
         N = 500
         rho0 = 19.32
-        Pw = (2.0, 0.0, 1.0)  # Use tau as Pw2 for self-similar solver
+        Pw = (2.0, 0.0, tau)  # Use tau as Pw2 for self-similar solver
         x_min = 0.0
         x_max = 3e-3 / 19.32
+    return Args()
+
+def get_default_args_tau_minus_0447():
+    """Return default arguments for direct execution."""
+    class Args:
+        mode = "slider"
+        xaxis = "m"
+        time = None
+        save = None
+        output = "comparison_tau_-0.447.gif"
+        no_show = False
+        skip_sim = False
+        skip_solver = False
+        npz = None
+        P0 = 2.71e8
+        tau = -0.447
+        t_end = 1e-8
+        N = 500
+        rho0 = 19.32
+        Pw = (2.0, 0.0, tau)  # Use tau as Pw2 for self-similar solver
+        x_min = 0.0
+        x_max = 20e-3 / 19.32
     return Args()
 
 def main():
@@ -193,7 +215,7 @@ def main():
         parser = create_parser()
         args = parser.parse_args()
     else:
-        args = get_default_args_tau0()
+        args = get_default_args_tau_minus_0447()
     
     # Create configuration
     from shussman_shock_solver.materials_shock import au_supersonic_variant_1

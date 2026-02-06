@@ -25,7 +25,7 @@ def solve_normalize3(tau: float, r: float, iternum: int = 20, xi_f0: float = 4.0
          
         sol = integrate_ode(
             lambda tt, yy: F3(tt, yy, tau, r),
-            (xi_f, 1e-4),
+            (xi_f, 1e-6),
             y0=x0,
             rtol=1e-9,
             atol=1e-9,

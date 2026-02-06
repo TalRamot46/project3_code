@@ -211,9 +211,9 @@ def main():
     # save a test figure
     plot_profiles(
         args.npz,
-        quantity="P",
+        quantity="rho",
         xaxis="m",
-        save="project_3/shussman_shock_solver/shock_profiles_P_vs_m.png",
+        save="project_3/shussman_shock_solver/shock_profiles_V_vs_m.png",
         show=(not args.no_show),
         title="Pressure profiles at multiple times",
     )

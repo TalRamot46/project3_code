@@ -149,6 +149,6 @@ if __name__ == "__main__":
     # from materials import Au, P0, Pw
     Au = au_supersonic_variant_1()
     P0 = 10.0 # units = dyne / cm^2
-    Pw = [1.0, 0.0, 1.0]  # example parameters
+    Pw = [1.0, 0.0, -0.45]  # example parameters
     data = compute_shock_profiles(Au, P0, Pw)
     pass

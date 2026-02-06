@@ -312,10 +312,10 @@ def plot_history_slider(
     
     def update(val):
         k = int(slider.val)
-        lines[0].set_data(history.m[k], history.rho[k])
-        lines[1].set_data(history.m[k], history.p[k])
-        lines[2].set_data(history.m[k], history.u[k])
-        lines[3].set_data(history.m[k], history.e[k])
+        lines[0].set_data(history.x[k], history.rho[k])
+        lines[1].set_data(history.x[k], history.p[k])
+        lines[2].set_data(history.x[k], history.u[k])
+        lines[3].set_data(history.x[k], history.e[k])
         set_title(k)
         
         for ax in axes:

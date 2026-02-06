@@ -46,13 +46,21 @@ def step_lagrangian(state: HydroState,
     """
     One time step implementing PDF Eqs.(11)-(19),
     with generalized boundary conditions.
+    
+    Supported boundary conditions:
+        - "outflow": Zero-gradient (transmissive) boundary
+        - "none": No boundary treatment (for Riemann problems)
+        - "reflective": Reflecting wall (u=0 at boundary, for Sedov origin)
+        - {"type": "pressure", "p": value}: Pressure-driven boundary
     """
 
     t_half = state.t + 0.5 * dt
 
     # (11) half-step velocity
     u_half = state.u + 0.5 * dt * state.a
-    # u_half = apply_velocity_bc(u_half, bc_left, bc_right, t_half)
+    
+    # Apply velocity boundary conditions at half-step
+    u_half = _apply_velocity_bc_half(u_half, bc_left, bc_right)
 
     # (12) update nodes
     x_new = state.x + dt * u_half
@@ -80,21 +88,16 @@ def step_lagrangian(state: HydroState,
         pass
 
     # (18) acceleration from new (p,q)
-    p_left = bc_left["p"] if isinstance(bc_left, dict) and bc_left["type"]=="pressure" else None
-    t_bc = state.t + dt
-    # p_left = p_left * t_bc**gamma
-    a_new = compute_acceleration_nodes(x_new, p_new, q_new, m_cells, geom, p_left=p_left)
-
-    # print(f"dt={dt:.4e} \t p_left | p_new[1:10]={p_left}|{p_new[0:10]}")
-    # plt.plot(1/2 * (x_new[1:] + x_new[:-1]) , p_new)
-    # plt.xlabel("Position")
-    # plt.ylabel("Pressure")
-    # plt.title(f"Pressure profile at t={state.t + dt:.4e}")
-    # plt.show()
+    # Determine boundary pressures for acceleration calculation
+    p_left, p_right = _get_boundary_pressures(bc_left, bc_right, p_new, state.t + dt)
+    a_new = compute_acceleration_nodes(x_new, p_new, q_new, m_cells, geom, 
+                                        p_left=p_left, p_right=p_right)
 
     # (19) full-step velocity
     u_new = u_half + 0.5 * dt * a_new
-    #  u_new = apply_velocity_bc(u_new, bc_left, bc_right, state.t + dt)
+    
+    # Apply velocity boundary conditions at full step
+    u_new = _apply_velocity_bc_full(u_new, bc_left, bc_right)
 
     return HydroState(
         t=state.t + dt,
@@ -107,3 +110,86 @@ def step_lagrangian(state: HydroState,
         p=p_new,
         q=q_new
     )
+
+
+def _apply_velocity_bc_half(u, bc_left, bc_right):
+    """Apply velocity boundary conditions at half-step."""
+    u = u.copy()
+    
+    # Left boundary
+    if bc_left == "reflective":
+        # Reflective: velocity at origin is zero (symmetric/wall)
+        u[0] = 0.0
+    elif bc_left == "outflow":
+        u[0] = u[1]
+    elif bc_left == "none":
+        pass
+    elif isinstance(bc_left, dict):
+        if bc_left["type"] == "pressure":
+            # Pressure BC: don't constrain velocity at half-step
+            pass
+    
+    # Right boundary
+    if bc_right == "reflective":
+        u[-1] = 0.0
+    elif bc_right == "outflow":
+        u[-1] = u[-2]
+    elif bc_right == "none":
+        pass
+    elif isinstance(bc_right, dict):
+        pass
+    
+    return u
+
+
+def _apply_velocity_bc_full(u, bc_left, bc_right):
+    """Apply velocity boundary conditions at full step."""
+    u = u.copy()
+    
+    # Left boundary
+    if bc_left == "reflective":
+        u[0] = 0.0
+    elif bc_left == "outflow":
+        u[0] = u[1]
+    elif bc_left == "none":
+        pass
+    elif isinstance(bc_left, dict):
+        pass
+    
+    # Right boundary
+    if bc_right == "reflective":
+        u[-1] = 0.0
+    elif bc_right == "outflow":
+        u[-1] = u[-2]
+    elif bc_right == "none":
+        pass
+    elif isinstance(bc_right, dict):
+        pass
+    
+    return u
+
+
+def _get_boundary_pressures(bc_left, bc_right, p_cells, t):
+    """
+    Extract boundary pressures for acceleration calculation.
+    
+    Returns:
+        (p_left, p_right): Boundary pressures, or None for transmissive/none
+    """
+    p_left = None
+    p_right = None
+    
+    # Left boundary
+    if isinstance(bc_left, dict) and bc_left.get("type") == "pressure":
+        p_left = bc_left["p"]
+    elif bc_left == "reflective":
+        # For reflective BC, use ghost cell with same pressure (dp/dn = 0)
+        p_left = p_cells[0]
+    
+    # Right boundary
+    if isinstance(bc_right, dict) and bc_right.get("type") == "pressure":
+        p_right = bc_right["p"]
+    elif bc_right == "reflective":
+        p_right = p_cells[-1]
+    
+    return p_left, p_right

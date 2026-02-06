@@ -46,8 +46,8 @@ SEDOV_TEST_CASES = {
     "standard_spherical": SedovExplosionCase(
         x_min=0.0,
         x_max=1.2,
-        t_end=1.0,
-        E0=1.0,
+        t_end=0.5,
+        E0=0.851072,
         rho0=1.0,
         p0=1e-6,
         title="Standard Spherical Sedov"
@@ -55,11 +55,20 @@ SEDOV_TEST_CASES = {
     "standard_cylindrical": SedovExplosionCase(
         x_min=0.0,
         x_max=1.2,
-        t_end=1.0,
-        E0=1.0,
+        t_end=0.5,
+        E0=0.311357,
         rho0=1.0,
         p0=1e-6,
         title="Standard Cylindrical Sedov"
+    ),
+    "standard_planar": SedovExplosionCase(
+        x_min=0.0,
+        x_max=1.2,
+        t_end=0.5,
+        E0=0.311357,
+        rho0=1.0,
+        p0=1e-6,
+        title="Standard Planar Sedov"
     ),
     "strong_explosion": SedovExplosionCase(
         x_min=0.0,

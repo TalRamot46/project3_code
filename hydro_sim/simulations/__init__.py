@@ -2,7 +2,7 @@
 """
 Simulation runners for hydrodynamic problems.
 """
-from .driven_shock_sim import (
+from .lagrangian_sim import (
     simulate_lagrangian,
     SimulationHistory,
     ShockHistory,  # Alias for backward compatibility

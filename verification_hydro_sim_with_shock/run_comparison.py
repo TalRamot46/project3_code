@@ -26,11 +26,11 @@ for p in [str(_project_root), str(_hydro_sim), str(_shussman)]:
         sys.path.insert(0, p)
 
 # Configuration and presets
-from comparison.comparison_config import ComparisonCase, ComparisonConfig, PlotMode
-from comparison.presets import get_preset, list_presets, PRESETS
+from verification_hydro_sim_with_shock.comparison_config import ComparisonCase, ComparisonConfig, PlotMode
+from verification_hydro_sim_with_shock.presets import get_preset, list_presets, PRESETS
 
 # Plotting
-from comparison.compare_shock_plots import (
+from verification_hydro_sim_with_shock.compare_shock_plots import (
     SimulationData,
     load_shussman_data,
     load_hydro_history,
@@ -56,7 +56,7 @@ def run_hydro_simulation(case: ComparisonCase, config: ComparisonConfig) -> Simu
     Returns:
         SimulationData ready for comparison plotting
     """
-    from hydro_sim.simulations.driven_shock_sim import simulate_lagrangian, SimulationType
+    from project_3.hydro_sim.simulations.lagrangian_sim import simulate_lagrangian, SimulationType
     
     driven_case = case.to_driven_shock_case()
     

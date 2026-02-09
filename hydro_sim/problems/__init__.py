@@ -4,7 +4,7 @@ Hydrodynamic problem definitions and initialization functions.
 
 Structure:
 - simulation_config.py: Numerical solver parameters (N, CFL, etc.) + SIMULATION_CONFIGS
-- base_problem.py: Base class for physical problem parameters
+- Hydro_case.py: Base class for physical problem parameters
 - presets.py: Predefined test cases with recommended configs
 - *_problem.py: Specific problem types with unique physics
 """
@@ -15,7 +15,7 @@ from .simulation_config import (
     get_config,
     make_output_paths,
 )
-from .base_problem import ProblemCase
+from .Hydro_case import HydroCase
 from .presets import get_preset, list_presets, PRESETS, get_preset_names
 
 from .riemann_problem import (
@@ -50,7 +50,7 @@ __all__ = [
     "list_presets",
     "get_preset_names",
     # Base class
-    "ProblemCase",
+    "HydroCase",
     # Riemann
     "RiemannCase",
     "RIEMANN_TEST_CASES",

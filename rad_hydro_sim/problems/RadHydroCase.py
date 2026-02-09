@@ -12,15 +12,15 @@ from typing import Optional, Any
 
 
 @dataclass(frozen=True)
-class ProblemCase(ABC):
+class RadHydroCase(ABC):
     """
-    Abstract base class for hydrodynamic problem configurations.
+    Abstract base class for radiation hydrodynamic problem configurations.
     
     All problem types (Riemann, DrivenShock, Sedov, etc.) inherit from this
     base class to ensure a consistent interface.
     """
     # Common to all problems
-    gamma: float
+    r: float # r = \gamma - 1 (Rosen's notation)
     x_min: float
     x_max: float
     t_end: float

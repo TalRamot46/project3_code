@@ -13,7 +13,7 @@ Usage:
 from typing import Tuple, Dict
 
 from .simulation_config import SimulationConfig, SIMULATION_CONFIGS, get_config
-from .base_problem import ProblemCase
+from .Hydro_case import HydroCase
 from .riemann_problem import RIEMANN_TEST_CASES
 from .driven_shock_problem import DRIVEN_SHOCK_TEST_CASES
 from .sedov_problem import SEDOV_TEST_CASES
@@ -24,7 +24,7 @@ from .sedov_problem import SEDOV_TEST_CASES
 # ============================================================================
 
 # All available presets: maps preset name -> (case, config)
-PRESETS: Dict[str, Tuple[ProblemCase, SimulationConfig]] = {
+PRESETS: Dict[str, Tuple[HydroCase, SimulationConfig]] = {
     # -------------------------------------------------------------------------
     # Riemann shock tube presets
     # -------------------------------------------------------------------------
@@ -91,7 +91,7 @@ PRESETS: Dict[str, Tuple[ProblemCase, SimulationConfig]] = {
 # Preset Access Functions
 # ============================================================================
 
-def get_preset(name: str) -> Tuple[ProblemCase, SimulationConfig]:
+def get_preset(name: str) -> Tuple[HydroCase, SimulationConfig]:
     """
     Get a predefined test case and simulation configuration.
     

@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.state import HydroState
-    from simulations.driven_shock_sim import SimulationHistory
+    from project_3.hydro_sim.simulations.lagrangian_sim import SimulationHistory
 
 
 # ============================================================================

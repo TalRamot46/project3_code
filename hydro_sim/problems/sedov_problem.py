@@ -12,13 +12,19 @@ from typing import Any
 
 # Handle both package import and direct run cases
 try:
-    from .base_problem import ProblemCase
+    from .Hydro_case import HydroCase
     from ..core.eos import internal_energy_from_prho
     from ..core.grid import cell_volumes, masses_from_initial_rho
     from ..core.state import HydroState
     from ..core.geometry import spherical, cylindrical, planar
-except ImportError:
-    from problems.base_problem import ProblemCase
+except (ImportError, ValueError):
+    # Fallback for when running as a standalone script
+    import sys
+    from pathlib import Path
+    _parent_dir = str(Path(__file__).parent.parent.absolute())
+    if _parent_dir not in sys.path:
+        sys.path.insert(0, _parent_dir)
+    from problems.Hydro_case import HydroCase
     from core.eos import internal_energy_from_prho
     from core.grid import cell_volumes, masses_from_initial_rho
     from core.state import HydroState
@@ -26,7 +32,7 @@ except ImportError:
 
 
 @dataclass(frozen=True)
-class SedovExplosionCase(ProblemCase):
+class SedovExplosionCase(HydroCase):
     """
     Configuration for Sedov-Taylor point explosion problem.
     

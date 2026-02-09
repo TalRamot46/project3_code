@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from comparison.comparison_config import (
+from verification_hydro_sim_with_shock.comparison_config import (
     ComparisonCase,
     ComparisonConfig,
     PlotMode,
@@ -70,8 +70,8 @@ COMPARISON_CASES: Dict[str, ComparisonCase] = {
         P0=2.71e8,
         tau=-0.447,
         Pw=(2.0, 0.0, -0.447),
-        t_end=1.6e-9,
-        x_max=20e-3 / 19.32,
+        t_end=1e-9,
+        x_max=15e-3 / 19.32,
         n_snapshots=10000,
         material=au_supersonic_variant_1(),
         title="Gold τ=-0.447 (decaying drive)",

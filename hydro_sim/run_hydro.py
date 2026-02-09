@@ -10,7 +10,14 @@ Usage:
     case, config = get_preset("sedov_spherical")
     run_simulation(case, config)
 """
+import sys
 import numpy as np
+from pathlib import Path
+
+# Ensure the current directory is in sys.path for imports to work
+_hydro_sim_dir = Path(__file__).parent.absolute()
+if str(_hydro_sim_dir) not in sys.path:
+    sys.path.insert(0, str(_hydro_sim_dir))
 
 # Problem definitions and configuration
 from problems.simulation_config import SimulationConfig
@@ -18,10 +25,10 @@ from problems.presets import get_preset, get_preset_names, list_presets, PRESETS
 from problems.riemann_problem import RiemannCase
 from problems.driven_shock_problem import DrivenShockCase
 from problems.sedov_problem import SedovExplosionCase
-from problems.base_problem import ProblemCase
+from problems.Hydro_case import HydroCase
 
 # Simulations
-from simulations.driven_shock_sim import simulate_lagrangian, SimulationType
+from simulations.lagrangian_sim import simulate_lagrangian, SimulationType
 
 # Unified plotting
 from plotting.hydro_plots import (
@@ -40,7 +47,7 @@ from simulations.riemann_exact import sample_solution
 # Simulation Type Detection
 # ============================================================================
 
-def _get_sim_type(case: ProblemCase) -> SimulationType:
+def _get_sim_type(case: HydroCase) -> SimulationType:
     """Determine simulation type from case class."""
     if isinstance(case, RiemannCase):
         return SimulationType.RIEMANN
@@ -57,7 +64,7 @@ def _get_sim_type(case: ProblemCase) -> SimulationType:
 # ============================================================================
 
 def run_simulation(
-    case: ProblemCase,
+    case: HydroCase,
     config: SimulationConfig,
 ) -> tuple:
     """
@@ -89,7 +96,6 @@ def run_simulation(
     
     return x_cells, state, meta, history
 
-
 # ============================================================================
 # Plotting Dispatch
 # ============================================================================
@@ -97,7 +103,7 @@ def run_simulation(
 def plot_results(
     x_cells: np.ndarray,
     state,
-    case: ProblemCase,
+    case: HydroCase,
     config: SimulationConfig,
     history=None,
 ) -> None:

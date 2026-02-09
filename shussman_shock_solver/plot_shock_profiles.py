@@ -211,7 +211,7 @@ def main():
     # save a test figure
     plot_profiles(
         args.npz,
-        quantity="rho",
+        quantity="p",
         xaxis="m",
         save="project_3/shussman_shock_solver/shock_profiles_V_vs_m.png",
         show=(not args.no_show),

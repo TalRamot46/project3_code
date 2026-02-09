@@ -30,12 +30,9 @@ def compute_shock_profiles(mat: Material, P0: float, Pw, times=None, *, save_npz
     Pw = np.asarray(Pw, float)
 
     if times is None:
-        times = np.array([0.1, 0.15, 0.25, 0.5, 0.75, 1.0], float) * 5.0e-3
+        times = np.array([0.1, 0.15, 0.25, 0.5, 0.75, 1.0], float) * 1e-9
     else:
         times = np.asarray(times, float)
-
-    # MATLAB: P0 = P0*(7^Pw(2));
-    P0_eff = float(P0) * (7.0 ** float(Pw[1]))
 
     # MATLAB: manager(mat,Pw(3));
     tau = float(Pw[2])
@@ -55,7 +52,7 @@ def compute_shock_profiles(mat: Material, P0: float, Pw, times=None, *, save_npz
         "times": times,
         "t": t,
         "x": x,
-        "P0_eff": P0_eff,
+        "P0_eff": P0,
         "Pw": Pw,
         "meta": dict(m0=m0, mw=mw, e0=e0, ew=ew, u0=u0, uw=uw, xsi=xsi, z=z, utilda=utilda, ufront=ufront),
         "m_shock": [],
@@ -78,14 +75,14 @@ def compute_shock_profiles(mat: Material, P0: float, Pw, times=None, *, save_npz
     for ti in times:
         ti = float(ti)
 
-        m_prof = (m0 * (P0_eff ** mw0) * (ti ** mw2)) * (t / xsi)
-        P_prof = (P0_eff * (ti ** Pw2)) * P_tilde
-        u_prof = (ufront * ((P0_eff * 1e12) ** uw0) * (ti ** uw2)) * (u_tilde / utilda / 1e5)
+        m_prof = (m0 * (P0 ** mw0) * (ti ** mw2)) * (t / xsi)
+        P_prof = (P0 * (ti ** Pw2)) * P_tilde
+        u_prof = (ufront * ((P0 * 1e12) ** uw0) * (ti ** uw2)) * (u_tilde / utilda / 1e5)
         rho_prof = 1.0 / (float(mat.V0) * V_tilde)
 
         T_prof = (
             (
-                (P0_eff * 1e12) * P_tilde * (ti ** Pw2)
+                (P0 * 1e12) * P_tilde * (ti ** Pw2)
                 / float(mat.r) / float(mat.f)
                 * (rho_prof ** (float(mat.mu) - 1.0))
             )
@@ -95,7 +92,7 @@ def compute_shock_profiles(mat: Material, P0: float, Pw, times=None, *, save_npz
 
         # My version of m_prof and P_prof
         m_prof = t * P0**(1/2) * mat.V0**(-1/2) * (ti)**(1+Pw2/2)
-        P_prof = P0 * (ti**Pw2) * P_tilde
+        P_prof = P0 * (ti**Pw2) * P_tilde 
         u_prof = P0**(1/2) * mat.V0**(1/2) * ti**(Pw2/2) * u_tilde
         e_prof = P_prof / (rho_prof * mat.r)
 
@@ -136,7 +133,7 @@ def compute_shock_profiles(mat: Material, P0: float, Pw, times=None, *, save_npz
         np.savez(
             save_npz,
             times=times, t=t, x=x,
-            P0_eff=P0_eff, Pw=Pw,
+            P0_eff=P0, Pw=Pw,
             **{k: np.array(v, dtype=object) for k, v in out.items() if isinstance(v, list)},
             **out["meta"],
         )
@@ -148,7 +145,7 @@ if __name__ == "__main__":
     # You already have your real mat/P0/Pw elsewhere. Example:
     # from materials import Au, P0, Pw
     Au = au_supersonic_variant_1()
-    P0 = 10.0 # units = dyne / cm^2
-    Pw = [1.0, 0.0, -0.45]  # example parameters
+    P0 = 2.71e12 # units = Barye = 
+    Pw = [1.0, 0.0, -0.447]  # example parameters
     data = compute_shock_profiles(Au, P0, Pw)
     pass

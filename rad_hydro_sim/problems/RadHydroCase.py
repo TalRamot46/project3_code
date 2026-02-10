@@ -10,6 +10,8 @@ from abc import ABC
 from dataclasses import dataclass
 from typing import Optional, Any, Tuple
 
+from project_3.hydro_sim.core.geometry import Geometry, planar
+
 
 @dataclass(frozen=True)
 class RadHydroCase(ABC):
@@ -32,24 +34,26 @@ class RadHydroCase(ABC):
     # coupling factor
     chi: float = 1000
 
-    # Boundar conditions
-    T_0: float = 100.0
+    # Boundary conditions
+    T0: float = 100.0
     tau: float = 1.0
+
+    # adiabatic index
+    r: float = 0.25 # r = \gamma_adiabatic - 1
 
     # Initial conditions0
     
     # grid parameters
-    Ncells: int = 1000
-    CFL: float = 1/3
-    sigma_visc: float = 1.0
     x_min: float = 0.0
     x_max: float = 1.0e-3
     t_end: float = 1.0e-9
     title: str = ""
     
-    # Geometry (can be overridden by subclasses)
-    geom: Any = None  # Will be set to planar() by default in subclasses
+    # Geometry
+    geom: Geometry = planar()  # Default to planar geometry
 
-def _get_params(self) -> Tuple[float, float, float, float, float, float, float, float, float]:
-    """Returns the parameters as a tuple"""
-    return self.alpha, self.gamma, self.mu, self.f, self.chi, self.lambda_, self.g, self.T_0, self.tau
+def _get_params(
+    self,
+) -> Tuple[float, float, float, float, float, float, float]:
+    """Returns the parameters as a tuple for radiation step"""
+    return self.alpha, self.gamma, self.mu, self.f, self.chi, self.lambda_, self.g

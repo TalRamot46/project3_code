@@ -12,3 +12,9 @@ class HydroState:
     e: np.ndarray      # cells
     p: np.ndarray      # cells
     q: np.ndarray      # cells
+    m_cells: np.ndarray # cells
+
+@dataclass
+class RadHydroState(HydroState):
+    T: np.ndarray      # cells
+    E_rad: np.ndarray  # cells

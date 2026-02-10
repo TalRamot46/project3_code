@@ -1,0 +1,105 @@
+import numpy as np
+
+from project_3.hydro_sim.core.geometry import Geometry, planar
+from project_3.hydro_sim.core.integrator import (
+    _apply_velocity_bc_half,
+    _get_boundary_pressures,
+    compute_acceleration_nodes,
+)
+from project_3.hydro_sim.core.state import RadHydroState
+from project_3.hydro_sim.core.grid import cell_volumes
+from project_3.hydro_sim.core.viscosity import artificial_viscosity
+from project_3.hydro_sim.core.eos import pressure_ideal_gas
+from project_3.hydro_sim.core.boundary import apply_velocity_bc, apply_pressure_bc
+
+def get_e_star_from_hydro(
+    state: RadHydroState,
+    geom: Geometry,
+    r: float,
+    sigma_visc: float,
+    dt: float,
+) -> RadHydroState:
+    """
+    One time step implementing PDF Eqs.(11)-(19),
+    with generalized boundary conditions.
+    
+    Supported boundary conditions:
+        - "outflow": Zero-gradient (transmissive) boundary
+        - "none": No boundary treatment (for Riemann problems)
+        - "reflective": Reflecting wall (u=0 at boundary, for Sedov origin)
+        - {"type": "pressure", "p": value}: Pressure-driven boundary
+    """
+
+    # (11) half-step velocity
+    u_half = state.u + 0.5 * dt * state.a
+    
+    # Apply velocity boundary conditions at half-step
+    # u_half = _apply_velocity_bc_half(u_half, bc_left, bc_right) # No velocity BCs for now!
+ 
+    # (12) update nodes
+    x_new = state.x + dt * u_half
+
+    # (13) new volumes
+    V_new = cell_volumes(x_new, geom)
+    if not np.all(V_new > 0):
+        raise RuntimeError("Negative/zero cell volume encountered. Reduce dt or add limiter.")
+
+    # (14) new density
+    rho_new = state.m_cells / V_new
+
+    # (15) artificial viscosity
+    q_new = artificial_viscosity(rho_new, u_half, sigma_visc)
+
+    # (16) energy update
+    dV = V_new - state.V
+    num = state.e - 0.5 * (state.p + state.q + q_new) * (dV / state.m_cells)
+    den = 1.0 + 0.5 * r * rho_new * (dV / state.m_cells)
+    e_star = num / den
+    
+    state_star = RadHydroState(
+        t=state.t + dt,
+        x=x_new,
+        u=u_half,
+        a=state.a,  # acceleration will be updated after radiation step
+        V=V_new,
+        rho=rho_new,
+        e=e_star,
+        p=state.p,  # pressure will be updated after radiation step
+        q=q_new,
+        m_cells=state.m_cells,
+        T=state.T,  # temperature will be updated after radiation step
+        E_rad=state.E_rad # radiation energy will be updated after radiation step
+    )
+
+    return state_star
+
+def update_nodes_from_pressure(state: RadHydroState, e_new, dt: float) -> RadHydroState:
+    # (17) pressure EOS
+    p_new = pressure_ideal_gas(state.rho, e_new)
+
+    # (18) acceleration from new (p,q)
+    a_new = compute_acceleration_nodes(state.x, p_new, state.q, state.m_cells, planar(), 
+                                        p_left=state.p[0], p_right=state.p[-1])
+
+    # (19) full-step velocity
+    u_new = state.u + 0.5 * dt * a_new
+    
+    # Apply velocity boundary conditions at full step
+    # u_new = _apply_velocity_bc_full(u_new, N) # No velocity BCs for now!
+
+    new_state = RadHydroState(
+        t=state.t + dt,
+        x=state.x,
+        u=u_new,
+        a=a_new, # acceleration updated with new pressure
+        V=state.V,
+        rho=state.rho,
+        e=e_new,
+        p=p_new, # pressure updated with new energy (after radiation step)
+        q=state.q,
+        m_cells=state.m_cells,
+        T=state.T, # new_state.T already calculated in radiation step.
+        E_rad=state.E_rad # new_state.E_rad already calculated in radiation step.
+    )
+
+    return new_state

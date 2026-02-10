@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.state import HydroState
-    from project_3.hydro_sim.simulations.lagrangian_sim import SimulationHistory
+    from project_3.hydro_sim.simulations.lagrangian_sim import HydroHistory
 
 
 # ============================================================================
@@ -39,6 +39,11 @@ def _create_4panel_figure(sharex: bool = True, figsize: tuple = (10, 8)):
 def _create_4panel_vertical_figure(sharex: bool = True, figsize: tuple = (7, 10)):
     """Create a vertical 4-panel figure for hydro variables."""
     fig, axes = plt.subplots(4, 1, figsize=figsize, sharex=sharex)
+    return fig, axes
+
+def _create_6panel_vertical_figure(sharex: bool = True, figsize: tuple = (7, 10)):
+    """Create a vertical 6-panel figure for hydro variables."""
+    fig, axes = plt.subplots(6, 1, figsize=figsize, sharex=sharex)
     return fig, axes
 
 
@@ -256,7 +261,7 @@ def plot_sedov_results(
 # ============================================================================
 
 def plot_history_slider(
-    history: "SimulationHistory",
+    history: "HydroHistory",
     case,
     savepath: str | None = None,
     show: bool = True,
@@ -345,7 +350,7 @@ def plot_history_slider(
 # ============================================================================
 
 def save_history_gif(
-    history: "SimulationHistory",
+    history: "HydroHistory",
     case,
     gif_path: str = "simulation.gif",
     fps: int = 20,
@@ -355,7 +360,7 @@ def save_history_gif(
     Save an animated GIF of the time-history data.
     
     Parameters:
-        history: SimulationHistory object with time-series data
+        history: HydroHistory object with time-series data
         case: Problem case (for title info)
         gif_path: Output file path
         fps: Frames per second

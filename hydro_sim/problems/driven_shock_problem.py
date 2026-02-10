@@ -139,9 +139,10 @@ def init_driven_shock(x_nodes: np.ndarray, case: DrivenShockCase) -> tuple:
         rho=rho,
         e=e,
         p=p,
-        q=q
+        q=q,
+        m_cells=m_cells
     )
-    return state, m_cells
+    return state
 
 
 # Legacy alias

@@ -4,7 +4,7 @@ Simulation runners for hydrodynamic problems.
 """
 from .lagrangian_sim import (
     simulate_lagrangian,
-    SimulationHistory,
+    HydroHistory,
     ShockHistory,  # Alias for backward compatibility
     SimulationType,
 )
@@ -13,7 +13,7 @@ from .riemann_exact import sample_solution, solve_star_region
 __all__ = [
     # Unified simulation
     "simulate_lagrangian",
-    "SimulationHistory",
+    "HydroHistory",
     "SimulationType",
     # Backward compatibility
     "ShockHistory",

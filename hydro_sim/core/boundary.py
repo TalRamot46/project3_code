@@ -57,3 +57,4 @@ def apply_pressure_bc(p, bc_left, bc_right, t):
         raise ValueError(f"Unknown bc_right: {bc_right}")
 
     return p
+

@@ -166,10 +166,11 @@ def init_sedov(x_nodes: np.ndarray, case: SedovExplosionCase) -> tuple:
         rho=rho,
         e=e,
         p=p,
-        q=q
+        q=q,
+        m_cells=m_cells
     )
     
-    return state, m_cells
+    return state
 
 
 # Legacy alias

@@ -101,6 +101,19 @@ class SimulationConfig:
             show_plot=self.show_plot,
             show_slider=self.show_slider,
         )
+    
+    def _get_parameters(self) -> Tuple[int, float, float, int, Optional[str], Optional[str], bool, bool]:
+        """Return parameters as a tuple (for easy unpacking)."""
+        return (
+            self.N,
+            self.CFL,
+            self.sigma_visc,
+            self.store_every,
+            self.save_path,
+            self.gif_path,
+            self.show_plot,
+            self.show_slider,
+        )
 
 
 # ============================================================================

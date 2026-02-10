@@ -42,4 +42,35 @@ def compute_dt_cfl(x_nodes, u_nodes, rho_cells, p_cells, gamma, CFL):
 
     dt_vol_change = compute_dt_volchange(x_nodes, u_nodes, eta=0.1)
     return min(dt_acoustic, dt_cross, dt_vol_change)
-    
+
+
+# ============================================================================
+# Radiation timestep (for rad-hydro)
+# ============================================================================
+
+def update_dt_relchange(dt, new_E, E, new_UR, UR, *, dtfac=0.05, dtmin=2e-15, dtmax=5e-13, growth_cap=1.1):
+    """
+    Adaptive dt based on max relative change in E and UR.
+
+    dtfac: target relative change per step (~0.05 means ~5%)
+    dtmax: absolute cap on dt
+    growth_cap: allow dt to increase by at most 10% per step (1.1)
+    """
+    # Protect from division by tiny numbers
+    E_min = np.max(np.abs(E)) * 1e-3 + 1e-30
+    dE = np.max(np.abs(new_E - E) / (np.abs(E) + E_min))
+
+    U_min = np.max(np.abs(UR)) * 1e-3 + 1e-30
+    dU = np.max(np.abs(new_UR - UR) / (np.abs(UR) + U_min))
+
+    # Avoid blow-ups if change is ~0
+    dE = max(dE, 1e-16)
+    dU = max(dU, 1e-16)
+
+    dttag1 = dt / dE * dtfac
+    dttag2 = dt / dU * dtfac
+
+    dt_new = min(dttag1, dttag2, growth_cap * dt, dtmax)
+    dt_new = max(dt_new, dtmin)
+    return dt_new
+

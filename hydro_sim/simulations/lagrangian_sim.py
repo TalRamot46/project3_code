@@ -30,7 +30,7 @@ class SimulationType(str, Enum):
 
 
 @dataclass
-class SimulationHistory:
+class HydroHistory:
     """
     Time history of simulation fields (for all simulation types).
     
@@ -53,7 +53,7 @@ class SimulationHistory:
 
 
 # Alias for backward compatibility
-ShockHistory = SimulationHistory
+ShockHistory = HydroHistory
 
 
 def _determine_geometry(case, sim_type: SimulationType) -> Geometry:
@@ -124,22 +124,22 @@ def _initialize_problem(
     """
     if sim_type == SimulationType.RIEMANN:
         x_nodes = np.linspace(case.x_min, case.x_max, Ncells + 1)
-        state, m_cells = init_riemann(x_nodes, case)
+        state = init_riemann(x_nodes, case)
         
     elif sim_type == SimulationType.DRIVEN_SHOCK:
         x_nodes = np.linspace(case.x_min, case.x_max, Ncells + 1)
-        state, m_cells = init_driven_shock(x_nodes, case)
+        state = init_driven_shock(x_nodes, case)
         
     elif sim_type == SimulationType.SEDOV:
         # For Sedov, start slightly away from r=0 to avoid singularity
         r_min = case.x_min if case.x_min > 0 else 1e-6 * case.x_max
         x_nodes = np.linspace(r_min, case.x_max, Ncells + 1)
-        state, m_cells = init_sedov(x_nodes, case)
+        state = init_sedov(x_nodes, case)
         
     else:
         raise ValueError(f"Unknown simulation type: {sim_type}")
     
-    return state, m_cells, x_nodes
+    return state, x_nodes
 
 
 def simulate_lagrangian(
@@ -176,9 +176,9 @@ def simulate_lagrangian(
     """
 
     # Initialize problem
-    state, m_cells, x_nodes = _initialize_problem(case, sim_type, geom, gamma, Ncells)
+    state = _initialize_problem(case, sim_type, geom, gamma, Ncells)
     state.a = compute_acceleration_nodes(state.x, state.p, state.q, m_cells, geom)
-    
+    m_cells = state.m_cells
     t_end = case.t_end
     
     # ---- history buffers ----
@@ -236,7 +236,7 @@ def simulate_lagrangian(
     if times[-1] != state.t:
         store_frame()
 
-    history = SimulationHistory(
+    history = HydroHistory(
         t=np.array(times),
         x=np.stack(Xs, axis=0),
         m=np.stack(Ms, axis=0),

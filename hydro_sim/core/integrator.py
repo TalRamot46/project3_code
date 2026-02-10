@@ -54,8 +54,6 @@ def step_lagrangian(state: HydroState,
         - {"type": "pressure", "p": value}: Pressure-driven boundary
     """
 
-    t_half = state.t + 0.5 * dt
-
     # (11) half-step velocity
     u_half = state.u + 0.5 * dt * state.a
     

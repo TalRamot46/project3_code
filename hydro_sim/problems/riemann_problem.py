@@ -116,8 +116,8 @@ def init_riemann(x_nodes: np.ndarray, case: RiemannCase) -> tuple:
 
     a_nodes = np.zeros_like(x_nodes)
 
-    state = HydroState(t=0.0, x=x_nodes, u=u_nodes, a=a_nodes, V=V, rho=rho, e=e, p=p, q=q)
-    return state, m
+    state = HydroState(t=0.0, x=x_nodes, u=u_nodes, a=a_nodes, V=V, rho=rho, e=e, p=p, q=q, m_cells=m)
+    return state
 
 
 # Legacy alias

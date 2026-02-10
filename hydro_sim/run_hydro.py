@@ -116,6 +116,8 @@ def plot_results(
     - GIF animation (if config.gif_path)
     """
     sim_type = _get_sim_type(case)
+    # Auto-generate output paths for PNG and GIF based on case title
+    config = config.with_output_paths(case.title)
     
     # Plot final state
     if sim_type == SimulationType.RIEMANN:
@@ -184,10 +186,7 @@ def main():
         
         # Get case and config
         case, config = get_preset(preset_name)
-        
-        # Auto-generate output paths for PNG and GIF based on case title
-        config = config.with_output_paths(case.title)
-        
+                
         # Run simulation
         x_cells, state, meta, history = run_simulation(case, config)
         

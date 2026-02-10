@@ -19,8 +19,8 @@ import sys
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from hydro_sim.problems.driven_shock_problem import DrivenShockCase
-from hydro_sim.core.geometry import planar
+from project_3.hydro_sim.problems.driven_shock_problem import DrivenShockCase
+from project_3.hydro_sim.core.geometry import planar
 from shussman_shock_solver.materials_shock import Material, au_supersonic_variant_1
 
 

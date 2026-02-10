@@ -1,6 +1,6 @@
 import numpy as np
 from .eos import sound_speed
-from core.state import HydroState
+from .state import HydroState
 
 def compute_dt_acoustic(state, gamma, CFL):
     c = sound_speed(state.rho, state.p, gamma)     # cells
@@ -33,7 +33,7 @@ def compute_dt_cfl(x_nodes, u_nodes, rho_cells, p_cells, gamma, CFL):
     # 1) acoustic CFL
     dt_acoustic = compute_dt_acoustic(
         HydroState(t=0.0, x=x_nodes, u=u_nodes, a=None,
-                   V=None, rho=rho_cells, e=None, p=p_cells, q=None),
+                   V=None, rho=rho_cells, e=None, p=p_cells, q=None, m_cells=None),
         gamma, CFL)
     
     # 2) mesh-crossing limiter (prevents x_{i+1} < x_i after update)
@@ -41,6 +41,7 @@ def compute_dt_cfl(x_nodes, u_nodes, rho_cells, p_cells, gamma, CFL):
     dt_cross = compute_dt_crossing(x_nodes, u_nodes, CFL)
 
     dt_vol_change = compute_dt_volchange(x_nodes, u_nodes, eta=0.1)
+    dt_vol_change = np.inf
     return min(dt_acoustic, dt_cross, dt_vol_change)
 
 
@@ -48,7 +49,7 @@ def compute_dt_cfl(x_nodes, u_nodes, rho_cells, p_cells, gamma, CFL):
 # Radiation timestep (for rad-hydro)
 # ============================================================================
 
-def update_dt_relchange(dt, new_E, E, new_UR, UR, *, dtfac=0.05, dtmin=2e-15, dtmax=5e-13, growth_cap=1.1):
+def update_dt_relchange(dt, new_E, E, new_UR, UR, *, dtfac=0.05, dtmin=2e-15, growth_cap=1.1):
     """
     Adaptive dt based on max relative change in E and UR.
 
@@ -70,7 +71,7 @@ def update_dt_relchange(dt, new_E, E, new_UR, UR, *, dtfac=0.05, dtmin=2e-15, dt
     dttag1 = dt / dE * dtfac
     dttag2 = dt / dU * dtfac
 
-    dt_new = min(dttag1, dttag2, growth_cap * dt, dtmax)
+    dt_new = min(dttag1, dttag2, growth_cap * dt)
     dt_new = max(dt_new, dtmin)
     return dt_new
 

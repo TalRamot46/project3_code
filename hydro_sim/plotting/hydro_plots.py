@@ -11,7 +11,7 @@ import numpy as np
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.state import HydroState
+    from project_3.hydro_sim.core.state import HydroState
     from project_3.hydro_sim.simulations.lagrangian_sim import HydroHistory
 
 

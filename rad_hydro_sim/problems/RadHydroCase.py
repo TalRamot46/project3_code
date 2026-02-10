@@ -32,28 +32,33 @@ class RadHydroCase(ABC):
     mu: float
 
     # coupling factor
-    chi: float = 1000
+    chi: float
 
     # Boundary conditions
-    T0: float = 100.0
-    tau: float = 1.0
+    T0: float
+    tau: float
+
+    # initial conditions
+    rho0: float 
+    p0: float
+    u0: float
 
     # adiabatic index
-    r: float = 0.25 # r = \gamma_adiabatic - 1
+    r: float # r = \gamma_adiabatic - 1
 
     # Initial conditions0
     
     # grid parameters
-    x_min: float = 0.0
-    x_max: float = 1.0e-3
-    t_end: float = 1.0e-9
+    x_min: float
+    x_max: float
+    t_end: float 
     title: str = ""
     
     # Geometry
     geom: Geometry = planar()  # Default to planar geometry
 
-def _get_params(
-    self,
-) -> Tuple[float, float, float, float, float, float, float]:
-    """Returns the parameters as a tuple for radiation step"""
-    return self.alpha, self.gamma, self.mu, self.f, self.chi, self.lambda_, self.g
+    def _get_params(
+        self,
+    ) -> Tuple[float, float, float, float, float, float, float]:
+        """Returns the parameters as a tuple for radiation step"""
+        return self.alpha, self.gamma, self.mu, self.f, self.chi, self.lambda_, self.g

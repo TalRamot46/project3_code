@@ -7,7 +7,6 @@ from project_3.hydro_sim.core.grid import cell_volumes, masses_from_initial_rho
 from project_3.hydro_sim.core.integrator import compute_acceleration_nodes
 from project_3.hydro_sim.core.state import RadHydroState
 from project_3.hydro_sim.core.timestep import compute_dt_cfl, update_dt_relchange
-from project_3.hydro_sim.simulations.lagrangian_sim import _initialize_problem
 from project_3.rad_hydro_sim.integrator import step_rad_hydro
 from project_3.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 from project_3.rad_hydro_sim.plotting.RadHydroHistory import RadHydroHistory
@@ -20,7 +19,7 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> tuple:
     """Initialize the problem state based on the case and simulation type."""
     # Unpack parameters from case & config
     geom = planar()
-    x_nodes = np.linspace(case.x_min, case.x_max, num=case.Ncells + 1)  # Initial grid
+    x_nodes = np.linspace(case.x_min, case.x_max, num=config.N + 1)  # Initial grid
     x_cells = 0.5 * (x_nodes[:-1] + x_nodes[1:])  # Cell centers
 
     rho = np.full_like(x_cells, case.rho0)
@@ -32,13 +31,12 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> tuple:
     V = cell_volumes(x_nodes, geom)
     m_cells = masses_from_initial_rho(x_nodes, rho, geom)
     
-    u = np.full_like(x_nodes, case.u_0)
+    u = np.full_like(x_nodes, case.u0)
     a = np.zeros_like(x_nodes)
 
-    T_val = calculate_temperature_from_specific_energy(e, rho, case.f, case.gamma, case.mu)  # Initial temperature from Rosen's model
-    T_cells = np.full_like(x_cells, T_val)
+    T = calculate_temperature_from_specific_energy(e, rho, case.f, case.gamma, case.mu)  # Initial temperature from Rosen's model
 
-    state = RadHydroState(t=0.0, x=x_nodes, u=u, a=a, V=V, rho=rho, e=e, p=p, q=q, m_cells=m_cells, T=T_cells, E_rad=np.zeros_like(x_cells))
+    state = RadHydroState(t=0.0, x=x_nodes, u=u, a=a, V=V, rho=rho, e=e, p=p, q=q, m_cells=m_cells, T=T, E_rad=np.zeros_like(x_cells))
     return state
 
 def simulate_rad_hydro(
@@ -48,7 +46,7 @@ def simulate_rad_hydro(
     """This method activates the rad-hydro integrator for a given problem case and simulation type. It initializes the problem, runs the time integration loop, and returns the final state and history."""
     # Unpack parameters from case & config
     # Initialize problem
-    state = _initialize_problem(rad_hydro_case, simulation_config)
+    state = initialize_problem(rad_hydro_case, simulation_config)
     state.a = compute_acceleration_nodes(state.x, state.p, state.q, state.m_cells, rad_hydro_case.geom, p_left=state.p[0], p_right=state.p[-1])
     
     t_end = rad_hydro_case.t_end
@@ -79,14 +77,18 @@ def simulate_rad_hydro(
         while state.t < t_end:
             # Adaptive timestep
             if step > 2:
-                dt_cfl = compute_dt_cfl(state.x, state.u, state.rho, state.p, simulation_config.gamma, simulation_config.CFL)
-                dt_rel = update_dt_relchange(dt_prev, state.E_rad, E_rad_history[-1], state.T, T_history[-1])
+                dt_cfl = compute_dt_cfl(state.x, state.u, state.rho, state.p, rad_hydro_case.r+1, simulation_config.CFL)
+                # dt_rel = update_dt_relchange(dt_prev, state.E_rad, E_rad_history[-1], state.T, T_history[-1])
+                dt_rel = np.inf
                 dt = min(dt_cfl, dt_rel, 0.05 * t_end, dt_prev * 1.1, t_end - state.t)
                 if np.isnan(dt):
                     dt = min(0.05 * t_end, dt_prev * 1.1, t_end - state.t, 1e-12)
             else:
                 # Small initial timestep for stability
                 dt = min(1e-13, 1e-6 * t_end)
+            print(dt)
+            if dt < 1e-14:
+                pass
             dt_prev = dt
 
             # Get boundary conditions for current state
@@ -103,7 +105,7 @@ def simulate_rad_hydro(
             if (step % simulation_config.store_every) == 0:
                 store_frame()
             
-            pbar.update(dt)
+            # pbar.update(dt)
 
     # Ensure last frame stored
     if times[-1] != state.t:

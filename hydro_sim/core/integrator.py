@@ -106,7 +106,8 @@ def step_lagrangian(state: HydroState,
         rho=rho_new,
         e=e_new,
         p=p_new,
-        q=q_new
+        q=q_new,
+        m_cells=m_cells
     )
 
 

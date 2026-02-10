@@ -126,7 +126,7 @@ SIMULATION_CONFIGS: Dict[str, SimulationConfig] = {
         N=500,
         CFL=1/3,
         sigma_visc=1.0,
-        store_every=100,
+        store_every=10,
         show_plot=True,
     ),
     
@@ -199,7 +199,7 @@ SIMULATION_CONFIGS: Dict[str, SimulationConfig] = {
         N=500,
         CFL=1/3,
         sigma_visc=1.0,
-        store_every=50,
+        store_every=10,
         show_plot=True,
         show_slider=True,
     ),

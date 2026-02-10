@@ -9,13 +9,13 @@ Supports:
 All problem types use the same integration loop with configurable boundary conditions.
 """
 from tqdm import tqdm
-from core.geometry import planar, spherical, cylindrical, Geometry
-from core.integrator import step_lagrangian, compute_acceleration_nodes
-from core.timestep import compute_dt_cfl
-from problems.driven_shock_problem import init_driven_shock, DrivenShockCase
-from problems.riemann_problem import init_riemann, RiemannCase
-from problems.sedov_problem import init_sedov, SedovExplosionCase
-from simulations.riemann_exact import sample_solution
+from ..core.geometry import planar, spherical, cylindrical, Geometry
+from ..core.integrator import step_lagrangian, compute_acceleration_nodes
+from ..core.timestep import compute_dt_cfl
+from ..problems.driven_shock_problem import init_driven_shock, DrivenShockCase
+from ..problems.riemann_problem import init_riemann, RiemannCase
+from ..problems.sedov_problem import init_sedov, SedovExplosionCase
+from .riemann_exact import sample_solution
 import numpy as np
 from dataclasses import dataclass
 from enum import Enum
@@ -139,7 +139,7 @@ def _initialize_problem(
     else:
         raise ValueError(f"Unknown simulation type: {sim_type}")
     
-    return state, x_nodes
+    return state
 
 
 def simulate_lagrangian(
@@ -177,7 +177,7 @@ def simulate_lagrangian(
 
     # Initialize problem
     state = _initialize_problem(case, sim_type, geom, gamma, Ncells)
-    state.a = compute_acceleration_nodes(state.x, state.p, state.q, m_cells, geom)
+    state.a = compute_acceleration_nodes(state.x, state.p, state.q, state.m_cells, geom)
     m_cells = state.m_cells
     t_end = case.t_end
     

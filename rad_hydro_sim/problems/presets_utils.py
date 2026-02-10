@@ -22,7 +22,7 @@ from project_3.hydro_sim.problems.riemann_problem import RIEMANN_TEST_CASES
 from project_3.hydro_sim.problems.driven_shock_problem import DRIVEN_SHOCK_TEST_CASES
 from project_3.hydro_sim.problems.sedov_problem import SEDOV_TEST_CASES
 from project_3.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
-from presets_config import PRESETS
+from project_3.rad_hydro_sim.problems.presets_config import PRESETS
 # ============================================================================
 # Preset Access Functions
 # ============================================================================

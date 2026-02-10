@@ -11,6 +11,7 @@ from project_3.hydro_sim.core.grid import cell_volumes
 from project_3.hydro_sim.core.viscosity import artificial_viscosity
 from project_3.hydro_sim.core.eos import pressure_ideal_gas
 from project_3.hydro_sim.core.boundary import apply_velocity_bc, apply_pressure_bc
+from project_3.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 
 def get_e_star_from_hydro(
     state: RadHydroState,
@@ -73,13 +74,13 @@ def get_e_star_from_hydro(
 
     return state_star
 
-def update_nodes_from_pressure(state: RadHydroState, e_new, dt: float) -> RadHydroState:
+def update_nodes_from_pressure(state: RadHydroState, case: RadHydroCase, e_new, dt: float) -> RadHydroState:
     # (17) pressure EOS
-    p_new = pressure_ideal_gas(state.rho, e_new)
+    p_new = pressure_ideal_gas(state.rho, e_new, gamma=case.r+1)
 
     # (18) acceleration from new (p,q)
     a_new = compute_acceleration_nodes(state.x, p_new, state.q, state.m_cells, planar(), 
-                                        p_left=state.p[0], p_right=state.p[-1])
+                                        p_left=1.0, p_right=state.p[-1])
 
     # (19) full-step velocity
     u_new = state.u + 0.5 * dt * a_new

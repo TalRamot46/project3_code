@@ -14,24 +14,22 @@ import sys
 import numpy as np
 from pathlib import Path
 
-# Ensure the current directory is in sys.path for imports to work
-_hydro_sim_dir = Path(__file__).parent.absolute()
-if str(_hydro_sim_dir) not in sys.path:
-    sys.path.insert(0, str(_hydro_sim_dir))
+# Add parent directory to path so project_3 module can be found
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 # Problem definitions and configuration
-from problems.simulation_config import SimulationConfig
-from problems.presets import get_preset, get_preset_names, list_presets, PRESETS
-from problems.riemann_problem import RiemannCase
-from problems.driven_shock_problem import DrivenShockCase
-from problems.sedov_problem import SedovExplosionCase
-from problems.Hydro_case import HydroCase
+from project_3.hydro_sim.problems.simulation_config import SimulationConfig
+from project_3.hydro_sim.problems.presets import get_preset, get_preset_names, list_presets, PRESETS
+from project_3.hydro_sim.problems.riemann_problem import RiemannCase
+from project_3.hydro_sim.problems.driven_shock_problem import DrivenShockCase
+from project_3.hydro_sim.problems.sedov_problem import SedovExplosionCase
+from project_3.hydro_sim.problems.Hydro_case import HydroCase
 
 # Simulations
-from simulations.lagrangian_sim import simulate_lagrangian, SimulationType
+from project_3.hydro_sim.simulations.lagrangian_sim import simulate_lagrangian, SimulationType
 
 # Unified plotting
-from plotting.hydro_plots import (
+from project_3.hydro_sim.plotting.hydro_plots import (
     plot_riemann_results,
     plot_shock_results,
     plot_sedov_results,
@@ -40,7 +38,7 @@ from plotting.hydro_plots import (
 )
 
 # For Riemann exact solution
-from simulations.riemann_exact import sample_solution
+from project_3.hydro_sim.simulations.riemann_exact import sample_solution
 
 
 # ============================================================================
@@ -176,10 +174,7 @@ def plot_results(
 # Main Entry Point
 # ============================================================================
 
-def main():
-    """Run a simulation with a predefined preset."""
-    
-    # ===== SELECT YOUR PRESET HERE =====
+def run_all_presets():
     # run over all presets for testing:
     for preset_name in get_preset_names():
         print(f"\n=== Running preset: {preset_name} ===")
@@ -192,7 +187,22 @@ def main():
         
         # Plot results (will automatically save PNG and GIF)
         plot_results(x_cells, state, case, config, history)
-        
+
+def main():
+    """Run a simulation with a predefined preset."""
+    # ===== SELECT YOUR PRESET HERE =====
+    preset_name = "sedov_spherical"  # Change this to run different cases
+    print(f"\n=== Running preset: {preset_name} ===")
+
+    # Get case and config
+    case, config = get_preset(preset_name)
+            
+    # Run simulation
+    x_cells, state, meta, history = run_simulation(case, config)
+    
+    # Plot results (will automatically save PNG and GIF)
+    plot_results(x_cells, state, case, config, history)
+
 
 if __name__ == "__main__":
     main()

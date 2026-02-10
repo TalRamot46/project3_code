@@ -1,4 +1,10 @@
+import sys
+from pathlib import Path
+
 import numpy as np
+
+# Add parent directory to path so project_3 module can be found
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from project_3.rad_hydro_sim.problems.presets_utils import (
     get_preset_names,
@@ -25,7 +31,7 @@ def run_simulation(
     
     # Run simulation
     x_cells, state, meta, history = simulate_rad_hydro(
-        case=case,
+        rad_hydro_case=case,
         simulation_config=config,
     )
     
@@ -57,8 +63,8 @@ def plot_results(
     #     plot_final_state(x_cells, state, case, config)
         
     # Interactive slider
-    if config.show_slider and history is not None:
-        plot_history_slider(history, case, show=True)
+    # if config.show_slider and history is not None:
+    plot_history_slider(history, case, show=True)
     
     # Save GIF
     if config.gif_path and history is not None:

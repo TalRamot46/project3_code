@@ -18,3 +18,7 @@ class HydroState:
 class RadHydroState(HydroState):
     T: np.ndarray      # cells
     E_rad: np.ndarray  # cells
+
+    def _replace(self, **changes):
+        """Utility method to create a new instance with some fields updated."""
+        return self.__class__(**{**self.__dict__, **changes})

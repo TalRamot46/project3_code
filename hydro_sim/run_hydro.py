@@ -191,7 +191,7 @@ def run_all_presets():
 def main():
     """Run a simulation with a predefined preset."""
     # ===== SELECT YOUR PRESET HERE =====
-    preset_name = "sedov_spherical"  # Change this to run different cases
+    preset_name = "shock_constant"  # Change this to run different cases
     print(f"\n=== Running preset: {preset_name} ===")
 
     # Get case and config

@@ -43,6 +43,8 @@ class RadHydroCase(ABC):
     p0: float
     u0: float
 
+    T_initial: float 
+
     # adiabatic index
     r: float # r = \gamma_adiabatic - 1
 
@@ -52,6 +54,12 @@ class RadHydroCase(ABC):
     x_min: float
     x_max: float
     t_end: float 
+
+    # for flags
+    initial_condition: str # e.g. "pressure, velocity, density", 
+    scenario: str # "hydro_only", "radiation_only", "full_rad_hydro"
+    
+    # Optional fields with defaults
     title: str = ""
     
     # Geometry
@@ -62,3 +70,4 @@ class RadHydroCase(ABC):
     ) -> Tuple[float, float, float, float, float, float, float]:
         """Returns the parameters as a tuple for radiation step"""
         return self.alpha, self.gamma, self.mu, self.f, self.chi, self.lambda_, self.g
+    

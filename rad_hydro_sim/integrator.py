@@ -17,13 +17,24 @@ def step_rad_hydro(state: RadHydroState, dt: float, case: RadHydroCase, config: 
     3. Take e_star, rho, and m_cells to perform radiation-matter coupling and get updated new_e_material and E_rad.
     4. Update pressure profile using new_e_material.
     """
-    state_star = get_e_star_from_hydro(state, case.geom, case.r, config.sigma_visc, dt)
-    # new_e_material, new_T, new_E_rad = radiation_step(state_star, dt, case)
-    new_e_material = state_star.e # Attempting to bypass the radiation step for now to isolate hydro behavior
-    new_T = calculate_temperature_from_specific_energy(new_e_material, state_star.rho, case.f, case.gamma, case.mu)
-    new_state = update_nodes_from_pressure(state, case, new_e_material, dt)
-    new_E_rad = np.zeros_like(state_star.rho) 
-    new_state.T, new_state.E_rad = new_T, new_E_rad
+    if case.scenario == "hydro_only":
+        state_star = get_e_star_from_hydro(state, case.geom, case.r, config.sigma_visc, dt)
+        new_e_material = state_star.e # Attempting to bypass the radiation step for now to isolate hydro behavior
+        new_T = calculate_temperature_from_specific_energy(new_e_material, state_star.rho, case.f, case.gamma, case.mu)
+        new_state = update_nodes_from_pressure(state, case, new_e_material, dt)
+        new_E_rad = np.zeros_like(state_star.rho) 
+        new_state.T, new_state.E_rad = new_T, new_E_rad
+    elif case.scenario == "radiation_only":
+        new_e_material, new_T, new_E_rad = radiation_step(state, dt, case)
+        new_T = calculate_temperature_from_specific_energy(new_e_material, state.rho, case.f, case.gamma, case.mu)
+        new_state = state._replace(e=new_e_material, T=new_T, E_rad=new_E_rad)
+    elif case.scenario == "full_rad_hydro":
+        state_star = get_e_star_from_hydro(state, case.geom, case.r, config.sigma_visc, dt)
+        new_e_material, new_T, new_E_rad = radiation_step(state_star, dt, case)
+        new_T = calculate_temperature_from_specific_energy(new_e_material, state_star.rho, case.f, case.gamma, case.mu)
+        new_state = update_nodes_from_pressure(state, case, new_e_material, dt)
+        new_state.T, new_state.E_rad = new_T, new_E_rad
+    new_state.t += dt
     return new_state
     
 

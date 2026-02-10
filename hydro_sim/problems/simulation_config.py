@@ -196,7 +196,7 @@ SIMULATION_CONFIGS: Dict[str, SimulationConfig] = {
     
     # All outputs (save PNG and GIF, show plot)
     "all_outputs": SimulationConfig(
-        N=500,
+        N=1000,
         CFL=1/3,
         sigma_visc=1.0,
         store_every=10,

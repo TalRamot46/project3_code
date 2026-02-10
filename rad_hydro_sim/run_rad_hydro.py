@@ -76,7 +76,7 @@ def main():
     """Run a simulation with a predefined preset."""
     
     # ===== SELECT YOUR PRESET HERE =====
-    preset_name = "tau_zero"  
+    preset_name = "hydro_only_constant_pressure_drive"  
     
     # Get case and config from preset
     case, config = get_preset(preset_name)

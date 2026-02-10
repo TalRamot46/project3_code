@@ -50,7 +50,7 @@ PRESETS: Dict[str, Tuple[HydroCase, SimulationConfig]] = {
     # -------------------------------------------------------------------------
     "shock_constant": (
         DRIVEN_SHOCK_TEST_CASES["constant_drive"],
-        SIMULATION_CONFIGS["gif_only"],
+        SIMULATION_CONFIGS["all_outputs"],
     ),
     "shock_linear": (
         DRIVEN_SHOCK_TEST_CASES["linear_drive"],

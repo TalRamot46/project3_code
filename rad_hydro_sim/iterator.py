@@ -12,6 +12,7 @@ from project_3.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 from project_3.rad_hydro_sim.plotting.RadHydroHistory import RadHydroHistory
 from project_3.rad_hydro_sim.radiation_step import (
     calculate_temperature_from_specific_energy,
+    a_Hev
 )
 from project_3.hydro_sim.problems.simulation_config import SimulationConfig
 
@@ -22,21 +23,38 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> tuple:
     x_nodes = np.linspace(case.x_min, case.x_max, num=config.N + 1)  # Initial grid
     x_cells = 0.5 * (x_nodes[:-1] + x_nodes[1:])  # Cell centers
 
-    rho = np.full_like(x_cells, case.rho0)
-    p = np.full_like(x_cells, case.p0)
+    rho = np.zeros_like(x_cells)
+    p = np.zeros_like(x_cells)
+    u = np.zeros_like(x_nodes)
+    e = np.zeros_like(x_cells)
+    T = np.zeros_like(x_cells)
+    E_rad= np.zeros_like(x_cells)
+
+    if case.initial_condition == "temperature, density":
+        # If initial condition is given in terms of temperature, convert to specific energy
+        T = np.full_like(x_cells, case.T_initial)
+        e = case.f * T**case.gamma * case.rho0**(-case.mu)
+        rho = np.full_like(x_cells, case.rho0)
+        p = (case.r + 1) * rho * e  # Ideal gas EOS
+        E_rad=a_Hev * T**4
+    elif case.initial_condition == "pressure, velocity, density":
+        rho = np.full_like(x_cells, case.rho0)
+        p = np.full_like(x_cells, case.p0)
+        u = np.full_like(x_nodes, case.u0)
+        e = internal_energy_from_prho(p, rho, case.r+1)
+        T = calculate_temperature_from_specific_energy(e, rho, case.f, case.gamma, case.mu)  # Initial temperature from Rosen's model
+        E_rad = np.zeros_like(x_cells)  # Assuming no initial radiation energy
+        
     q = np.zeros_like(x_cells)
 
-    e = internal_energy_from_prho(rho, p, case.gamma)
     # Initialize mass cells and node positions
     V = cell_volumes(x_nodes, geom)
     m_cells = masses_from_initial_rho(x_nodes, rho, geom)
     
-    u = np.full_like(x_nodes, case.u0)
-    a = np.zeros_like(x_nodes)
+    a = np.zeros_like(x_nodes) # Initial acceleration will be computed in a matching step.
 
-    T = calculate_temperature_from_specific_energy(e, rho, case.f, case.gamma, case.mu)  # Initial temperature from Rosen's model
 
-    state = RadHydroState(t=0.0, x=x_nodes, u=u, a=a, V=V, rho=rho, e=e, p=p, q=q, m_cells=m_cells, T=T, E_rad=np.zeros_like(x_cells))
+    state = RadHydroState(t=0.0, x=x_nodes, u=u, a=a, V=V, rho=rho, e=e, p=p, q=q, m_cells=m_cells, T=T, E_rad=E_rad)
     return state
 
 def simulate_rad_hydro(
@@ -77,19 +95,25 @@ def simulate_rad_hydro(
         while state.t < t_end:
             # Adaptive timestep
             if step > 2:
-                dt_cfl = compute_dt_cfl(state.x, state.u, state.rho, state.p, rad_hydro_case.r+1, simulation_config.CFL)
-                # dt_rel = update_dt_relchange(dt_prev, state.E_rad, E_rad_history[-1], state.T, T_history[-1])
-                dt_rel = np.inf
-                dt = min(dt_cfl, dt_rel, 0.05 * t_end, dt_prev * 1.1, t_end - state.t)
+                # dt_cfl = compute_dt_cfl(state.x, state.u, state.rho, state.p, rad_hydro_case.r+1, simulation_config.CFL)
+                dt_rel = update_dt_relchange(dt_prev, state.E_rad, E_rad_history[-1], state.T, T_history[-1])
+                # dt_rel = np.inf
+
+                # dt = min(dt_cfl, dt_rel, 0.05 * t_end, dt_prev * 1.1, t_end - state.t)
                 if np.isnan(dt):
                     dt = min(0.05 * t_end, dt_prev * 1.1, t_end - state.t, 1e-12)
+                dt = min(dt_rel, 0.05 * t_end, dt_prev * 1.1, t_end - state.t)
             else:
                 # Small initial timestep for stability
-                dt = min(1e-13, 1e-6 * t_end)
-            print(dt)
-            if dt < 1e-14:
+                dt = min(1e-13, 1e-6 * t_end, t_end - state.t)
+            # print(dt)
+            if step > 300 and step % 10 == 0:
                 pass
+            if dt > 0.00022:
+                pass
+
             dt_prev = dt
+
 
             # Get boundary conditions for current state
             # bc_left, bc_right = _get_boundary_conditions(rad_hydro_case, simulation_config, state)
@@ -105,7 +129,7 @@ def simulate_rad_hydro(
             if (step % simulation_config.store_every) == 0:
                 store_frame()
             
-            # pbar.update(dt)
+            pbar.update(dt)
 
     # Ensure last frame stored
     if times[-1] != state.t:

@@ -212,8 +212,11 @@ def simulate_lagrangian(
                     dt = min(0.05 * t_end, dt_prev * 1.1, t_end - state.t)
             else:
                 # Small initial timestep for stability
-                dt = 1e-12 if sim_type in (SimulationType.DRIVEN_SHOCK, SimulationType.SEDOV) else 1e-6 * t_end
+                dt = 1e-13 if sim_type in (SimulationType.DRIVEN_SHOCK, SimulationType.SEDOV) else 1e-6 * t_end
+            print(dt)
             dt_prev = dt
+            if step > 300 and step % 10 == 0:
+                pass
 
             # Get boundary conditions for current state
             bc_left, bc_right = _get_boundary_conditions(case, sim_type, state)
@@ -230,7 +233,7 @@ def simulate_lagrangian(
             if (step % store_every) == 0:
                 store_frame()
             
-            pbar.update(dt)
+            # pbar.update(dt)
 
     # Ensure last frame stored
     if times[-1] != state.t:

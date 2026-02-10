@@ -59,8 +59,8 @@ class DrivenShockCase(HydroCase):
 # Pre-defined driven shock test cases
 DRIVEN_SHOCK_TEST_CASES = {
     "constant_drive": DrivenShockCase(
-        gamma=5/3,
-        x_min=0.0, x_max=1.0, t_end=0.5,
+        gamma=1.25,
+        x_min=0.0, x_max=1.0, t_end=1.0,
         rho0=1.0, p0=1e-6, u0=0.0,
         P0=1.0, tau=0.0,
         geom=planar(),

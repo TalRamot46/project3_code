@@ -2,8 +2,9 @@
 c = 3e10  # speed of light [cm/s]
 a_Kelvin = 7.5646e-15  # Radiation constant in erg cm^-3 K^-4
 eV_to_erg = 1.60218e-12  # electron energy in CGS [erg/eV]
+Hev_to_erg =  100 * eV_to_erg  # electron energy in CGS [erg/Hev]
 k_B = 1.380649e-16  # Boltzmann constant in CGS [erg/K]
-K_per_Hev = 1.16045e7  # Conversion factor from keV to Kelvin
+K_per_Hev = Hev_to_erg / k_B  # Conversion factor from keV to Kelvin
 a_Hev = a_Kelvin * K_per_Hev**4  # Radiation constant in keV cm^-3 keV^-4
 
 import numpy as np
@@ -20,7 +21,7 @@ def calculate_temperature_from_specific_energy(
      
 
 def calculate_beta_from_temperature_and_density(T: np.ndarray, rho: np.ndarray) -> np.ndarray:
-    return 4*a_Hev / (f * gamma) * T**(4-gamma) * rho**(mu - 1) # MAKE SURE THIS IS CORRECT BECAUSER OF a_Hev!
+    return 4*a_Hev / (f * gamma) * T**(4-gamma) * rho**(mu - 1)
 
 def calculate_sigma_from_temperature_and_density(T: np.ndarray, rho: np.ndarray) -> np.ndarray:
     return 1.0 / (g * T**alpha * rho**(-lambda_ - 1))
@@ -47,6 +48,16 @@ def calculate_abcd(sigma: np.ndarray, D: np.ndarray, A: np.ndarray, m_cells: np.
     UR_star = a_Hev * T_star[1:-1]**4
     d = F * UR_star + (1/dt) * E_rad[1:-1]
 
+    # check for nan values in the coefficients which would indicate a problem with the input parameters or the state    if np.any(np.isnan(a)):
+    if np.any(np.isnan(a)) or np.any(np.isnan(b)) or np.any(np.isnan(c_coeff)) or np.any(np.isnan(d)):
+        j = np.where(np.isnan(a))[0][0] if np.any(np.isnan(a)) else (np.where(np.isnan(b))[0][0] if np.any(np.isnan(b)) else (np.where(np.isnan(c_coeff))[0][0] if np.any(np.isnan(c_coeff)) else np.where(np.isnan(d))[0][0]))
+        raise ValueError(
+            f"NaN value encountered in coefficients at interior index {j}: "
+            f"a={a[j]}, b={b[j]}, c={c_coeff[j]}, "
+            f"coef={coeff[j]}, dt={dt}, F={F[j]}, UR_star={UR_star[j]}"
+        )
+    
+    
     if np.any(b <= 0):
         j = np.where(b <= 0)[0][0]
         raise ValueError(
@@ -162,5 +173,5 @@ def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydr
     new_UR = (A / (1 + A)) * new_E_rad + (1 / (1 + A)) * UR_star
 
     new_T = (new_UR / a_Hev)**(1/4)  # calculating the temperature from the updated effective radiation energy density
-    new_e_material = f * gamma / (gamma - 1) * new_T**gamma * rho**(mu - 1)  # Calculating the material specific energy from Rosen's model using the updated temperature and density
+    new_e_material = f * new_T**gamma * rho**(-mu)  # Calculating the material specific energy from Rosen's model using the updated temperature and density
     return new_e_material, new_T, new_E_rad

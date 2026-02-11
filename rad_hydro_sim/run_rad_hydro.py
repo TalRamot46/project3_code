@@ -12,7 +12,7 @@ from project_3.rad_hydro_sim.problems.presets_utils import (
     get_preset,
 )
 from project_3.hydro_sim.plotting.hydro_plots import save_history_gif
-from project_3.rad_hydro_sim.iterator import simulate_rad_hydro
+from project_3.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
 from project_3.rad_hydro_sim.plotting.slider import plot_history_slider
 from project_3.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 from project_3.hydro_sim.problems.simulation_config import SIMULATION_CONFIGS, SimulationConfig
@@ -77,7 +77,7 @@ def main():
     """Run a simulation with a predefined preset."""
     
     # ===== SELECT YOUR PRESET HERE =====
-    preset_name = "hydro_only_power_law_pressure_drive"  
+    preset_name = "rad_hydro_constant_temperature_drive"  
     
     # Get case and config from preset
     case, config = get_preset(preset_name)
@@ -93,4 +93,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

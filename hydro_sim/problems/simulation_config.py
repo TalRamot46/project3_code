@@ -23,12 +23,22 @@ class ProblemType(str, Enum):
 
 
 # ============================================================================
-# Output Path Generation
+# Output Path Generation (all outputs under results/)
 # ============================================================================
 
+def get_results_dir() -> Path:
+    """Base directory for simulation outputs (figures, data). All runs write under results/."""
+    root = Path(__file__).resolve().parent.parent.parent
+    out = root / "results"
+    out.mkdir(parents=True, exist_ok=True)
+    return out
+
+
 def get_figures_dir() -> Path:
-    """Get the base figures directory for hydro_sim outputs."""
-    return Path(__file__).parent.parent / "figures"
+    """Get the base figures directory for hydro_sim outputs (under results/)."""
+    base = get_results_dir() / "hydro_sim"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
 
 
 def make_output_paths(case_name: str) -> Tuple[Path, Path]:

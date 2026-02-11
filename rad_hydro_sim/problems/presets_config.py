@@ -14,7 +14,7 @@ from project_3.hydro_sim.problems.simulation_config import (
     SIMULATION_CONFIGS,
     SimulationConfig,
 )
-from project_3.rad_hydro_sim.radiation_step import K_per_Hev
+from project_3.rad_hydro_sim.simulation.radiation_step import K_per_Hev
 
 
 SIMPLE_TEST_CASES = {
@@ -189,7 +189,49 @@ SIMPLE_TEST_CASES = {
 
         # Geometry
         geom = planar()  # Default to planar geometry
-    )
+    ),
+    "rad_hydro_constant_temperature_drive": RadHydroCase(
+        # Rosen's opacity parameters
+        g = 1.0/7200,
+        alpha = 1.5,
+        lambda_ = 0.2,
+
+        # Rosen's specific energy parameters
+        f = 3.4e13,
+        gamma = 1.6,
+        mu = 0.14,
+
+        # coupling factor
+        chi = 1000,
+
+        # Boundary conditions
+        T0 = 0.86,
+        P0 = None,
+        tau = 0.0,
+
+        # initial conditions
+        rho0 = 19.32,
+        p0 = None,
+        u0 = None,
+        T_initial = 300 / K_per_Hev, # 300 K in Hev
+
+        # adiabatic index
+        r = 0.25, # r = \gamma_adiabatic - 1
+
+        # grid parameters
+        x_min = 0,
+        x_max = 3e-4,
+        t_end = 1.0e-9,
+
+        # for flags
+        initial_condition = "temperature, density",
+        scenario = "full_rad_hydro",
+
+        title = "",
+
+        # Geometry
+        geom = planar()  # Default to planar geometry
+    ),
 }
 
 PRESETS: Dict[str, Tuple[HydroCase, SimulationConfig]] = {
@@ -206,6 +248,10 @@ PRESETS: Dict[str, Tuple[HydroCase, SimulationConfig]] = {
     ),
     "radiation_only_constant_temperature_drive": (
         SIMPLE_TEST_CASES["constant_temperature_drive"],
+        SIMULATION_CONFIGS["all_outputs"],
+    ),
+    "rad_hydro_constant_temperature_drive": (
+        SIMPLE_TEST_CASES["rad_hydro_constant_temperature_drive"],
         SIMULATION_CONFIGS["all_outputs"],
     ),
 }

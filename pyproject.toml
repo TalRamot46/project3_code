@@ -1,0 +1,42 @@
+[project]
+name = "weapon-group"
+version = "0.1.0"
+description = "Hydrodynamic and radiation-hydrodynamic simulation tools"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.23",
+    "matplotlib>=3.5",
+    "scipy>=1.9",
+    "tqdm>=4.60",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+run-hydro = "project_3.hydro_sim.run_hydro:main"
+run-rad-hydro = "project_3.rad_hydro_sim.run_rad_hydro:main"
+
+# =============================================================================
+# Ruff configuration
+# =============================================================================
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]  # ignore line-length for now to avoid a massive diff
+
+[tool.ruff.lint.isort]
+known-first-party = ["project_3"]
+
+# =============================================================================
+# Pytest configuration
+# =============================================================================
+[tool.pytest.ini_options]
+testpaths = ["project_3/tests"]
+pythonpath = ["."]

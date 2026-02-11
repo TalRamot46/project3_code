@@ -53,12 +53,12 @@ def plot_history_slider(
     def set_title(k):
         t = history.t[k]
         case_title = case.title if hasattr(case, 'title') else "Simulation"
-        if hasattr(case, 'T0') and hasattr(case, 'tau'):
+        if case.T0 is not None and case.tau is not None:
             title.set_text(
                 f"{case_title}\n"
                 f"$T(0,t)=T_0 t^{{\\tau}},\\; T_0={case.T0},\\; \\tau={case.tau},\\; t={t:.3e}$"
             )
-        elif hasattr(case, 'P0') and hasattr(case, 'tau'):
+        elif case.P0 is not None and case.tau is not None:
             title.set_text(
                 f"{case_title}\n"
                 f"$P(0,t)=P_0 t^{{\\tau}},\\; P_0={case.P0},\\; \\tau={case.tau},\\; t={t:.3e}$"

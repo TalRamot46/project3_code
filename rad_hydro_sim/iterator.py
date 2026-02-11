@@ -95,23 +95,24 @@ def simulate_rad_hydro(
         while state.t < t_end:
             # Adaptive timestep
             if step > 2:
-                # dt_cfl = compute_dt_cfl(state.x, state.u, state.rho, state.p, rad_hydro_case.r+1, simulation_config.CFL)
-                dt_rel = update_dt_relchange(dt_prev, state.E_rad, E_rad_history[-1], state.T, T_history[-1])
-                # dt_rel = np.inf
-
-                # dt = min(dt_cfl, dt_rel, 0.05 * t_end, dt_prev * 1.1, t_end - state.t)
-                if np.isnan(dt):
-                    dt = min(0.05 * t_end, dt_prev * 1.1, t_end - state.t, 1e-12)
-                dt = min(dt_rel, 0.05 * t_end, dt_prev * 1.1, t_end - state.t)
+                if rad_hydro_case.scenario == "hydro_only":
+                    dt_cfl = compute_dt_cfl(state.x, state.u, state.rho, state.p, rad_hydro_case.r+1, simulation_config.CFL)
+                    if np.isnan(dt_cfl):
+                        dt_cfl = min(0.05 * t_end, dt_prev * 1.1, t_end - state.t, 1e-12)
+                    dt = min(dt_cfl, 0.05 * t_end, dt_prev * 1.1, t_end - state.t)
+                if rad_hydro_case.scenario == "radiation_only":
+                    dt_rel = update_dt_relchange(dt_prev, state.E_rad, E_rad_history[-1], state.T, T_history[-1])
+                    dt = min(dt_rel, 0.05 * t_end, dt_prev * 1.1, t_end - state.t, 1e-12)
+                elif rad_hydro_case.scenario == "full_rad_hydro":
+                    dt_cfl = compute_dt_cfl(state.x, state.u, state.rho, state.p, rad_hydro_case.r+1, simulation_config.CFL)
+                    dt_rel = update_dt_relchange(dt_prev, state.E_rad, E_rad_history[-1], state.T, T_history[-1])
+                    dt = min(dt_cfl, dt_rel, 0.05 * t_end, dt_prev * 1.1, t_end - state.t)
+                    if np.isnan(dt):
+                        dt = min(0.05 * t_end, dt_prev * 1.1, t_end - state.t, 1e-12)
             else:
                 # Small initial timestep for stability
                 dt = min(1e-13, 1e-6 * t_end, t_end - state.t)
             # print(dt)
-            if step > 300 and step % 10 == 0:
-                pass
-            if dt > 0.00022:
-                pass
-
             dt_prev = dt
 
 

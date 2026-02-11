@@ -58,6 +58,11 @@ def plot_history_slider(
                 f"{case_title}\n"
                 f"$T(0,t)=T_0 t^{{\\tau}},\\; T_0={case.T0},\\; \\tau={case.tau},\\; t={t:.3e}$"
             )
+        elif hasattr(case, 'P0') and hasattr(case, 'tau'):
+            title.set_text(
+                f"{case_title}\n"
+                f"$P(0,t)=P_0 t^{{\\tau}},\\; P_0={case.P0},\\; \\tau={case.tau},\\; t={t:.3e}$"
+            )
         else:
             title.set_text(f"{case_title}, t={t:.3e}")
     

@@ -17,11 +17,21 @@ def step_rad_hydro(state: RadHydroState, dt: float, case: RadHydroCase, config: 
     3. Take e_star, rho, and m_cells to perform radiation-matter coupling and get updated new_e_material and E_rad.
     4. Update pressure profile using new_e_material.
     """
+    # Determine boundary conditions based on case
+    if case.P0 is not None:
+        # Pressure-driven boundary
+        p_drive = case.P0 * (state.t ** case.tau) if state.t > 0 else 0.0
+        bc_left = {"type": "pressure", "p": p_drive}
+        bc_right = "outflow"
+    else:
+        bc_left = "outflow"
+        bc_right = "outflow"
+    
     if case.scenario == "hydro_only":
-        state_star = get_e_star_from_hydro(state, case.geom, case.r, config.sigma_visc, dt)
+        state_star = get_e_star_from_hydro(state, case.geom, case.r, config.sigma_visc, dt, bc_left, bc_right)
         new_e_material = state_star.e # Attempting to bypass the radiation step for now to isolate hydro behavior
         new_T = calculate_temperature_from_specific_energy(new_e_material, state_star.rho, case.f, case.gamma, case.mu)
-        new_state = update_nodes_from_pressure(state, case, new_e_material, dt)
+        new_state = update_nodes_from_pressure(state_star, case, new_e_material, dt, bc_left, bc_right, t_old=state.t)
         new_E_rad = np.zeros_like(state_star.rho) 
         new_state.T, new_state.E_rad = new_T, new_E_rad
     elif case.scenario == "radiation_only":
@@ -29,10 +39,10 @@ def step_rad_hydro(state: RadHydroState, dt: float, case: RadHydroCase, config: 
         new_T = calculate_temperature_from_specific_energy(new_e_material, state.rho, case.f, case.gamma, case.mu)
         new_state = state._replace(e=new_e_material, T=new_T, E_rad=new_E_rad)
     elif case.scenario == "full_rad_hydro":
-        state_star = get_e_star_from_hydro(state, case.geom, case.r, config.sigma_visc, dt)
+        state_star = get_e_star_from_hydro(state, case.geom, case.r, config.sigma_visc, dt, bc_left, bc_right)
         new_e_material, new_T, new_E_rad = radiation_step(state_star, dt, case)
         new_T = calculate_temperature_from_specific_energy(new_e_material, state_star.rho, case.f, case.gamma, case.mu)
-        new_state = update_nodes_from_pressure(state, case, new_e_material, dt)
+        new_state = update_nodes_from_pressure(state_star, case, new_e_material, dt, bc_left, bc_right, t_old=state.t)
         new_state.T, new_state.E_rad = new_T, new_E_rad
     new_state.t += dt
     return new_state

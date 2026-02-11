@@ -36,6 +36,7 @@ class RadHydroCase(ABC):
 
     # Boundary conditions
     T0: float
+    P0: float
     tau: float
 
     # initial conditions

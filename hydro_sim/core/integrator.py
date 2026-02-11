@@ -89,7 +89,7 @@ def step_lagrangian(state: HydroState,
     # Determine boundary pressures for acceleration calculation
     p_left, p_right = _get_boundary_pressures(bc_left, bc_right, p_new, state.t + dt)
     a_new = compute_acceleration_nodes(x_new, p_new, q_new, m_cells, geom, 
-                                        p_left=1.0*state.t**0, p_right=p_right)
+                                        p_left=p_left, p_right=p_right)
 
     # (19) full-step velocity
     u_new = u_half + 0.5 * dt * a_new

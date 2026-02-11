@@ -34,6 +34,7 @@ SIMPLE_TEST_CASES = {
 
         # Boundary conditions
         T0 = 0.86, # Hev units
+        P0 = None,
         tau = 1.0,
 
         # initial conditions
@@ -75,7 +76,51 @@ SIMPLE_TEST_CASES = {
         chi = 1000,
 
         # Boundary conditions
-        T0 = 0.86, # Hev units
+        T0 = None, 
+        P0 = 1.0,
+        tau = 0.0,
+
+        # initial conditions
+        rho0 = 1.0,
+        p0 = 1e-6,
+        u0 = 0.0,
+
+        T_initial = None,
+
+        # adiabatic index
+        r = 0.25, # r = \gamma_adiabatic - 1
+
+        # Initial conditions0
+        
+        # grid parameters
+        x_min = 0.0,
+        x_max = 1.0,
+        t_end = 1.0,
+
+        initial_condition="pressure, velocity, density",
+        scenario="hydro_only",
+        title = "",
+        
+        # Geometry
+        geom = planar()  # Default to planar geometry
+    ),
+    "power_law_pressure_drive": RadHydroCase(
+    # Rosen's opacity parameters
+        g = 1.0/7200,
+        alpha = 1.5,
+        lambda_ = 0.2,
+
+        # Rosen's specific energy parameters
+        f = 3.4e13,
+        gamma = 1.6,
+        mu = 0.14,
+
+        # coupling factor
+        chi = 1000,
+
+        # Boundary conditions
+        T0 = None, 
+        P0 = 1.0,
         tau = 1.0,
 
         # initial conditions
@@ -117,7 +162,8 @@ SIMPLE_TEST_CASES = {
         chi = 1000,
 
         # Boundary conditions
-        T0 = 0.86, # Hev units
+        T0 = 0.86,
+        P0 = None,
         tau = 0.0,
 
         # initial conditions
@@ -152,6 +198,10 @@ PRESETS: Dict[str, Tuple[HydroCase, SimulationConfig]] = {
     # -------------------------------------------------------------------------
     "hydro_only_constant_pressure_drive": (
         SIMPLE_TEST_CASES["constant_pressure_drive"],
+        SIMULATION_CONFIGS["all_outputs"],
+    ),
+    "hydro_only_power_law_pressure_drive": (
+        SIMPLE_TEST_CASES["power_law_pressure_drive"],
         SIMULATION_CONFIGS["all_outputs"],
     ),
     "radiation_only_constant_temperature_drive": (

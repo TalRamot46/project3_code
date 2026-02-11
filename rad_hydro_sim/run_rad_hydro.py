@@ -64,8 +64,8 @@ def plot_results(
     #     plot_final_state(x_cells, state, case, config)
         
     # Interactive slider
-    # if config.show_slider and history is not None:
-    plot_history_slider(history, case, show=True)
+    if history is not None and config.show_slider:
+        plot_history_slider(history, case, show=True)
     
     # Save GIF
     if config.gif_path and history is not None:

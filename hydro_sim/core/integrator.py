@@ -5,6 +5,7 @@ from .viscosity import artificial_viscosity
 from .grid import cell_volumes
 from .state import HydroState
 from .boundary import apply_velocity_bc, apply_pressure_bc
+from project_3.rad_hydro_sim.plotting import mpl_style  # noqa: F401 - apply project style
 import matplotlib.pyplot as plt
 
 def compute_acceleration_nodes(x_nodes, p_cells, q_cells, m_cells, geom,

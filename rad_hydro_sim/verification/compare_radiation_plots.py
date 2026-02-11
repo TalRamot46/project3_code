@@ -9,6 +9,8 @@ from typing import Any, List, Optional
 
 import numpy as np
 import matplotlib.pyplot as plt
+
+from project_3.rad_hydro_sim.plotting import mpl_style  # noqa: F401 - apply project style
 from matplotlib.widgets import Slider
 
 from project_3.rad_hydro_sim.verification.radiation_data import RadiationData

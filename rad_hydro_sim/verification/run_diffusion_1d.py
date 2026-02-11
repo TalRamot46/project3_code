@@ -24,10 +24,7 @@ _PROJECT_3 = _RAD_HYDRO_DIR.parent
 _REPO_ROOT = _PROJECT_3.parent
 
 # 1D Diffusion script path (from repo root)
-_DIFFUSION_SCRIPT_NAME = "1D Diffusion self similar.py"
-_DIFFUSION_FIGURES_DIR = _REPO_ROOT / "1D Diffusion self similar in gold" / "figures"
-_DIFFUSION_SCRIPT_PATH = _DIFFUSION_FIGURES_DIR / _DIFFUSION_SCRIPT_NAME
-
+_DIFFUSION_SCRIPT_PATH = Path(__file__).resolve().parent / "1D Diffusion self similar.py"
 
 def run_diffusion_1d(
     x_max: float,

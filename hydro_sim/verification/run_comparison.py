@@ -15,18 +15,18 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# Add project_3 to path for imports (hydro_shock is at project_3/rad_hydro_sim/verification/hydro_shock)
+# Add project_3 to path for imports
 _this_file = Path(__file__).resolve()
 _project_root = _this_file.parent.parent.parent.parent  # project_3
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-# Configuration and presets
-from project_3.rad_hydro_sim.verification.hydro_shock.comparison_config import ComparisonCase, ComparisonConfig, PlotMode
-from project_3.rad_hydro_sim.verification.hydro_shock.presets import get_preset, list_presets, PRESETS
+# Configuration and presets (local to hydro_sim.verification)
+from project_3.hydro_sim.verification.comparison_config import ComparisonCase, ComparisonConfig, PlotMode
+from project_3.hydro_sim.verification.presets import get_preset, list_presets, PRESETS
 
 # Plotting
-from project_3.rad_hydro_sim.verification.hydro_shock.compare_shock_plots import (
+from project_3.hydro_sim.verification.compare_shock_plots import (
     SimulationData,
     load_shussman_data,
     load_hydro_history,

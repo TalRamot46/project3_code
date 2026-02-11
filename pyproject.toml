@@ -40,3 +40,9 @@ known-first-party = ["project_3"]
 [tool.pytest.ini_options]
 testpaths = ["project_3/tests"]
 pythonpath = ["."]
+
+# =============================================================================
+# Pyright / Pylance: resolve "project_3" when workspace is the repo (project_3)
+# =============================================================================
+[tool.pyright]
+extraPaths = [".."]

@@ -7,7 +7,6 @@
 # All available presets: maps preset name -> (case, config)
 from typing import Dict, Tuple
 
-from project_3.hydro_sim.problems.Hydro_case import HydroCase
 from project_3.hydro_sim.core.geometry import planar
 from project_3.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 from project_3.hydro_sim.problems.simulation_config import (
@@ -177,7 +176,7 @@ SIMPLE_TEST_CASES = {
         
         # grid parameters
         x_min = 0,
-        x_max = 3e-4,
+        x_max = 3e-5,
         t_end = 1.0e-9,
 
         # for flags
@@ -234,7 +233,7 @@ SIMPLE_TEST_CASES = {
     ),
 }
 
-PRESETS: Dict[str, Tuple[HydroCase, SimulationConfig]] = {
+PRESETS: Dict[str, Tuple[RadHydroCase, SimulationConfig]] = {
     # -------------------------------------------------------------------------
     # Simple Trial
     # -------------------------------------------------------------------------

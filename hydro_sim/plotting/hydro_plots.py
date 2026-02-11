@@ -4,6 +4,8 @@ Unified plotting routines for hydrodynamic simulations.
 Supports Riemann, Driven Shock, and Sedov explosion problems.
 """
 from __future__ import annotations
+
+from project_3.rad_hydro_sim.plotting import mpl_style  # noqa: F401 - apply project style
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 from matplotlib.animation import FuncAnimation, PillowWriter

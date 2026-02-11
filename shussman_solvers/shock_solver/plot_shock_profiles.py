@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import numpy as np
+from project_3.rad_hydro_sim.plotting import mpl_style  # noqa: F401 - apply project style
 import matplotlib.pyplot as plt
 
 
@@ -112,17 +113,7 @@ def plot_profiles(npz_path: str | Path, *, quantity: str, xaxis: str,
     y_list = y_list[:nt]
     x_list = x_list[:nt]
 
-    # --- Figure style (paper-friendly) ---
-    plt.rcParams.update({
-        "font.size": 12,
-        "axes.labelsize": 13,
-        "axes.titlesize": 13,
-        "legend.fontsize": 10,
-        "xtick.labelsize": 11,
-        "ytick.labelsize": 11,
-        "figure.dpi": 150,
-    })
-
+    # Style applied via project_3.rad_hydro_sim.plotting.mpl_style
     fig, ax = plt.subplots(figsize=(7.2, 4.6))
 
     # Use a perceptually uniform colormap across time

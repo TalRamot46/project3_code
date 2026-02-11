@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from project_3.rad_hydro_sim.verification.hydro_shock.comparison_config import (
+from project_3.hydro_sim.verification.comparison_config import (
     ComparisonCase,
     ComparisonConfig,
     PlotMode,

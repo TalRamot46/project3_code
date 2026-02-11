@@ -7,6 +7,7 @@ shussman_shock_solver (self-similar solution).
 from __future__ import annotations
 
 import numpy as np
+from project_3.rad_hydro_sim.plotting import mpl_style  # noqa: F401 - apply project style
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 from matplotlib.animation import FuncAnimation, PillowWriter

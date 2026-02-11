@@ -35,16 +35,16 @@ class RadHydroCase(ABC):
     chi: float
 
     # Boundary conditions
-    T0: float
-    P0: float
+    T0: float | Optional[float]
+    P0: float | Optional[float]
     tau: float
 
     # initial conditions
-    rho0: float 
-    p0: float
-    u0: float
+    rho0: float | Optional[float]
+    p0: float | Optional[float]
+    u0: float | Optional[float]
 
-    T_initial: float 
+    T_initial: float | Optional[float]
 
     # adiabatic index
     r: float # r = \gamma_adiabatic - 1

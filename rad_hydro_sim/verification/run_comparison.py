@@ -8,6 +8,8 @@ Compares:
      vs Supersonic solver (radiation self-similar, same physics).
   2. Hydro-only: run_rad_hydro (hydro_only_power_law_pressure_drive)
      vs hydro_sim run_hydro (matching driven shock case).
+  3. Full rad_hydro: run_rad_hydro (constant temperature drive) vs Shussman piecewise
+     reference (subsonic solver to shock front; shock solver driven by front pressure).
 
 Usage:
   # In main(), set MODE and run:
@@ -24,15 +26,16 @@ from typing import Optional
 
 import numpy as np
 
-# Ensure project_3 is on path (when run as script)
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
+# Ensure project_3 is on path (when run as script): add parent of repo root so "project_3" package resolves
+_REPO_PARENT = Path(__file__).resolve().parent.parent.parent.parent
+if str(_REPO_PARENT) not in sys.path:
+    sys.path.insert(0, str(_REPO_PARENT))
 
 from project_3.rad_hydro_sim.verification.verification_config import (
     VerificationMode,
     RADIATION_ONLY_PRESET,
     HYDRO_ONLY_PRESET,
+    FULL_RAD_HYDRO_PRESET,
     make_verification_output_paths,
 )
 from project_3.rad_hydro_sim.verification.radiation_data import (
@@ -142,8 +145,8 @@ def run_radiation_only_comparison(
         times_sec, z, T_list, E_rad_list = run_diffusion_1d(
             x_max=float(case.x_max),
             t_end=float(case.t_end),
-            T_bath_hev=float(case.T0),
-            rho0=float(case.rho0),
+            T_bath_hev=float(case.T0) if case.T0 is not None else 0.86,
+            rho0=float(case.rho0) if case.rho0 is not None else 1.0,
             n_times=min(40, max(10, len(sim_data.times) if sim_data else 20)),
             Nz=config.N,
         )
@@ -214,7 +217,7 @@ def run_hydro_only_comparison(
         load_rad_hydro_history,
         load_hydro_history,
     )
-    from project_3.rad_hydro_sim.verification.hydro_shock.compare_shock_plots import (
+    from project_3.hydro_sim.verification.compare_shock_plots import (
         plot_comparison_single_time,
         plot_comparison_slider,
     )
@@ -230,9 +233,9 @@ def run_hydro_only_comparison(
         x_min=float(case_rh.x_min),
         x_max=float(case_rh.x_max),
         t_end=float(case_rh.t_end),
-        rho0=float(case_rh.rho0),
-        p0=float(case_rh.p0),
-        u0=float(case_rh.u0),
+        rho0=float(case_rh.rho0) if case_rh.rho0 is not None else 1.0,
+        p0=float(case_rh.p0) if case_rh.p0 is not None else 1e-6,
+        u0=float(case_rh.u0) if case_rh.u0 is not None else 0.0,
         P0=1.0,
         tau=1.0,
         geom=planar(),
@@ -297,13 +300,100 @@ def run_hydro_only_comparison(
 
 
 # =============================================================================
+# Full rad_hydro: constant T drive vs Shussman (subsonic + shock)
+# =============================================================================
+
+def run_full_rad_hydro_comparison(
+    skip_rad_hydro: bool = False,
+    skip_shussman: bool = False,
+    show_plot: bool = True,
+    save_png: bool = True,
+) -> None:
+    """
+    Run rad_hydro with constant temperature drive and compare to piecewise Shussman
+    reference: subsonic solver (profiles until shock front) + shock solver (driven by
+    pressure at front from subsonic). Shock front is diagnosed from rad_hydro solution.
+    """
+    from project_3.rad_hydro_sim.problems.presets_utils import get_preset
+    from project_3.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
+    from project_3.rad_hydro_sim.verification.hydro_data import (
+        load_rad_hydro_history,
+    )
+    from project_3.rad_hydro_sim.verification.shussman_comparison import (
+        run_shussman_piecewise_reference,
+    )
+    from project_3.hydro_sim.verification.compare_shock_plots import (
+        plot_comparison_single_time,
+        plot_comparison_slider,
+    )
+
+    case, config = get_preset(FULL_RAD_HYDRO_PRESET)
+    case_title = case.title or "rad_hydro_constant_temperature_drive"
+    png_path, gif_path = make_verification_output_paths(f"full_rad_hydro_{case_title}")
+
+    sim_data = None
+    if not skip_rad_hydro:
+        print("Running rad_hydro (rad_hydro_constant_temperature_drive)...")
+        x_cells, state, meta, history_rh = simulate_rad_hydro(
+            rad_hydro_case=case,
+            simulation_config=config,
+        )
+        sim_data = load_rad_hydro_history(history_rh, label="Rad-Hydro (full)")
+        print(f"  Stored {len(sim_data.times)} time steps.")
+    if sim_data is None:
+        print("Need rad_hydro data for full rad_hydro comparison.")
+        return
+
+    ref_data = None
+    if not skip_shussman:
+        print("Building Shussman piecewise reference (subsonic + shock)...")
+        times_sec = np.asarray(sim_data.times, dtype=float)
+        ref_data = run_shussman_piecewise_reference(
+            case,
+            times_sec,
+            sim_data.x,
+            sim_data.rho,
+            subsonic_iternum=1500,
+        )
+        if ref_data is not None:
+            print(f"  Reference has {len(ref_data.times)} time steps.")
+    if ref_data is None:
+        print("Could not build Shussman reference; skipping comparison.")
+        return
+
+    print("\nPlotting full rad_hydro vs Shussman (rho, P, u, e vs x)...")
+    if show_plot:
+        plot_comparison_slider(
+            sim_data,
+            ref_data,
+            xaxis="x",
+            show=True,
+            title="Full rad_hydro vs Shussman (subsonic + shock)",
+        )
+    if save_png:
+        time_mid = 0.5 * (float(case.t_end))
+        plot_comparison_single_time(
+            sim_data,
+            ref_data,
+            time=time_mid,
+            xaxis="x",
+            savepath=str(png_path),
+            show=False,
+            title="Full rad_hydro vs Shussman (subsonic + shock)",
+        )
+        print(f"Saved PNG: {png_path}")
+    print("Full rad_hydro comparison done.")
+
+
+# =============================================================================
 # Main
 # =============================================================================
 
 def main():
-    # Select mode: RADIATION_ONLY or HYDRO_ONLY
-    MODE = VerificationMode.RADIATION_ONLY
+    # Select mode: RADIATION_ONLY, HYDRO_ONLY, or FULL_RAD_HYDRO
+    # MODE = VerificationMode.RADIATION_ONLY
     # MODE = VerificationMode.HYDRO_ONLY
+    MODE = VerificationMode.FULL_RAD_HYDRO
 
     print("=" * 60)
     print("Rad-Hydro Verification Comparison")
@@ -323,6 +413,13 @@ def main():
         run_hydro_only_comparison(
             skip_rad_hydro=False,
             skip_hydro_sim=False,
+            show_plot=True,
+            save_png=True,
+        )
+    elif MODE == VerificationMode.FULL_RAD_HYDRO:
+        run_full_rad_hydro_comparison(
+            skip_rad_hydro=False,
+            skip_shussman=False,
             show_plot=True,
             save_png=True,
         )

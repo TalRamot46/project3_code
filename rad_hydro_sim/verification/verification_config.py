@@ -2,14 +2,15 @@
 """
 Configuration for rad_hydro_sim verification comparisons.
 
-Two verification modes:
+Verification modes:
   1. Radiation-only: run_rad_hydro (radiation_only_constant_temperature_drive) vs
      1D Diffusion self similar in gold (constant temperature drive) vs
      Supersonic solver (radiation self-similar, same physics).
   2. Hydro-only: run_rad_hydro (hydro_only_power_law_pressure_drive) vs
      hydro_sim run_hydro (matching driven shock case).
-
-Later: add comparison to Shussman semi-analytic solver for hydro case.
+  3. Full rad_hydro: run_rad_hydro (constant temperature drive) vs piecewise Shussman
+     reference (subsonic solver up to shock front, then shock solver driven by
+     pressure at front from subsonic; shock front diagnosed from rad_hydro).
 """
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ class VerificationMode(str, Enum):
     """Which verification comparison to run."""
     RADIATION_ONLY = "radiation_only"   # vs 1D Diffusion
     HYDRO_ONLY = "hydro_only"            # vs hydro_sim (and later Shussman)
+    FULL_RAD_HYDRO = "full_rad_hydro"   # vs Shussman subsonic + shock (constant T drive)
 
 
 # ============================================================================
@@ -54,3 +56,4 @@ def make_verification_output_paths(case_name: str) -> Tuple[Path, Path]:
 
 RADIATION_ONLY_PRESET = "radiation_only_constant_temperature_drive"
 HYDRO_ONLY_PRESET = "hydro_only_power_law_pressure_drive"
+FULL_RAD_HYDRO_PRESET = "rad_hydro_constant_temperature_drive"

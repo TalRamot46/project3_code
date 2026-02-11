@@ -11,12 +11,12 @@ import numpy as np
 import sys
 from pathlib import Path
 
-# Repo root so that "project_3.verification_hydro_sim_with_shock" resolves
-_repo_root = Path(__file__).resolve().parent.parent.parent.parent
-if str(_repo_root) not in sys.path:
-    sys.path.insert(0, str(_repo_root))
+# Parent of repo root so project_3 package resolves when run as script
+_repo_parent = Path(__file__).resolve().parent.parent.parent.parent
+if str(_repo_parent) not in sys.path:
+    sys.path.insert(0, str(_repo_parent))
 
-from project_3.rad_hydro_sim.verification.hydro_shock.compare_shock_plots import (
+from project_3.hydro_sim.verification.compare_shock_plots import (
     SimulationData,
     load_hydro_history as _load_hydro_history,
 )

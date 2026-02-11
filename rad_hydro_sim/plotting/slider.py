@@ -2,6 +2,7 @@
 # Interactive Slider Plot (Generic for time-history data)
 # ============================================================================
 
+from . import mpl_style  # noqa: F401 - apply project style
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 

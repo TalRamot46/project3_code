@@ -1,15 +1,19 @@
 # verification/hydro_data.py
 """
-Convert rad_hydro and hydro_sim histories to SimulationData for comparison plots.
+Convert rad_hydro and hydro_sim histories to data containers for comparison plots.
 
-Reuses SimulationData and load_hydro_history from verification_hydro_sim_with_shock
-for hydro-only comparison (rad_hydro vs run_hydro).
+For hydro-only verification we reuse ``SimulationData`` from ``hydro_sim``.
+For full rad_hydro verification we use a dedicated ``RadHydroData`` container
+with the same fields but a distinct type.
 """
 from __future__ import annotations
 
-import numpy as np
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+from typing import List
+
+import numpy as np
 
 # Parent of repo root so project_3 package resolves when run as script
 _repo_parent = Path(__file__).resolve().parent.parent.parent.parent
@@ -22,30 +26,59 @@ from project_3.hydro_sim.verification.compare_shock_plots import (
 )
 
 
+@dataclass
+class RadHydroData:
+    """
+    Hydrodynamic fields from a rad_hydro run, for verification comparisons.
+
+    Shape/semantics mirror ``SimulationData`` so plotting helpers from
+    ``hydro_sim.verification.compare_shock_plots`` can be reused.
+    """
+
+    times: np.ndarray          # (nt,)
+    m: List[np.ndarray]        # list of (N,) arrays - mass coordinate
+    x: List[np.ndarray]        # list of (N,) arrays - position
+    rho: List[np.ndarray]      # list of (N,) arrays - density
+    p: List[np.ndarray]        # list of (N,) arrays - pressure
+    u: List[np.ndarray]        # list of (N,) arrays - velocity
+    e: List[np.ndarray]        # list of (N,) arrays - specific internal energy
+    label: str = "Rad-Hydro"
+    color: str = "blue"
+    linestyle: str = "-"
+
+
 def load_hydro_history(history):
     """Convert hydro_sim HydroHistory to SimulationData. Re-export from shock comparison."""
     return _load_hydro_history(history)
 
 
-def load_rad_hydro_history(history, label: str = "Rad-Hydro") -> SimulationData:
-    """Convert RadHydroHistory (hydro fields only) to SimulationData for comparison with run_hydro."""
+def load_rad_hydro_history(history, label: str = "Rad-Hydro") -> RadHydroData:
+    """
+    Convert RadHydroHistory (hydro fields only) to RadHydroData for comparisons.
+    """
     times = np.asarray(history.t, dtype=float)
     nt = len(times)
-    m_list = []
-    x_list = []
-    rho_list = []
-    p_list = []
-    u_list = []
-    e_list = []
+    m_list: List[np.ndarray] = []
+    x_list: List[np.ndarray] = []
+    rho_list: List[np.ndarray] = []
+    p_list: List[np.ndarray] = []
+    u_list: List[np.ndarray] = []
+    e_list: List[np.ndarray] = []
     for k in range(nt):
         # RadHydroHistory has .x, .m, .rho, .p, .u, .e as (K, Ncells) arrays
-        x_list.append(history.x[k].copy() if hasattr(history.x[k], "copy") else np.asarray(history.x[k]))
-        m_list.append(history.m[k].copy() if hasattr(history.m[k], "copy") else np.asarray(history.m[k]))
-        rho_list.append(history.rho[k].copy() if hasattr(history.rho[k], "copy") else np.asarray(history.rho[k]))
-        p_list.append(history.p[k].copy() if hasattr(history.p[k], "copy") else np.asarray(history.p[k]))
-        u_list.append(history.u[k].copy() if hasattr(history.u[k], "copy") else np.asarray(history.u[k]))
-        e_list.append(history.e[k].copy() if hasattr(history.e[k], "copy") else np.asarray(history.e[k]))
-    return SimulationData(
+        x_k = history.x[k]
+        m_k = history.m[k]
+        rho_k = history.rho[k]
+        p_k = history.p[k]
+        u_k = history.u[k]
+        e_k = history.e[k]
+        x_list.append(x_k.copy() if hasattr(x_k, "copy") else np.asarray(x_k))
+        m_list.append(m_k.copy() if hasattr(m_k, "copy") else np.asarray(m_k))
+        rho_list.append(rho_k.copy() if hasattr(rho_k, "copy") else np.asarray(rho_k))
+        p_list.append(p_k.copy() if hasattr(p_k, "copy") else np.asarray(p_k))
+        u_list.append(u_k.copy() if hasattr(u_k, "copy") else np.asarray(u_k))
+        e_list.append(e_k.copy() if hasattr(e_k, "copy") else np.asarray(e_k))
+    return RadHydroData(
         times=times,
         m=m_list,
         x=x_list,

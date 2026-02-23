@@ -96,8 +96,9 @@ def main():
     from project_3.rad_hydro_sim.problems.presets_config import (
         PRESET_POWER_LAW,
         PRESET_FIG_10,
+        PRESET_CONSTANT_T_RADIATION
     )
-    preset_name = PRESET_FIG_10  
+    preset_name = PRESET_CONSTANT_T_RADIATION  
     
     # Get case and config from preset
     case, config = get_preset(preset_name)

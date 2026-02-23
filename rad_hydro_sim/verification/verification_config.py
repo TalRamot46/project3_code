@@ -40,7 +40,7 @@ class VerificationMode(str, Enum):
 # Preset names (physical case keys) and mode → preset mapping
 # ============================================================================
 
-RADIATION_ONLY_PRESET = PRESET_FIRST_ATTEMPT   # constant_temperature_drive
+RADIATION_ONLY_PRESET = PRESET_CONSTANT_T_RADIATION   # constant_temperature_drive
 HYDRO_ONLY_PRESET = PRESET_POWER_LAW                  # power_law_pressure_drive
 FULL_RAD_HYDRO_PRESET = PRESET_FIG_9                 # fig_8_comparison
 

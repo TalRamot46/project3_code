@@ -87,10 +87,10 @@ def test_rad_hydro_presets_importable():
     """rad_hydro_sim presets should import without error."""
     from project_3.rad_hydro_sim.problems.presets_config import (
         PRESETS as RAD_PRESETS,
-        SIMPLE_TEST_CASES,
+        PRESET_TEST_CASES,
     )
     assert len(RAD_PRESETS) > 0
-    assert len(SIMPLE_TEST_CASES) > 0
+    assert len(PRESET_TEST_CASES) > 0
 
 
 def test_rad_hydro_presets_valid():

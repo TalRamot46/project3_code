@@ -136,18 +136,20 @@ def run_radiation_only_comparison(
         sim_data = rad_hydro_history_to_radiation_data(history)
         print(f"  Stored {len(sim_data.times)} time steps.")
 
+    # For debugging purposes:
     import matplotlib.pyplot as plt
-    plt.plot(sim_data.x[-1], sim_data.T[-1])
+    plt.plot(sim_data.x[-1], sim_data.T[-1], label="Rad-Hydro (radiation only)")
     plt.show()
+    
     ref_data = None
     if not skip_diffusion:
         print("Running 1D Diffusion self-similar reference...")
         times_sec, z, T_list, E_rad_list = run_diffusion_1d(
             x_max=float(case.x_max),
             t_end=float(case.t_end),
-            T_bath_hev=float(case.T0) if case.T0 is not None else 0.86,
-            rho0=float(case.rho0) if case.rho0 is not None else 1.0,
-            n_times=min(40, max(10, len(sim_data.times) if sim_data else 20)),
+            T_bath_hev=float(case.T0),
+            rho0=float(case.rho0),
+            n_times=40,
             Nz=config.N,
         )
         ref_data = diffusion_output_to_radiation_data(times_sec, z, T_list, E_rad_list)
@@ -511,7 +513,7 @@ def main() -> None:
 
     run_comparison(
         MODE,
-        skip_rad_hydro=False,
+        skip_rad_hydro=True,
         skip_diffusion=False,
         skip_supersonic=False,
         skip_hydro_sim=False,

@@ -33,7 +33,7 @@ from project_3.hydro_sim.problems.simulation_config import (
 from project_3.rad_hydro_sim.simulation.radiation_step import KELVIN_PER_HEV
 
 KELVIN_PRE_HEV = 1_160_500
-SIMPLE_TEST_CASES = {
+PRESET_TEST_CASES = {
     PRESET_FIRST_ATTEMPT: RadHydroCase(
         # Rosen's opacity parameters
         g = 1.0/7200,
@@ -366,5 +366,5 @@ def get_default_config() -> SimulationConfig:
 # Preset name = physical case key (SIMPLE_TEST_CASES). Config is always all_outputs.
 # ---------------------------------------------------------------------------
 PRESETS: Dict[str, Tuple[RadHydroCase, SimulationConfig]] = {
-    k: (v, DEFAULT_SIMULATION_CONFIG) for k, v in SIMPLE_TEST_CASES.items()
+    k: (v, DEFAULT_SIMULATION_CONFIG) for k, v in PRESET_TEST_CASES.items()
 }

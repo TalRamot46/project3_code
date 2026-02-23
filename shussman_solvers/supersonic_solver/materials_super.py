@@ -21,7 +21,7 @@ from typing import Optional
 KELVIN_PRE_HEV = 1_160_500.0
 
 # Stefan-Boltzmann in W/cm^2/K^4 (MATLAB: 5.670373e-5). Some variants convert to J/ns/cm^2/HeV^4.
-STEFAN_BOLTZMANN = 5.670373e-5
+STEFAN_BOLTZMANN = 5.670373e-5 * KELVIN_PRE_HEV**4 # To convert to Hev unit system
 
 
 @dataclass(frozen=True, slots=True)

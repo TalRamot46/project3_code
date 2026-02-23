@@ -82,7 +82,7 @@ def run_supersonic_solver_reference(
         lambda_=float(case.lambda_),
         mu=float(case.mu),
         rho0=float(case.rho0),
-        f=float(case.f),
+        f=float(case.f) ,
         g=float(case.g),
         sigma=STEFAN_BOLTZMANN,
         r=float(case.r),
@@ -154,10 +154,17 @@ def run_radiation_only_comparison(
         )
         ref_data = diffusion_output_to_radiation_data(times_sec, z, T_list, E_rad_list)
         print(f"  Stored {len(ref_data.times)} time steps.")
+    
+    if skip_rad_hydro:
+        # copy the ref_data to the sim_data
+        sim_data = ref_data
+        print(f"Copied ref_data to sim_data")
 
     # Save and load from rad_hydro_sim/data/ (same path for round-trip)
     # plt.plot(ref_data.x[-1], ref_data.x[-1])
     # plt.show()
+
+    
     sim_npz = get_rad_hydro_npz_path(case_title, prefix="sim_data")
     ref_npz = get_rad_hydro_npz_path(case_title, prefix="ref_data")
     np.savez(str(sim_npz), times=sim_data.times, x=sim_data.x, T=sim_data.T, E_rad=sim_data.E_rad)

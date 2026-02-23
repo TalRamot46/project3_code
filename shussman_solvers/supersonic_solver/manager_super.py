@@ -15,19 +15,15 @@ Structure:
 """
 from __future__ import annotations
 import numpy as np
-from .materials_super import MaterialSuper, HEV_IN_KELVIN
+from .materials_super import MaterialSuper, KELVIN_PRE_HEV
 from .solve_normalize_super import solve_normalize
 from .utils_super import trapz
 
 
 def manager_super(
     mat: MaterialSuper,
-    tau: float,
-    *,
-    iternum: int = 30,
-    xsi0: float = 1.0,
-    tol: float = 1e-4,
-):
+    tau: float
+) -> tuple[float, np.ndarray, float, np.ndarray, float, float, float, np.ndarray, np.ndarray]:
     """
     Provides a self-similar solution for a material and temporal power law tau.
 
@@ -62,7 +58,7 @@ def manager_super(
     A = 3.0 * mat.f * mat.beta / 16.0 / mat.sigma / mat.g
 
     # ---- Solve ODE and normalize ----
-    t, x = solve_normalize(mat.alpha, mat.beta, tau, iternum=iternum, xsi0=xsi0, tol=tol)
+    t, x = solve_normalize(mat.alpha, mat.beta, tau, iternum=100, xsi0=1, shooting_tol=1e-5)
 
     # z = -integral of T^beta over xi (MATLAB: z = -trapz(t, x(:,1).^mat.beta))
     # trapz(y, x): first arg integrand, second abscissa
@@ -79,7 +75,7 @@ def manager_super(
         xsi
         * (A ** mw[0])
         * (10.0 ** (-9.0 * (-mw[1] * tau)))
-        * (HEV_IN_KELVIN ** mw[1])
+        * (KELVIN_PRE_HEV ** mw[1])
         * (1e-9 ** mw[2])
     )
 
@@ -90,7 +86,7 @@ def manager_super(
         * mat.f
         * (A ** ew[0])
         * (10.0 ** (-9.0 * (-ew[1] * tau)))
-        * (HEV_IN_KELVIN ** ew[1])
+        * (KELVIN_PRE_HEV ** ew[1])
         * (1e-9 ** ew[2])
         / 1e9
         / 100.0

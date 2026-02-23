@@ -1,8 +1,8 @@
 from __future__ import annotations
 import numpy as np
-from project_3.shussman_solvers.shock_solver.utils import trapz
-from project_3.shussman_solvers.shock_solver.materials_shock import Material
-from project_3.shussman_solvers.shock_solver.solve_normalize_shock import solve_normalize3
+from .materials_shock import Material
+from .solve_normalize_shock import solve_normalize3
+from .utils import trapz
 
 
 def manager_shock(mat: Material, tau: float,

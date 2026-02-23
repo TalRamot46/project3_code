@@ -31,11 +31,11 @@ _REPO_PARENT = Path(__file__).resolve().parent.parent.parent.parent
 if str(_REPO_PARENT) not in sys.path:
     sys.path.insert(0, str(_REPO_PARENT))
 
+from project_3.rad_hydro_sim.output_paths import get_rad_hydro_npz_path
 from project_3.rad_hydro_sim.verification.verification_config import (
     VerificationMode,
-    RADIATION_ONLY_PRESET,
-    HYDRO_ONLY_PRESET,
-    FULL_RAD_HYDRO_PRESET,
+    get_preset_for_mode,
+    get_output_prefix_for_mode,
     make_verification_output_paths,
 )
 from project_3.rad_hydro_sim.verification.radiation_data import (
@@ -57,9 +57,7 @@ from project_3.rad_hydro_sim.verification.compare_radiation_plots import (
 def run_supersonic_solver_reference(
     case,
     n_times: int = 30,
-    iternum: int = 30,
-    xsi0: float = 1.0,
-) -> Optional[RadiationData]:
+) -> RadiationData | None:
     """
     Run the supersonic (radiation self-similar) solver with parameters matching the RadHydroCase.
 
@@ -91,21 +89,18 @@ def run_supersonic_solver_reference(
         name="Au_rad_hydro",
     )
     tau = float(case.tau)  # 0 for constant temperature drive
-    t_end_sec = float(case.t_end)
     T0_hev = float(case.T0)
 
-    # Dimensionless times 0.05..0.95 map to physical times 0.05*t_end .. 0.95*t_end
-    times_dim = np.linspace(0.05, 0.95, n_times)
+    # Dimensionless times 0.05..0.95 (solver expects these; supersonic_output_to_radiation_data maps to physical time via t_end)
+    times = np.linspace(0.05, 0.95, n_times)
     profiles = compute_profiles_for_report(
         mat, tau,
-        times=times_dim,
-        T0=T0_hev,
-        iternum=iternum,
-        xsi0=xsi0,
+        times=times,
+        T0=T0_hev
     )
     return supersonic_output_to_radiation_data(
         profiles,
-        t_end_sec,
+        case.t_end,
         T0_hev,
         label="Supersonic solver (reference)",
         color="green",
@@ -120,14 +115,16 @@ def run_radiation_only_comparison(
     show_plot: bool = True,
     save_png: bool = True,
 ) -> None:
-    """Run rad_hydro (radiation_only_constant_temperature_drive), 1D Diffusion, and Supersonic solver; compare T, E_rad."""
+    """Run rad_hydro (radiation_only preset), 1D Diffusion, and Supersonic solver; compare T, E_rad."""
     from project_3.rad_hydro_sim.problems.presets_utils import get_preset
     from project_3.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
     from project_3.rad_hydro_sim.verification.run_diffusion_1d import run_diffusion_1d
 
-    case, config = get_preset(RADIATION_ONLY_PRESET)
-    case_title = case.title or "radiation_only_constant_temperature_drive"
-    png_path, gif_path = make_verification_output_paths(f"radiation_only_{case_title}")
+    preset_name = get_preset_for_mode(VerificationMode.RADIATION_ONLY)
+    case, config = get_preset(preset_name)
+    case_title = case.title or preset_name
+    output_prefix = get_output_prefix_for_mode(VerificationMode.RADIATION_ONLY)
+    png_path, gif_path = make_verification_output_paths(f"{output_prefix}_{case_title}")
 
     sim_data = None
     if not skip_rad_hydro:
@@ -139,6 +136,9 @@ def run_radiation_only_comparison(
         sim_data = rad_hydro_history_to_radiation_data(history)
         print(f"  Stored {len(sim_data.times)} time steps.")
 
+    import matplotlib.pyplot as plt
+    plt.plot(sim_data.x[-1], sim_data.T[-1])
+    plt.show()
     ref_data = None
     if not skip_diffusion:
         print("Running 1D Diffusion self-similar reference...")
@@ -153,14 +153,45 @@ def run_radiation_only_comparison(
         ref_data = diffusion_output_to_radiation_data(times_sec, z, T_list, E_rad_list)
         print(f"  Stored {len(ref_data.times)} time steps.")
 
+    # Save and load from rad_hydro_sim/data/ (same path for round-trip)
+    # plt.plot(ref_data.x[-1], ref_data.x[-1])
+    # plt.show()
+    sim_npz = get_rad_hydro_npz_path(case_title, prefix="sim_data")
+    ref_npz = get_rad_hydro_npz_path(case_title, prefix="ref_data")
+    np.savez(str(sim_npz), times=sim_data.times, x=sim_data.x, T=sim_data.T, E_rad=sim_data.E_rad)
+    print(f"Saved sim_data to {sim_npz}")
+    np.savez(str(ref_npz), times=ref_data.times, x=ref_data.x, T=ref_data.T, E_rad=ref_data.E_rad)
+    print(f"Saved ref_data to {ref_npz}")
+
+    loaded = np.load(str(sim_npz), allow_pickle=True)
+    sim_data = RadiationData(
+        times=np.asarray(loaded["times"], dtype=float),
+        x=np.asarray(loaded["x"], dtype=float),
+        T=np.asarray(loaded["T"], dtype=float),
+        E_rad=np.asarray(loaded["E_rad"], dtype=float),
+        label="Rad-Hydro (radiation only)",
+        color="blue",
+        linestyle="-",
+    )
+    loaded = np.load(str(ref_npz), allow_pickle=True)
+    ref_data = RadiationData(
+        times=np.asarray(loaded["times"], dtype=float),
+        x=np.asarray(loaded["x"], dtype=float),
+        T=np.asarray(loaded["T"], dtype=float),
+        E_rad=np.asarray(loaded["E_rad"], dtype=float),
+        label="1D Diffusion (reference)",
+        color="red",
+        linestyle="--",
+    )
+    print(f"Loaded sim_data from {sim_npz}")
+    print(f"Loaded ref_data from {ref_npz}")
+
     super_data = None
     if not skip_supersonic:
         print("Running Supersonic solver (radiation self-similar) reference...")
         super_data = run_supersonic_solver_reference(
             case,
-            n_times=min(30, max(10, len(sim_data.times) if sim_data else 20)),
-            iternum=30,
-            xsi0=1.0,
+            n_times=30,
         )
         if super_data is not None:
             print(f"  Stored {len(super_data.times)} time steps.")
@@ -169,26 +200,24 @@ def run_radiation_only_comparison(
         print("Need both rad_hydro and diffusion data for comparison.")
         return
 
-    extra_ref_data = [d for d in [super_data] if d is not None]
-    title = "Radiation-only: Rad-Hydro vs 1D Diffusion" + (" + Supersonic solver" if extra_ref_data else "")
+    title = "Radiation-only: Rad-Hydro vs 1D Diffusion" + (" + Supersonic solver" if super_data is not None else "")
 
     print("\nPlotting radiation comparison (T, E_rad vs x)...")
     if show_plot:
         plot_radiation_comparison_slider(
-            sim_data, ref_data,
+            sim_data, ref_data, super_data,
             show=True,
             title=title,
-            extra_ref_data=extra_ref_data if extra_ref_data else None,
         )
     if save_png:
-        time_mid = 0.5 * (case.t_end * 0.1 + case.t_end * 0.9)
+        time_mid = config.png_time_frac * float(case.t_end)
         plot_radiation_comparison_single_time(
             sim_data, ref_data,
             time=time_mid,
             savepath=str(png_path),
             show=False,
             title=title,
-            extra_ref_data=extra_ref_data if extra_ref_data else None,
+            extra_ref_data=super_data if super_data else None,
         )
         print(f"Saved PNG: {png_path}")
     print("Radiation-only comparison done.")
@@ -213,7 +242,9 @@ def run_hydro_only_comparison(
         simulate_lagrangian,
         SimulationType,
     )
-    from project_3.rad_hydro_sim.verification.hydro_data import (
+    from project_3.hydro_sim.verification.compare_shock_plots import (
+        plot_comparison_single_time,
+        plot_comparison_slider,
         load_rad_hydro_history,
         load_hydro_history,
     )
@@ -222,10 +253,11 @@ def run_hydro_only_comparison(
         plot_comparison_slider,
     )
 
-    # Rad-hydro preset (hydro_only_power_law_pressure_drive)
-    case_rh, config = get_preset(HYDRO_ONLY_PRESET)
-    case_title = case_rh.title or "hydro_only_power_law_pressure_drive"
-    png_path, gif_path = make_verification_output_paths(f"hydro_only_{case_title}")
+    preset_name = get_preset_for_mode(VerificationMode.HYDRO_ONLY)
+    case_rh, config = get_preset(preset_name)
+    case_title = case_rh.title or preset_name
+    output_prefix = get_output_prefix_for_mode(VerificationMode.HYDRO_ONLY)
+    png_path, gif_path = make_verification_output_paths(f"{output_prefix}_{case_title}")
 
     # Matching driven shock case for hydro_sim (same physics: P0=1, tau=1, gamma=1.25, etc.)
     driven_case = DrivenShockCase(
@@ -244,7 +276,7 @@ def run_hydro_only_comparison(
 
     sim_data = None
     if not skip_rad_hydro:
-        print("Running rad_hydro (hydro_only_power_law_pressure_drive)...")
+        print(f"Running rad_hydro ({preset_name})...")
         x_cells, state, meta, history_rh = simulate_rad_hydro(
             rad_hydro_case=case_rh,
             simulation_config=config,
@@ -286,7 +318,7 @@ def run_hydro_only_comparison(
             title="Hydro-only: Rad-Hydro vs run_hydro",
         )
     if save_png:
-        time_mid = 0.5 * case_rh.t_end
+        time_mid = config.png_time_frac * case_rh.t_end
         plot_comparison_single_time(
             sim_data, ref_data,
             time=time_mid,
@@ -317,7 +349,7 @@ def run_full_rad_hydro_comparison(
     from project_3.rad_hydro_sim.problems.presets_utils import get_preset
     from project_3.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
     from project_3.rad_hydro_sim.verification.hydro_data import (
-        load_rad_hydro_history,
+        RadHydroData,
     )
     from project_3.rad_hydro_sim.verification.shussman_comparison import (
         run_shussman_piecewise_reference,
@@ -325,53 +357,90 @@ def run_full_rad_hydro_comparison(
     from project_3.hydro_sim.verification.compare_shock_plots import (
         plot_comparison_single_time,
         plot_comparison_slider,
+        load_rad_hydro_history,
+        load_hydro_history,
     )
 
-    case, config = get_preset(FULL_RAD_HYDRO_PRESET)
-    case_title = case.title or "rad_hydro_constant_temperature_drive"
-    png_path, gif_path = make_verification_output_paths(f"full_rad_hydro_{case_title}")
+    preset_name = get_preset_for_mode(VerificationMode.FULL_RAD_HYDRO)
+    case, config = get_preset(preset_name)
+    case_title = case.title or preset_name
+    output_prefix = get_output_prefix_for_mode(VerificationMode.FULL_RAD_HYDRO)
+    png_path, gif_path = make_verification_output_paths(f"{output_prefix}_{case_title}")
 
     sim_data = None
     if not skip_rad_hydro:
-        print("Running rad_hydro (rad_hydro_constant_temperature_drive)...")
+        print(f"Running rad_hydro ({preset_name})...")
         x_cells, state, meta, history_rh = simulate_rad_hydro(
             rad_hydro_case=case,
             simulation_config=config,
         )
-        sim_data = load_rad_hydro_history(history_rh, label="Rad-Hydro (full)")
+        sim_data = load_rad_hydro_history(history_rh)
         print(f"  Stored {len(sim_data.times)} time steps.")
     if sim_data is None:
         print("Need rad_hydro data for full rad_hydro comparison.")
         return
 
+    # save the sim_data to rad_hydro_sim/data/
+    sim_npz = get_rad_hydro_npz_path(case_title, prefix="sim_data")
+    np.savez(
+        str(sim_npz),
+        times=sim_data.times, m=sim_data.m, x=sim_data.x,
+        rho=sim_data.rho, p=sim_data.p, u=sim_data.u, e=sim_data.e,
+        T=sim_data.T, E_rad=sim_data.E_rad,
+    )
+    print(f"Saved sim_data to {sim_npz}")
+
+    # load sim_data back from the file (round-trip for debugging)
+    loaded = np.load(str(sim_npz), allow_pickle=True)
+    def _to_list_of_arrays(arr):
+        a = np.asarray(arr)
+        if a.dtype == object:
+            return [np.asarray(v, dtype=float) for v in a.tolist()]
+        if a.ndim == 2:
+            return [a[i, :].astype(float, copy=False) for i in range(a.shape[0])]
+        return [a.astype(float, copy=False)]
+
+    sim_data = RadHydroData(
+        times=np.asarray(loaded["times"], dtype=float),
+        m=_to_list_of_arrays(loaded["m"]),
+        x=_to_list_of_arrays(loaded["x"]),
+        rho=_to_list_of_arrays(loaded["rho"]),
+        p=_to_list_of_arrays(loaded["p"]),
+        u=_to_list_of_arrays(loaded["u"]),
+        e=_to_list_of_arrays(loaded["e"]),
+        T=_to_list_of_arrays(loaded["T"]) if "T" in loaded else [],
+        E_rad=_to_list_of_arrays(loaded["E_rad"]) if "E_rad" in loaded else [],
+        label="Rad-Hydro (full)",
+        color="blue",
+        linestyle="-",
+    )
+
     ref_data = None
     if not skip_shussman:
         print("Building Shussman piecewise reference (subsonic + shock)...")
-        times_sec = np.asarray(sim_data.times, dtype=float)
-        ref_data = run_shussman_piecewise_reference(
-            case,
-            times_sec,
-            sim_data.x,
-            sim_data.rho,
-            subsonic_iternum=1500,
-        )
+        # sample 1 times from the sim_data.times
+        times_sec = np.linspace(sim_data.times[0] + 1e-16, sim_data.times[-1], 10000)
+        print(f"times_sec: {times_sec}")
+        ref_data = run_shussman_piecewise_reference(case, times_sec)
         if ref_data is not None:
             print(f"  Reference has {len(ref_data.times)} time steps.")
     if ref_data is None:
         print("Could not build Shussman reference; skipping comparison.")
         return
 
+
     print("\nPlotting full rad_hydro vs Shussman (rho, P, u, e vs x)...")
     if show_plot:
         plot_comparison_slider(
             sim_data,
             ref_data,
-            xaxis="x",
+            xaxis="m",
             show=True,
             title="Full rad_hydro vs Shussman (subsonic + shock)",
         )
+    print(f"sim_data.times: {sim_data.times}")
     if save_png:
-        time_mid = 0.5 * (float(case.t_end))
+        time_mid = config.png_time_frac * float(case.t_end)
         plot_comparison_single_time(
             sim_data,
             ref_data,
@@ -389,44 +458,67 @@ def run_full_rad_hydro_comparison(
 # Main
 # =============================================================================
 
-def main():
-    # Select mode: RADIATION_ONLY, HYDRO_ONLY, or FULL_RAD_HYDRO
-    # MODE = VerificationMode.RADIATION_ONLY
-    # MODE = VerificationMode.HYDRO_ONLY
-    MODE = VerificationMode.FULL_RAD_HYDRO
-
+def run_comparison(
+    mode: VerificationMode,
+    *,
+    skip_rad_hydro: bool = False,
+    skip_diffusion: bool = False,
+    skip_supersonic: bool = False,
+    skip_hydro_sim: bool = False,
+    skip_shussman: bool = False,
+    show_plot: bool = True,
+    save_png: bool = True,
+) -> None:
+    """Run the verification comparison for the given mode."""
+    preset_name = get_preset_for_mode(mode)
     print("=" * 60)
     print("Rad-Hydro Verification Comparison")
     print("=" * 60)
-    print(f"Mode: {MODE.value}")
+    print(f"Mode: {mode.value} (preset: {preset_name})")
     print()
 
-    if MODE == VerificationMode.RADIATION_ONLY:
+    if mode == VerificationMode.RADIATION_ONLY:
         run_radiation_only_comparison(
-            skip_rad_hydro=False,
-            skip_diffusion=False,
-            skip_supersonic=False,
-            show_plot=True,
-            save_png=True,
+            skip_rad_hydro=skip_rad_hydro,
+            skip_diffusion=skip_diffusion,
+            skip_supersonic=skip_supersonic,
+            show_plot=show_plot,
+            save_png=save_png,
         )
-    elif MODE == VerificationMode.HYDRO_ONLY:
+    elif mode == VerificationMode.HYDRO_ONLY:
         run_hydro_only_comparison(
-            skip_rad_hydro=False,
-            skip_hydro_sim=False,
-            show_plot=True,
-            save_png=True,
+            skip_rad_hydro=skip_rad_hydro,
+            skip_hydro_sim=skip_hydro_sim,
+            show_plot=show_plot,
+            save_png=save_png,
         )
-    elif MODE == VerificationMode.FULL_RAD_HYDRO:
+    elif mode == VerificationMode.FULL_RAD_HYDRO:
         run_full_rad_hydro_comparison(
-            skip_rad_hydro=False,
-            skip_shussman=False,
-            show_plot=True,
-            save_png=True,
+            skip_rad_hydro=skip_rad_hydro,
+            skip_shussman=skip_shussman,
+            show_plot=show_plot,
+            save_png=save_png,
         )
     else:
-        raise ValueError(f"Unknown mode: {MODE}")
+        raise ValueError(f"Unknown mode: {mode}")
 
-    print("\nDone.")
+
+def main() -> None:
+    """Entry point: select mode and run comparison."""
+    # MODE = VerificationMode.FULL_RAD_HYDRO
+    MODE = VerificationMode.RADIATION_ONLY
+    # MODE = VerificationMode.HYDRO_ONLY
+
+    run_comparison(
+        MODE,
+        skip_rad_hydro=False,
+        skip_diffusion=False,
+        skip_supersonic=False,
+        skip_hydro_sim=False,
+        skip_shussman=False,
+        show_plot=True,
+        save_png=True,
+    )
 
 
 if __name__ == "__main__":

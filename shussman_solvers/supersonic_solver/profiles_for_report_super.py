@@ -13,19 +13,30 @@ Structure:
       Returns a dict with times, t, x, m_heat, x_heat, T_heat, and meta (m0, mw, e0, ew, xsi, z, A).
 """
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+
 import numpy as np
-from .materials_super import MaterialSuper
-from .manager_super import manager_super
+
+try:
+    from .materials_super import MaterialSuper
+    from .manager_super import manager_super
+except ImportError:
+    # Run as script: ensure project_3 is on path (repo root = parent of project_3)
+    _repo_root = Path(__file__).resolve().parents[3]
+    if str(_repo_root) not in sys.path:
+        sys.path.insert(0, str(_repo_root))
+    from project_3.shussman_solvers.supersonic_solver.materials_super import MaterialSuper
+    from project_3.shussman_solvers.supersonic_solver.manager_super import manager_super
 
 
 def compute_profiles_for_report(
     mat: MaterialSuper,
     tau: float,
     *,
-    times: np.ndarray | None = None,
-    T0: float = 2.0,
-    iternum: int = 100,
-    xsi0: float = 1.0,
+    times: np.ndarray,
+    T0: float,
 ):
     """
     Compute mass, position, and temperature profiles at a sequence of times.
@@ -45,14 +56,7 @@ def compute_profiles_for_report(
     - x_heat[i,:]: position (cm) = m_heat / rho0
     - T_heat[i,:]: temperature; MATLAB uses 100*T0*times^tau*T_tilde (unit scaling by 100)
     """
-    if times is None:
-        times = np.arange(0.01, 1.0 + 0.005, 0.01)
-    times = np.asarray(times, dtype=float).ravel()
-
-    m0, mw, e0, ew, xsi, z, A, t, x = manager_super(
-        mat, tau, iternum=iternum, xsi0=xsi0
-    )
-
+    m0, mw, e0, ew, xsi, z, A, t, x = manager_super(mat, tau)
     # Self-similar T (dimensionless)
     T_tilde = np.asarray(x[:, 0], dtype=float)
     t_xi = np.asarray(t, dtype=float)
@@ -62,8 +66,7 @@ def compute_profiles_for_report(
 
     m_heat = np.zeros((n_times, n_xi), dtype=float)
     x_heat = np.zeros((n_times, n_xi), dtype=float)
-    # MATLAB: T_heat(i,:) = 100*T0*times(i)^tau*(x(:,1))
-    # The factor 100 is a unit/scaling choice by the MATLAB author (e.g. for display or K vs HeV).
+    # MATLAB: T_heat(i,:) = T0*times(i)^tau*(x(:,1))
     T_heat = np.zeros((n_times, n_xi), dtype=float)
 
     for i in range(n_times):
@@ -71,7 +74,7 @@ def compute_profiles_for_report(
         # m_heat(i,:) = m0*T0^mw(2)*times(i)^mw(3) .* t'/xsi  (t and t' are column in MATLAB)
         m_heat[i, :] = m0 * (T0 ** mw[1]) * (ti ** mw[2]) * (t_xi / xsi)
         x_heat[i, :] = m_heat[i, :] / mat.rho0
-        T_heat[i, :] = 100.0 * T0 * (ti ** tau) * T_tilde
+        T_heat[i, :] = T0 * (ti ** tau) * T_tilde
 
     return {
         "times": times,
@@ -91,13 +94,21 @@ def compute_profiles_for_report(
 
 
 if __name__ == "__main__":
-    from .materials_super import material_al
+    try:
+        from .materials_super import material_au
+    except ImportError:
+        from project_3.shussman_solvers.supersonic_solver.materials_super import material_au
 
     # Example: Al with tau = 1/(4+alpha-2*beta) (constant-temperature-like scaling)
-    mat = material_al()
-    tau = 1.0 / (4.0 + mat.alpha - 2.0 * mat.beta)
+    mat = material_au()
+    tau = 0.0
 
-    data = compute_profiles_for_report(mat, tau, T0=2.0)
+    data = compute_profiles_for_report(mat, tau, times=np.array([1.0]), T0=1) # Corresponds to T0=10000K
     print("m_heat shape:", data["m_heat"].shape)
     print("xsi =", data["xsi"])
     print("m0 =", data["m0"], "e0 =", data["e0"])
+
+
+    import matplotlib.pyplot as plt
+    plt.plot(data["x_heat"][0,:], data["T_heat"][0,:])
+    plt.show()

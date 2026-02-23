@@ -18,7 +18,7 @@ from typing import Optional
 
 # ---- Unit-conversion constant (MATLAB author) ----
 # 1 HeV in Kelvin; used to convert between temperature and energy in opacity/EOS formulas.
-HEV_IN_KELVIN = 1_160_500.0
+KELVIN_PRE_HEV = 1_160_500.0
 
 # Stefan-Boltzmann in W/cm^2/K^4 (MATLAB: 5.670373e-5). Some variants convert to J/ns/cm^2/HeV^4.
 STEFAN_BOLTZMANN = 5.670373e-5
@@ -51,9 +51,9 @@ def material_al() -> MaterialSuper:
     mu = 0.0
     rho0 = 2.78  # g/cc
     # Unit conversion (MATLAB author): f in J/g/HeV^beta; (100^beta)/(HeV^beta) and (rho0^mu).
-    f = 3.6e11 * (100.0**beta) / (HEV_IN_KELVIN**beta) * (rho0**mu)
+    f = 3.6e11 * (100.0**beta) / (KELVIN_PRE_HEV**beta) * (rho0**mu)
     # g in g/cm^2/HeV^alpha (MATLAB: 1/(1487*(HeV^alpha)*(rho0^lambda)))
-    g = 1.0 / (1487.0 * (HEV_IN_KELVIN**alpha) * (rho0**lambda_))
+    g = 1.0 / (1487.0 * (KELVIN_PRE_HEV**alpha) * (rho0**lambda_))
     sigma = STEFAN_BOLTZMANN  # W/cm^2/K^4 (commented conversion to J/ns/cm^2/HeV^4 not applied)
     return MaterialSuper(alpha, beta, lambda_, mu, rho0, f, g, sigma, r=0.3, name="Al")
 
@@ -66,10 +66,10 @@ def material_au() -> MaterialSuper:
     beta = 1.6
     lambda_ = 0.2
     mu = 0.14
-    rho0 = 1.0  # g/cc
+    rho0 = 19.32  # g/cc
     # f: J/g/HeV^beta — MATLAB 3.4e13/((HeV^beta)*(rho0^mu))
-    f = 3.4e13 / ((HEV_IN_KELVIN**beta) * (rho0**mu))
-    g = 1.0 / (7200.0 * (HEV_IN_KELVIN**alpha) * (rho0**lambda_))
+    f = 3.4e13 / ((KELVIN_PRE_HEV**beta) * (rho0**mu))
+    g = 1.0 / (7200.0 * (KELVIN_PRE_HEV**alpha) * (rho0**lambda_))
     sigma = STEFAN_BOLTZMANN
     return MaterialSuper(alpha, beta, lambda_, mu, rho0, f, g, sigma, r=None, name="Au")
 
@@ -83,8 +83,8 @@ def material_be() -> MaterialSuper:
     lambda_ = 0.6726
     mu = 0.0701
     rho0 = 1.0  # g/cc
-    f = 8.8053e13 / ((HEV_IN_KELVIN**beta) * (rho0**mu))
-    g = 1.0 / (402.8102 * (HEV_IN_KELVIN**alpha) * (rho0**lambda_))
+    f = 8.8053e13 / ((KELVIN_PRE_HEV**beta) * (rho0**mu))
+    g = 1.0 / (402.8102 * (KELVIN_PRE_HEV**alpha) * (rho0**lambda_))
     sigma = STEFAN_BOLTZMANN
     # Optional sigma conversion (MATLAB commented): sigma*(1160400)*4*(10^-9) for J/ns/cm^2/HeV^4
     return MaterialSuper(alpha, beta, lambda_, mu, rho0, f, g, sigma, r=0.5529, name="Be")
@@ -99,8 +99,8 @@ def material_pb() -> MaterialSuper:
     lambda_ = 0.23
     mu = 0.14
     rho0 = 1.0  # g/cc
-    f = 3.5e13 / ((HEV_IN_KELVIN**beta) * (rho0**mu))
-    g = 1.0 / (13333.0 * (HEV_IN_KELVIN**alpha) * (rho0**lambda_))
+    f = 3.5e13 / ((KELVIN_PRE_HEV**beta) * (rho0**mu))
+    g = 1.0 / (13333.0 * (KELVIN_PRE_HEV**alpha) * (rho0**lambda_))
     sigma = STEFAN_BOLTZMANN
     return MaterialSuper(alpha, beta, lambda_, mu, rho0, f, g, sigma, r=None, name="Pb")
 
@@ -114,8 +114,8 @@ def material_sio2() -> MaterialSuper:
     lambda_ = 0.75
     mu = 0.1
     rho0 = 0.05  # g/cc
-    f = 8.8e13 / ((HEV_IN_KELVIN**beta) * (rho0**mu))
-    g = 1.0 / (9175.0 * (HEV_IN_KELVIN**alpha) * (rho0**lambda_))
+    f = 8.8e13 / ((KELVIN_PRE_HEV**beta) * (rho0**mu))
+    g = 1.0 / (9175.0 * (KELVIN_PRE_HEV**alpha) * (rho0**lambda_))
     sigma = STEFAN_BOLTZMANN
     # Optional conversion (MATLAB commented): sigma*(1160400)*4*(10^-9) J/ns/cm^2/HeV^4
     return MaterialSuper(alpha, beta, lambda_, mu, rho0, f, g, sigma, r=None, name="SiO2")

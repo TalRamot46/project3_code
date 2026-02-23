@@ -10,19 +10,11 @@ Usage:
     
     case, config = get_preset("sedov_spherical")
 """
-from typing import Tuple, Dict
+from typing import Tuple
 
-from project_3.hydro_sim.problems.simulation_config import (
-    SimulationConfig,
-    SIMULATION_CONFIGS,
-    get_config,
-)
-from project_3.hydro_sim.problems.Hydro_case import HydroCase
-from project_3.hydro_sim.problems.riemann_problem import RIEMANN_TEST_CASES
-from project_3.hydro_sim.problems.driven_shock_problem import DRIVEN_SHOCK_TEST_CASES
-from project_3.hydro_sim.problems.sedov_problem import SEDOV_TEST_CASES
+from project_3.hydro_sim.problems.simulation_config import SimulationConfig
 from project_3.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
-from project_3.rad_hydro_sim.problems.presets_config import PRESETS
+from project_3.rad_hydro_sim.problems.presets_config import PRESETS, FULL_RAD_HYDRO_PRESET_NAMES
 # ============================================================================
 # Preset Access Functions
 # ============================================================================
@@ -48,20 +40,24 @@ def get_preset(name: str) -> Tuple[RadHydroCase, SimulationConfig]:
 
 
 def list_presets() -> None:
-    """Print all available presets grouped by problem type."""
-    print("Available presets:")
+    """Print all available presets grouped by scenario (from case.scenario)."""
+    print("Available rad_hydro presets (physical case names):")
     print("=" * 70)
-    
-    # Group by prefix
-    group1 = [(k, v) for k, v in PRESETS.items() if k.startswith("riemann")]
-    
-    def print_group(title, items):
-        print(f"\n{title}:")
-        print("-" * 70)
+
+    def print_group(title: str, items: list) -> None:
+        if not items:
+            return
+        print(f"\n  {title}:")
         for name, (case, config) in sorted(items):
-            print(f"  {name:25s} - {case.title:30s} (N={config.N})")
-    
-    print_group("Group1", group1)
+            title_str = case.title or "(no title)"
+            print(f"    {name:42s}  {title_str:40s} N={config.N}")
+
+    hydro = [(k, v) for k, v in PRESETS.items() if getattr(v[0], "scenario", "") == "hydro_only"]
+    rad_only = [(k, v) for k, v in PRESETS.items() if getattr(v[0], "scenario", "") == "radiation_only"]
+    full_rh = [(k, v) for k, v in PRESETS.items() if k in FULL_RAD_HYDRO_PRESET_NAMES]
+    print_group("Hydro-only (driven shock)", hydro)
+    print_group("Radiation-only (vs 1D Diffusion)", rad_only)
+    print_group("Full rad-hydro", full_rh)
     print()
 
 

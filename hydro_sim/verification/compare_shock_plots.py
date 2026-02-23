@@ -12,10 +12,11 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 from matplotlib.animation import FuncAnimation, PillowWriter
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 from dataclasses import dataclass
 
-
+from project_3.rad_hydro_sim.verification.hydro_data import RadHydroData
+from project_3.rad_hydro_sim.plotting import RadHydroHistory
 @dataclass
 class SimulationData:
     """Container for simulation data at multiple times."""
@@ -30,6 +31,57 @@ class SimulationData:
     color: str = "blue"
     linestyle: str = "-"
 
+
+# Type alias: anything with SimulationData layout (RadHydroData is duck-typed compatible)
+HydroDataLike = Union[SimulationData, RadHydroData]
+
+def load_rad_hydro_history(history: RadHydroHistory, label: str = "Rad-Hydro (full)") -> RadHydroData:
+    """Convert hydro_sim HydroHistory to SimulationData. Re-export from shock comparison."""
+    times = np.asarray(history.t, dtype=float)
+    nt = len(times)
+    m_list: list[np.ndarray] = []
+    x_list: list[np.ndarray] = []
+    rho_list: list[np.ndarray] = []
+    p_list: list[np.ndarray] = []
+    u_list: list[np.ndarray] = []
+    e_list: list[np.ndarray] = []
+    T_list: list[np.ndarray] = []
+    E_rad_list: list[np.ndarray] = []
+    for k in range(nt):
+        x_k = history.x[k]
+        m_k = history.m[k]
+        rho_k = history.rho[k]
+        p_k = history.p[k] / 1e12 # Convert Barye -> MBars
+        u_k = history.u[k] / 1e5 # Convert cm/s -> Km/s
+        e_k = history.e[k] / 1e9 # Convert erg/g -> hJ/g
+        T_k = history.T[k]
+        E_k = history.E_rad[k]
+        x_list.append(x_k.copy() if hasattr(x_k, "copy") else np.asarray(x_k))
+        m_list.append(m_k.copy() if hasattr(m_k, "copy") else np.asarray(m_k))
+        rho_list.append(rho_k.copy() if hasattr(rho_k, "copy") else np.asarray(rho_k))
+        p_list.append(p_k.copy() if hasattr(p_k, "copy") else np.asarray(p_k))
+        u_list.append(u_k.copy() if hasattr(u_k, "copy") else np.asarray(u_k))
+        e_list.append(e_k.copy() if hasattr(e_k, "copy") else np.asarray(e_k))
+        if T_k is not None:
+            t_arr = T_k
+            T_list.append(t_arr.copy() if hasattr(t_arr, "copy") else np.asarray(t_arr))
+        if E_k is not None:
+            e_arr = E_k
+            E_rad_list.append(e_arr.copy() if hasattr(e_arr, "copy") else np.asarray(e_arr))
+    return RadHydroData(
+        times=times,
+        m=m_list,
+        x=x_list,
+        rho=rho_list,
+        p=p_list, # Convert Barye -> 
+        u=u_list,
+        e=e_list,
+        T=T_list,
+        E_rad=E_rad_list,
+        label=label,
+        color="blue",
+        linestyle="-",
+    )
 
 def _as_list(arr):
     """Convert array to list of 1D arrays (for NPZ compatibility)."""
@@ -110,19 +162,19 @@ def load_hydro_history(history) -> SimulationData:
     )
 
 
-def interpolate_to_time(data: SimulationData, target_time: float) -> int:
+def interpolate_to_time(data: HydroDataLike, target_time: float) -> int:
     """Find the index of the closest time in data."""
     idx = np.argmin(np.abs(data.times - target_time))
     return idx
-
+    
 
 # ============================================================================
 # 4-Panel Comparison Plot (Single Time)
 # ============================================================================
 
 def plot_comparison_single_time(
-    sim_data: SimulationData,
-    ref_data: SimulationData,
+    sim_data: HydroDataLike,
+    ref_data: HydroDataLike,
     time: float,
     xaxis: str = "m",  # "m" for mass coordinate, "x" for position
     savepath: str | None = None,
@@ -162,9 +214,10 @@ def plot_comparison_single_time(
     print(sim_data.times[sim_idx])
 
     # Create figure
-    fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True)
+    fig, axes = plt.subplots(3, 2, figsize=(12, 8), sharex=True)
     ax_rho, ax_p = axes[0, 0], axes[0, 1]
     ax_u, ax_e = axes[1, 0], axes[1, 1]
+    ax_T, ax_E_rad = axes[2, 0], axes[2, 1]
     
     # Plot density
     ax_rho.plot(x_sim, sim_data.rho[sim_idx], 
@@ -173,7 +226,7 @@ def plot_comparison_single_time(
     ax_rho.plot(x_ref, ref_data.rho[ref_idx], 
                 color=ref_data.color, linestyle=ref_data.linestyle, 
                 lw=2, label=f"{ref_data.label} (t={actual_ref_time:.2e})")
-    ax_rho.set_ylabel(r"Density $\rho$ [g/cm³]")
+    ax_rho.set_ylabel(r"$\rho$ [g/cm³]")
     ax_rho.legend(loc="best", fontsize=9)
     ax_rho.grid(True, alpha=0.3)
     
@@ -182,7 +235,7 @@ def plot_comparison_single_time(
               color=sim_data.color, linestyle=sim_data.linestyle, lw=2)
     ax_p.plot(x_ref, ref_data.p[ref_idx], 
               color=ref_data.color, linestyle=ref_data.linestyle, lw=2)
-    ax_p.set_ylabel(r"Pressure $P$ [dyne/cm²]")
+    ax_p.set_ylabel(r"$P$ [MBar]")
     ax_p.grid(True, alpha=0.3)
     
     # Plot velocity
@@ -190,7 +243,7 @@ def plot_comparison_single_time(
               color=sim_data.color, linestyle=sim_data.linestyle, lw=2)
     ax_u.plot(x_ref, ref_data.u[ref_idx], 
               color=ref_data.color, linestyle=ref_data.linestyle, lw=2)
-    ax_u.set_ylabel(r"Velocity $u$ [cm/s]")
+    ax_u.set_ylabel(r"$u$ [km/s]")
     ax_u.set_xlabel(xlabel)
     ax_u.grid(True, alpha=0.3)
     
@@ -199,10 +252,29 @@ def plot_comparison_single_time(
               color=sim_data.color, linestyle=sim_data.linestyle, lw=2)
     ax_e.plot(x_ref, ref_data.e[ref_idx], 
               color=ref_data.color, linestyle=ref_data.linestyle, lw=2)
-    ax_e.set_ylabel(r"Specific energy $e$ [erg/g]")
+    ax_e.set_ylabel(r"$e$ [hJ/g]")
     ax_e.set_xlabel(xlabel)
     ax_e.grid(True, alpha=0.3)
-    
+
+    # plot temperature (if present)
+    if hasattr(sim_data, 'T') and sim_data.T and hasattr(ref_data, 'T') and ref_data.T:
+        ax_T.plot(x_sim, sim_data.T[sim_idx], 
+                  color=sim_data.color, linestyle=sim_data.linestyle, lw=2)
+        ax_T.plot(x_ref, ref_data.T[ref_idx], 
+                  color=ref_data.color, linestyle=ref_data.linestyle, lw=2)
+    ax_T.set_ylabel(r"$T$ [Hev]")
+    ax_T.set_xlabel(xlabel)
+    ax_T.grid(True, alpha=0.3)
+
+    # plot radiation energy (if present)
+    if hasattr(sim_data, 'E_rad') and sim_data.E_rad and hasattr(ref_data, 'E_rad') and ref_data.E_rad:
+        ax_E_rad.plot(x_sim, sim_data.E_rad[sim_idx], 
+                  color=sim_data.color, linestyle=sim_data.linestyle, lw=2)
+        ax_E_rad.plot(x_ref, ref_data.E_rad[ref_idx], 
+                  color=ref_data.color, linestyle=ref_data.linestyle, lw=2)
+    ax_E_rad.set_ylabel(r"$E_{rad}$ [erg/cm³]")
+    ax_E_rad.set_xlabel(xlabel)
+    ax_E_rad.grid(True, alpha=0.3)
     # Title
     if title is None:
         title = f"Shock Profile Comparison at t ≈ {time:.2e} s"
@@ -226,8 +298,8 @@ def plot_comparison_single_time(
 # ============================================================================
 
 def plot_comparison_slider(
-    sim_data: SimulationData,
-    ref_data: SimulationData,
+    sim_data: HydroDataLike,
+    ref_data: HydroDataLike,
     xaxis: str = "m",
     show: bool = True,
     title: str | None = None,
@@ -245,11 +317,11 @@ def plot_comparison_slider(
     # Use simulation times as reference
     all_times = sim_data.times
     
-    fig, axes = plt.subplots(2, 2, figsize=(12, 9), sharex=True)
+    fig, axes = plt.subplots(3, 2, figsize=(12, 9), sharex=True)
     plt.subplots_adjust(bottom=0.15)
     ax_rho, ax_p = axes[0, 0], axes[0, 1]
     ax_u, ax_e = axes[1, 0], axes[1, 1]
-    
+    ax_T, ax_E_rad = axes[2, 0], axes[2, 1]
     xlabel = r"Mass coordinate $m$" if xaxis == "m" else r"Position $x$"
     
     # Initial plot (k=0)
@@ -274,22 +346,47 @@ def plot_comparison_slider(
     
     lines['sim_e'], = ax_e.plot(x_sim, sim_data.e[k], color=sim_data.color, lw=2)
     lines['ref_e'], = ax_e.plot(x_ref, ref_data.e[ref_k], color=ref_data.color, linestyle='--', lw=2)
+
+    # add temperature plots
+
+    # T and E_rad (optional; plot only if present)
+    _has_T = hasattr(sim_data, 'T') and sim_data.T and hasattr(ref_data, 'T') and ref_data.T
+    _has_E_rad = hasattr(sim_data, 'E_rad') and sim_data.E_rad and hasattr(ref_data, 'E_rad') and ref_data.E_rad
+    if _has_T:
+        lines['sim_T'], = ax_T.plot(x_sim, sim_data.T[k], color=sim_data.color, lw=2)
+        lines['ref_T'], = ax_T.plot(x_ref, ref_data.T[ref_k], color=ref_data.color, linestyle='--', lw=2)
+    else:
+        lines['sim_T'], = ax_T.plot([], [], color=sim_data.color, lw=2)
+        lines['ref_T'], = ax_T.plot([], [], color=ref_data.color, linestyle='--', lw=2)
+    if _has_E_rad:
+        lines['sim_E_rad'], = ax_E_rad.plot(x_sim, sim_data.E_rad[k], color=sim_data.color, lw=2)
+        lines['ref_E_rad'], = ax_E_rad.plot(x_ref, ref_data.E_rad[ref_k], color=ref_data.color, linestyle='--', lw=2)
+    else:
+        lines['sim_E_rad'], = ax_E_rad.plot([], [], color=sim_data.color, lw=2)
+        lines['ref_E_rad'], = ax_E_rad.plot([], [], color=ref_data.color, linestyle='--', lw=2)
     
-    # Labels
-    ax_rho.set_ylabel(r"$\rho$")
+    # Labels with units: rho[g/cc], P[MBar], u[km/s], e[hJ/g], T[Hev], E_rad[erg/cm³]
+    ax_rho.set_ylabel(r"$\rho$ [g/cm³]")
     ax_rho.legend(loc="best")
     ax_rho.grid(True, alpha=0.3)
     
-    ax_p.set_ylabel(r"$P$")
+    ax_p.set_ylabel(r"$P$ [MBar]")
     ax_p.grid(True, alpha=0.3)
     
-    ax_u.set_ylabel(r"$u$")
+    ax_u.set_ylabel(r"$u$ [km/s]")
     ax_u.set_xlabel(xlabel)
     ax_u.grid(True, alpha=0.3)
     
-    ax_e.set_ylabel(r"$e$")
+    ax_e.set_ylabel(r"$e$ [hJ/g]")
     ax_e.set_xlabel(xlabel)
     ax_e.grid(True, alpha=0.3)
+    
+    ax_T.set_ylabel(r"$T$ [Hev]")
+    ax_T.grid(True, alpha=0.3)
+    
+    ax_E_rad.set_ylabel(r"$E_{rad}$ [erg/cm³]")
+    ax_E_rad.set_xlabel(xlabel)
+    ax_E_rad.grid(True, alpha=0.3)
     
     title_text = fig.suptitle("", fontsize=12)
     
@@ -324,6 +421,13 @@ def plot_comparison_slider(
         lines['sim_e'].set_data(x_sim, sim_data.e[k])
         lines['ref_e'].set_data(x_ref, ref_data.e[ref_k])
         
+        if hasattr(sim_data, 'T') and sim_data.T and hasattr(ref_data, 'T') and ref_data.T:
+            lines['sim_T'].set_data(x_sim, sim_data.T[k])
+            lines['ref_T'].set_data(x_ref, ref_data.T[ref_k])
+        if hasattr(sim_data, 'E_rad') and sim_data.E_rad and hasattr(ref_data, 'E_rad') and ref_data.E_rad:
+            lines['sim_E_rad'].set_data(x_sim, sim_data.E_rad[k])
+            lines['ref_E_rad'].set_data(x_ref, ref_data.E_rad[ref_k])
+        
         set_title(k, ref_k)
         
         for ax in axes.flat:
@@ -347,8 +451,8 @@ def plot_comparison_slider(
 # ============================================================================
 
 def plot_comparison_overlay(
-    sim_data: SimulationData,
-    ref_data: SimulationData,
+    sim_data: HydroDataLike,
+    ref_data: HydroDataLike,
     times: list | None = None,
     xaxis: str = "m",
     savepath: str | None = None,
@@ -455,8 +559,8 @@ def plot_comparison_overlay(
 # ============================================================================
 
 def save_comparison_gif(
-    sim_data: SimulationData,
-    ref_data: SimulationData,
+    sim_data: HydroDataLike,
+    ref_data: HydroDataLike,
     gif_path: str,
     xaxis: str = "m",
     fps: int = 10,

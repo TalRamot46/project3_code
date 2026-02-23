@@ -26,30 +26,32 @@ def plot_history_slider(
         show: Whether to display the figure
     """
     k0 = 0  # Initial frame
+    # Use mass coordinate for x-axis when available (consistent with update)
+    x_axis = history.m[k0] if hasattr(history, "m") else history.x[k0]
     
     fig, axes = _create_6panel_vertical_figure()
     plt.subplots_adjust(bottom=0.12)
     
-    # Initial lines
+    # Initial lines (same abscissa as in update)
     lines = []
-    lines.append(axes[0].plot(history.m[k0], history.rho[k0], lw=2)[0])
-    lines.append(axes[1].plot(history.m[k0], history.p[k0], lw=2)[0])
-    lines.append(axes[2].plot(history.m[k0], history.u[k0], lw=2)[0])
-    lines.append(axes[3].plot(history.m[k0], history.e[k0], lw=2)[0])
-    lines.append(axes[4].plot(history.m[k0], history.T[k0], lw=2)[0])
-    lines.append(axes[5].plot(history.m[k0], history.E_rad[k0], lw=2)[0])
-    axes[0].set_ylabel(r"$\rho$")
-    axes[1].set_ylabel(r"$p$")
-    axes[2].set_ylabel(r"$u$")
-    axes[3].set_ylabel(r"$e$")
-    axes[4].set_ylabel(r"$T$")
-    axes[5].set_ylabel(r"$E_\mathrm{rad}$")
-    axes[5].set_xlabel(r"$x$")
+    lines.append(axes[0].plot(x_axis, history.rho[k0], lw=2)[0])
+    lines.append(axes[1].plot(x_axis, history.p[k0], lw=2)[0])
+    lines.append(axes[2].plot(x_axis, history.u[k0], lw=2)[0])
+    lines.append(axes[3].plot(x_axis, history.e[k0], lw=2)[0])
+    lines.append(axes[4].plot(x_axis, history.T[k0], lw=2)[0])
+    lines.append(axes[5].plot(x_axis, history.E_rad[k0], lw=2)[0])
+    axes[0].set_ylabel(r"$\rho$", fontsize=11)
+    axes[1].set_ylabel(r"$p$", fontsize=11)
+    axes[2].set_ylabel(r"$u$", fontsize=11)
+    axes[3].set_ylabel(r"$e$", fontsize=11)
+    axes[4].set_ylabel(r"$T$", fontsize=11)
+    axes[5].set_ylabel(r"$E_\mathrm{rad}$", fontsize=11)
+    axes[5].set_xlabel(r"$x$", fontsize=11)
     
     for ax in axes:
         ax.grid(True, alpha=0.3)
     
-    title = fig.suptitle("", fontsize=12)
+    title = fig.suptitle("", fontsize=12, fontweight="medium")
     
     def set_title(k):
         t = history.t[k]
@@ -75,12 +77,12 @@ def plot_history_slider(
     
     def update(val):
         k = int(slider.val)
-        lines[0].set_data(history.x[k], history.rho[k])
-        lines[1].set_data(history.x[k], history.p[k])
-        lines[2].set_data(history.x[k], history.u[k])
-        lines[3].set_data(history.x[k], history.e[k])
-        lines[4].set_data(history.x[k], history.T[k])
-        lines[5].set_data(history.x[k], history.E_rad[k])
+        lines[0].set_data(history.m[k], history.rho[k])
+        lines[1].set_data(history.m[k], history.p[k])
+        lines[2].set_data(history.m[k], history.u[k])
+        lines[3].set_data(history.m[k], history.e[k])
+        lines[4].set_data(history.m[k], history.T[k])
+        lines[5].set_data(history.m[k], history.E_rad[k])
         set_title(k)
         
         for ax in axes:
@@ -91,10 +93,13 @@ def plot_history_slider(
     
     slider.on_changed(update)
     
-    fig.tight_layout(rect=[0, 0.08, 1, 0.95])
+    # Use subplots_adjust to avoid tight_layout warning with slider axes
+    fig.subplots_adjust(left=0.12, right=0.96, top=0.92, bottom=0.08, hspace=0.35)
     
     if savepath:
-        fig.savefig(savepath, dpi=200)
+        from pathlib import Path
+        Path(savepath).parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(savepath, dpi=200, bbox_inches="tight", facecolor="white")
         print(f"Saved slider figure (static) to {savepath}")
     
     if show:

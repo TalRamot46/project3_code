@@ -4,8 +4,8 @@ a_Kelvin = 7.5646e-15  # Radiation constant in erg cm^-3 K^-4
 eV_to_erg = 1.60218e-12  # electron energy in CGS [erg/eV]
 Hev_to_erg =  100 * eV_to_erg  # electron energy in CGS [erg/Hev]
 k_B = 1.380649e-16  # Boltzmann constant in CGS [erg/K]
-K_per_Hev = Hev_to_erg / k_B  # Conversion factor from keV to Kelvin
-a_Hev = a_Kelvin * K_per_Hev**4  # Radiation constant in keV cm^-3 keV^-4
+KELVIN_PER_HEV = Hev_to_erg / k_B  # Conversion factor from keV to Kelvin
+a_Hev = a_Kelvin * KELVIN_PER_HEV**4  # Radiation constant in keV cm^-3 keV^-4
 
 import numpy as np
 from dataclasses import dataclass

@@ -89,6 +89,8 @@ class SimulationConfig:
     gif_path: Optional[str] = None
     show_plot: bool = True
     show_slider: bool = False
+    # Fraction of t_end at which to take the PNG snapshot (0.0..1.0)
+    png_time_frac: float = 0.5
     
     def with_output_paths(self, case_name: str) -> "SimulationConfig":
         """
@@ -110,6 +112,7 @@ class SimulationConfig:
             gif_path=str(gif_path),
             show_plot=self.show_plot,
             show_slider=self.show_slider,
+            png_time_frac=self.png_time_frac,
         )
     
     def _get_parameters(self) -> Tuple[int, float, float, int, Optional[str], Optional[str], bool, bool]:
@@ -129,82 +132,13 @@ class SimulationConfig:
 # ============================================================================
 # Predefined Simulation Configurations
 # ============================================================================
+# Lightweight: all_outputs = slider + PNG at png_time_frac * t_end.
+# Override N, store_every, png_time_frac manually when running a test.
+# gif_only = hydro_sim presets that only need GIF output.
+# ============================================================================
 
 SIMULATION_CONFIGS: Dict[str, SimulationConfig] = {
-    # Default configuration - good for most cases
-    "default": SimulationConfig(
-        N=500,
-        CFL=1/3,
-        sigma_visc=1.0,
-        store_every=10,
-        show_plot=True,
-    ),
-    
-    # High resolution configuration
-    "hires": SimulationConfig(
-        N=1000,
-        CFL=1/3,
-        sigma_visc=1.0,
-        store_every=100,
-        show_plot=True,
-    ),
-    
-    # Very high resolution (for publication quality)
-    "ultra": SimulationConfig(
-        N=2000,
-        CFL=1/3,
-        sigma_visc=1.0,
-        store_every=200,
-        show_plot=True,
-    ),
-    
-    # Fast configuration for testing
-    "fast": SimulationConfig(
-        N=200,
-        CFL=1/3,
-        sigma_visc=1.0,
-        store_every=50,
-        show_plot=True,
-    ),
-    
-    # Sedov-optimized (needs more viscosity)
-    "sedov": SimulationConfig(
-        N=500,
-        CFL=1/3,
-        sigma_visc=1.5,
-        store_every=50,
-        show_plot=True,
-    ),
-    
-    # Strong shock configuration (more viscosity)
-    "strong_shock": SimulationConfig(
-        N=1000,
-        CFL=1/3,
-        sigma_visc=2.0,
-        store_every=100,
-        show_plot=True,
-    ),
-    
-    # Slider mode (for interactive exploration)
-    "slider": SimulationConfig(
-        N=500,
-        CFL=1/3,
-        sigma_visc=1.0,
-        store_every=50,
-        show_plot=True,
-        show_slider=True,
-    ),
-    
-    # GIF output only (no display)
-    "gif_only": SimulationConfig(
-        N=500,
-        CFL=1/3,
-        sigma_visc=1.0,
-        store_every=50,
-        show_plot=False,
-    ),
-    
-    # All outputs (save PNG and GIF, show plot)
+    # All outputs: slider + PNG at png_time_frac * t_end (default 0.5)
     "all_outputs": SimulationConfig(
         N=1000,
         CFL=1/3,
@@ -212,6 +146,15 @@ SIMULATION_CONFIGS: Dict[str, SimulationConfig] = {
         store_every=10,
         show_plot=True,
         show_slider=True,
+        png_time_frac=0.5,
+    ),
+    # GIF output only (used by hydro_sim presets)
+    "gif_only": SimulationConfig(
+        N=500,
+        CFL=1/3,
+        sigma_visc=1.0,
+        store_every=50,
+        show_plot=False,
     ),
 }
 

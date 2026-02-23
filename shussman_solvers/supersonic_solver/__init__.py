@@ -23,7 +23,7 @@ Public API:
 """
 
 from .materials_super import (
-    HEV_IN_KELVIN,
+    KELVIN_PRE_HEV,
     STEFAN_BOLTZMANN,
     MaterialSuper,
     material_al,
@@ -40,7 +40,7 @@ from .profiles_for_report_super import compute_profiles_for_report
 from .run_super import run_super
 
 __all__ = [
-    "HEV_IN_KELVIN",
+    "KELVIN_PRE_HEV",
     "STEFAN_BOLTZMANN",
     "MaterialSuper",
     "material_al",

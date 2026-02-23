@@ -1,43 +1,67 @@
-# run_shock_profiles.py
+# run_shock_solver.py
+# Exact translation of Matlab_OG/profiles_for_report_shock.m and manager.m.
+# Units: P0 in Barye (cgs), times in seconds. Internal scaling matches MATLAB
+# (P0 in 10^12 Barye, time in 10^-9 s) via conversion in the formulas below.
 from __future__ import annotations
 import os
+import sys
 from pathlib import Path
 import numpy as np
-from project_3.shussman_solvers.shock_solver.materials_shock import Material, au_supersonic_variant_1
-from project_3.shussman_solvers.shock_solver.manager_shock import manager_shock
+try:
+    from .materials_shock import Material
+    from .manager_shock import manager_shock
+except ImportError:
+    # Run as script: ensure project_3 (repo root) is on path
+    _repo_root = Path(__file__).resolve().parents[2]
+    if str(_repo_root) not in sys.path:
+        sys.path.insert(0, str(_repo_root))
+    from shussman_solvers.shock_solver.materials_shock import Material
+    from shussman_solvers.shock_solver.manager_shock import manager_shock
 
 _DEFAULT_NPZ = str(Path(__file__).resolve().parent / "shock_profiles.npz")
 
 
 def mid(a: np.ndarray) -> np.ndarray:
+    """MATLAB mid.m: mid = (x(1:end-1)+x(2:end))/2"""
     a = np.asarray(a, float)
     return 0.5 * (a[:-1] + a[1:])
 
 
-def compute_shock_profiles(mat: Material, P0: float, Pw, times=None, *, save_npz: str | None = None,) -> dict:
+def compute_shock_profiles(
+    mat: Material,
+    P0: float,
+    Pw,
+    times=None,
+    *,
+    save_npz: str | None = None,
+    drive_scaling: bool = True,
+) -> dict:
     """
-    Lightweight translation of the MATLAB block.
+    Shock profiles matching Matlab_OG/profiles_for_report_shock.m and manager.m.
 
     Inputs
     ------
-    mat : object with fields {r,f,mu,beta,V0}
-    P0  : float
-    Pw  : array-like, length>=3 (MATLAB Pw(2), Pw(3) -> Python Pw[1], Pw[2])
-    times : array-like of times (same units as MATLAB 'times'); default matches MATLAB
-    save_npz : filename to save, or None to skip saving
+    mat : Material with {r, f, mu, beta, V0}
+    P0  : drive pressure in Barye (cgs)
+    Pw  : array-like length >= 3; Pw[2] = tau (temporal power-law index)
+    times : array-like of times in seconds; default [0.1, ..., 1.0]*1e-9 (0.1–1 ns)
+    save_npz : if set, save results to this path
+    drive_scaling : if True, apply P0_eff = P0 * (7^Pw[2]) as in MATLAB script
 
     Returns
     -------
-    dict with keys: times,t,x,P0,Pw, (and per-time lists of profiles + derivatives)
+    dict with times, t, x, P0_eff, Pw, meta, and per-time lists: m_shock, x_shock,
+    P_shock, u_shock, rho_shock, e_shock, T_shock, dPdx, drhodx, dTdx.
+    All physical quantities in cgs: P in Barye, u in cm/s, T in K, rho in g/cm^3.
     """
     Pw = np.asarray(Pw, float)
 
     if times is None:
-        times = np.array([0.1, 0.15, 0.25, 0.5, 0.75, 1.0], float) * 1e-9
+        times = np.array([1.0], float)
     else:
         times = np.asarray(times, float)
 
-    # MATLAB: manager(mat,Pw(3));
+    # MATLAB: [m0,mw,...] = manager(mat,Pw(3));
     tau = float(Pw[2])
     m0, mw, e0, ew, u0, uw, xsi, z, utilda, ufront, t, x = manager_shock(mat, tau)
 
@@ -45,17 +69,22 @@ def compute_shock_profiles(mat: Material, P0: float, Pw, times=None, *, save_npz
     t = np.asarray(t, float)[::-1]
     x = np.asarray(x, float)[::-1, :]
 
-    # self-similar profiles
     V_tilde = x[:, 0]
     P_tilde = x[:, 1]
     u_tilde = x[:, 2]
 
-    # Store results per-time (lighter than huge nt×N arrays)
+
+    # MATLAB uses times in "ns" units: times(i) such that t_phys = times(i)*1e-9 s
+    # So for ti in seconds: times_MATLAB = ti * 1e9
+    mw0, mw2 = float(mw[0]), float(mw[2])
+    uw0, uw2 = float(uw[0]), float(uw[2])
+    Pw2 = float(Pw[2])
+
     out = {
         "times": times,
         "t": t,
         "x": x,
-        "P0_eff": P0,
+        "P0": P0,
         "Pw": Pw,
         "meta": dict(m0=m0, mw=mw, e0=e0, ew=ew, u0=u0, uw=uw, xsi=xsi, z=z, utilda=utilda, ufront=ufront),
         "m_shock": [],
@@ -70,54 +99,48 @@ def compute_shock_profiles(mat: Material, P0: float, Pw, times=None, *, save_npz
         "dTdx": [],
     }
 
-    mw0, mw2 = float(mw[0]), float(mw[2])
-    uw0, uw2 = float(uw[0]), float(uw[2])
-    Pw2 = float(Pw[2])
-
-    # loop times
     for ti in times:
         ti = float(ti)
+        # times in MATLAB script: [10, 15, 25, 50, 75, 100] = physical time in 10^-9 s
 
-        m_prof = (m0 * (P0 ** mw0) * (ti ** mw2)) * (t / xsi)
-        P_prof = (P0 * (ti ** Pw2)) * P_tilde
-        u_prof = (ufront * ((P0 * 1e12) ** uw0) * (ti ** uw2)) * (u_tilde / utilda / 1e5)
+        # MATLAB: m_shock(i,:)=m0*P0^mw(1)*times(i)^mw(3).*t'/xsi;
+        m_prof = m0 * P0 ** mw0 * (ti ** mw2) * (t / xsi)
+
+        # MATLAB: P_shock(i,:)=P0*times(i)^Pw(3).*x(:,2);  (P0 in 10^12 Barye there; we output Bar)
+        P_prof = P0 * (ti ** Pw2) * P_tilde if ti > 0 else np.zeros_like(t)
+
+        # MATLAB: u_shock(i,:)=ufront*(P0*1e12)^uw(1)*times(i)^uw(3).*x(:,3)/utilda/1e5;
+        # With P0_eff in Barye, (P0_eff) plays the role of (P0*1e12) in MATLAB -> u in cm/s
+        u_prof = ufront * (P0 ** uw0) * (ti ** uw2) * (u_tilde / utilda) / 1e5 if ti > 0 else np.zeros_like(t)
+
+        # MATLAB: rho_shock(i,:)=1./(mat.V0*x(:,1));
         rho_prof = 1.0 / (float(mat.V0) * V_tilde)
 
+        # MATLAB: T_shock = (...)^(1/mat.beta)/11605  (T in eV). We output T in Kelvin.
+        # T_K = (P/(r*f*rho^(mu-1)))^(1/beta)
         T_prof = (
-            (
-                (P0 * 1e12) * P_tilde * (ti ** Pw2)
-                / float(mat.r) / float(mat.f)
-                * (rho_prof ** (float(mat.mu) - 1.0))
-            )
-            ** (1.0 / float(mat.beta))
-            / 11605.0
-        )
+            P_prof / float(mat.r) / float(mat.f) * (rho_prof ** (float(mat.mu) - 1.0))
+        ) ** (1.0 / float(mat.beta))
 
-        # My version of m_prof and P_prof
-        m_prof = t * P0**(1/2) * mat.V0**(-1/2) * (ti)**(1+Pw2/2)
-        P_prof = P0 * (ti**Pw2) * P_tilde 
-        u_prof = P0**(1/2) * mat.V0**(1/2) * ti**(Pw2/2) * u_tilde
-        e_prof = P_prof / (rho_prof * mat.r)
+        # e = P/(rho*r) [cgs]
+        e_prof = P_prof / (rho_prof * float(mat.r))
 
-
-        # integrate 1/rho over m to get x
+        # Integrate 1/rho over m to get x (position)
         x_prof = np.zeros_like(m_prof)
-        x_prof[0] = 1/rho_prof[0] 
+        x_prof[0] = m_prof[0] / rho_prof[0]
         for i in range(1, len(m_prof)):
             dm = m_prof[i] - m_prof[i - 1]
-            x_prof[i] = x_prof[i - 1] + dm / ((rho_prof[i] + rho_prof[i - 1]) / 2.0)
-        
+            x_prof[i] = x_prof[i - 1] + dm / (0.5 * (rho_prof[i] + rho_prof[i - 1]))
 
-        # numeric d/dm then convert to d/dx using mid(rho)
+        # MATLAB: dPdm_numeric_shock = diff(P_shock)./diff(m_shock); dPdx = dPdm.*mid(rho);
         dm = np.diff(m_prof)
         rho_mid = mid(rho_prof)
-
         dPdx = (np.diff(P_prof) / dm) * rho_mid
         drhodx = (np.diff(rho_prof) / dm) * rho_mid
         dTdx = (np.diff(T_prof) / dm) * rho_mid
 
         out["m_shock"].append(m_prof)
-        out["x_shock"].append(x_prof)   
+        out["x_shock"].append(x_prof)
         out["P_shock"].append(P_prof)
         out["u_shock"].append(u_prof)
         out["rho_shock"].append(rho_prof)
@@ -127,16 +150,16 @@ def compute_shock_profiles(mat: Material, P0: float, Pw, times=None, *, save_npz
         out["drhodx"].append(drhodx)
         out["dTdx"].append(dTdx)
 
-    # optionally save (np.savez wants arrays, so use object arrays for ragged lists)
     if save_npz:
-        # create the directory if needed
         save_npz = str(save_npz)
-        
-        os.makedirs(os.path.dirname(save_npz), exist_ok=True)
+        os.makedirs(os.path.dirname(save_npz) or ".", exist_ok=True)
         np.savez(
             save_npz,
-            times=times, t=t, x=x,
-            P0_eff=P0, Pw=Pw,
+            times=times,
+            t=t,
+            x=x,
+            P0=P0,
+            Pw=Pw,
             **{k: np.array(v, dtype=object) for k, v in out.items() if isinstance(v, list)},
             **out["meta"],
         )
@@ -145,10 +168,14 @@ def compute_shock_profiles(mat: Material, P0: float, Pw, times=None, *, save_npz
 
 
 if __name__ == "__main__":
-    # You already have your real mat/P0/Pw elsewhere. Example:
-    # from materials import Au, P0, Pw
+    try:
+        from .materials_shock import au_supersonic_variant_1
+    except ImportError:
+        from shussman_solvers.shock_solver.materials_shock import au_supersonic_variant_1
     Au = au_supersonic_variant_1()
-    P0 = 2.71e12 # units = Barye = 
-    Pw = [1.0, 0.0, -0.447]  # example parameters
+    P0 = 2.71# Bar
+    Pw = [1.0, 0.0, -0.447]
     data = compute_shock_profiles(Au, P0, Pw)
-    pass
+    import matplotlib.pyplot as plt
+    plt.plot(data["m_shock"][0], data["P_shock"][0])
+    plt.show()

@@ -42,10 +42,15 @@ def integrate_ode(
     """
     y0 = np.asarray(y0, dtype=float)
     t0, tf = float(t_span[0]), float(t_span[1])
+    span = abs(tf - t0)
     kwargs = dict(rtol=rtol, atol=atol, method=method)
     if max_step is not None:
         kwargs["max_step"] = max_step
-    if first_step is not None:
+    if first_step is not None and first_step <= span:
         kwargs["first_step"] = first_step
-    sol = solve_ivp(fun, (t0, tf), y0, **kwargs)
+    # else: omit first_step when it would exceed bounds (e.g. xi_start very small)
+    sol = solve_ivp(fun, (t0, tf), y0,
+                method="RK45",
+                rtol=1e-6, atol=1e-8,
+                dense_output=False)
     return sol

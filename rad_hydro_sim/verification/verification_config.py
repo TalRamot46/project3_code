@@ -19,12 +19,47 @@ from pathlib import Path
 from typing import Optional, Tuple
 from enum import Enum
 
+from project_3.rad_hydro_sim.problems.presets_config import (
+    PRESET_FIRST_ATTEMPT,
+    PRESET_CONSTANT_T_RADIATION,
+    PRESET_POWER_LAW,
+    PRESET_FIG_8,
+    PRESET_FIG_9,
+    PRESET_FIG_10,
+)
+
 
 class VerificationMode(str, Enum):
     """Which verification comparison to run."""
     RADIATION_ONLY = "radiation_only"   # vs 1D Diffusion
     HYDRO_ONLY = "hydro_only"            # vs hydro_sim (and later Shussman)
     FULL_RAD_HYDRO = "full_rad_hydro"   # vs Shussman subsonic + shock (constant T drive)
+
+
+# ============================================================================
+# Preset names (physical case keys) and mode → preset mapping
+# ============================================================================
+
+RADIATION_ONLY_PRESET = PRESET_FIRST_ATTEMPT   # constant_temperature_drive
+HYDRO_ONLY_PRESET = PRESET_POWER_LAW                  # power_law_pressure_drive
+FULL_RAD_HYDRO_PRESET = PRESET_FIG_9                 # fig_8_comparison
+
+# Map each verification mode to its preset name (SIMPLE_TEST_CASES key)
+MODE_TO_PRESET: dict[VerificationMode, str] = {
+    VerificationMode.RADIATION_ONLY: RADIATION_ONLY_PRESET,
+    VerificationMode.HYDRO_ONLY: HYDRO_ONLY_PRESET,
+    VerificationMode.FULL_RAD_HYDRO: FULL_RAD_HYDRO_PRESET,
+}
+
+
+def get_preset_for_mode(mode: VerificationMode) -> str:
+    """Return the preset name for the given verification mode."""
+    return MODE_TO_PRESET[mode]
+
+
+def get_output_prefix_for_mode(mode: VerificationMode) -> str:
+    """Return the output path prefix for the given mode (e.g. 'radiation_only', 'hydro_only', 'full_rad_hydro')."""
+    return mode.value
 
 
 # ============================================================================
@@ -50,10 +85,3 @@ def make_verification_output_paths(case_name: str) -> Tuple[Path, Path]:
     return png_dir / f"{safe}.png", gif_dir / f"{safe}.gif"
 
 
-# ============================================================================
-# Preset names used for verification
-# ============================================================================
-
-RADIATION_ONLY_PRESET = "radiation_only_constant_temperature_drive"
-HYDRO_ONLY_PRESET = "hydro_only_power_law_pressure_drive"
-FULL_RAD_HYDRO_PRESET = "rad_hydro_constant_temperature_drive"

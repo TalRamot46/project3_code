@@ -1,7 +1,8 @@
+from __future__ import annotations
 import numpy as np
-from project_3.shussman_solvers.shock_solver.utils import integrate_ode
-from project_3.shussman_solvers.shock_solver.F_shock import F3
-import matplotlib.pyplot as plt
+from .F_shock import F3
+from .utils import integrate_ode
+
 
 def solve_normalize3(tau: float, r: float, iternum: int = 20, xi_f0: float = 4.0):
     first_change = int(np.floor(np.log(xi_f0)/np.log(2.0))) if xi_f0 > 0 else 0
@@ -49,11 +50,6 @@ def solve_normalize3(tau: float, r: float, iternum: int = 20, xi_f0: float = 4.0
         else:
             a[i+1] = xi_f + 2.0**(-i + first_change)
 
-    # print(t_out)
-    # print(x_out)
-    # plt.plot(t_out, x_out[:, 1], label='Ptilde (Pressure)')
-    # plt.legend()
-    # plt.show()
 
     if t_out is None or x_out is None:
         raise RuntimeError("Shooting failed to produce a solution.")

@@ -123,14 +123,14 @@ def simulate_rad_hydro(
             new_state = step_rad_hydro(
                 state, dt, rad_hydro_case, simulation_config
             )
+            # Progress bar: use actual time advanced (step_rad_hydro may advance by more than dt in some code paths)
+            pbar.update(new_state.t - state.t)
             state = new_state
 
             # storing the new state
             step += 1
             if (step % simulation_config.store_every) == 0:
                 store_frame()
-            
-            pbar.update(dt)
 
     # Ensure last frame stored
     if times[-1] != state.t:

@@ -20,7 +20,17 @@ def F(
     """
     Derivatives for the self-similar profile: x = [V, V', P, P', u].
     Used by solve_ivp in solve_normalize_sub.
-    """
+    """   
+    x1, x2, x3, x4, x5 = map(float, x)
+
+    if x1 <= 0.0 or x3 <= 0.0:
+        # leave domain → force integrator to fail fast
+        return np.array([np.nan]*5, dtype=float)
+
+    temp = x3 * (x1 ** (1 - mu))
+    if temp <= 0.0:
+        return np.array([np.nan]*5, dtype=float)
+
     mechane = 4 + 2 * lambda_ - 4 * mu
     wm3 = 2 + 2 * (4 + alpha - beta) * tau - mu * (3 + (4 + alpha) * tau) + lambda_ * (2 + beta * tau)
     wm3 = wm3 / mechane

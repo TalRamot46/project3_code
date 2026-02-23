@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import numpy as np
 
-from project_3.hydro_sim.verification.compare_shock_plots import SimulationData
+from project_3.rad_hydro_sim.verification.hydro_data import RadHydroData
 
 if TYPE_CHECKING:
     from project_3.shussman_solvers.shock_solver.materials_shock import Material
@@ -79,32 +79,6 @@ def _rad_hydro_case_to_material_shock(case) -> Material:
     )
 
 
-def diagnose_shock_front_at_times(
-    times: np.ndarray,
-    x_list: List[np.ndarray],
-    rho_list: List[np.ndarray],
-    *,
-    method: str = "grad_rho",
-) -> np.ndarray:
-    """
-    Diagnose shock front position x_shock(t) from rad_hydro history.
-
-    method "grad_rho": position of maximum |d(rho)/dx| at each time.
-    Returns array of length len(times): x_shock[i] in cm.
-    """
-    x_shock = np.zeros(len(times), dtype=float)
-    for i in range(len(times)):
-        x = np.asarray(x_list[i], float)
-        rho = np.asarray(rho_list[i], float)
-        if x.size < 3 or rho.size < 3:
-            x_shock[i] = float(x[-1]) if x.size else 0.0
-            continue
-        drho_dx = np.gradient(rho, x)
-        idx = np.argmax(np.abs(drho_dx))
-        x_shock[i] = float(x[idx])
-    return x_shock
-
-
 def compute_subsonic_profiles_at_times(
     case,
     times_sec: np.ndarray,
@@ -127,11 +101,8 @@ def compute_subsonic_profiles_at_times(
     data = compute_profiles_for_report(
         mat,
         tau,
-        times=times_sec,
+        times=times_sec * 1e9,
         T0=T0_hev,
-        iternum=iternum,
-        xsi0=xsi0,
-        P0=P0_norm,
     )
     n_times, n_xi = data["m_heat"].shape
     # Compute position x from integral dm/rho
@@ -172,7 +143,7 @@ def fit_power_law_drive(times: np.ndarray, P_front: np.ndarray) -> Tuple[float, 
 def compute_shock_profiles_at_times(
     case,
     times_sec: np.ndarray,
-    P0_barye: float,
+    P0_Mbar: float,
     wP2: float,
     wP3: float,
 ) -> dict:
@@ -181,104 +152,87 @@ def compute_shock_profiles_at_times(
     mat = _rad_hydro_case_to_material_shock(case)
     # Pw[0], Pw[1], Pw[2]: P0 exponent, T0 exponent, time exponent (tau)
     Pw = np.array([1, wP2, wP3], dtype=float)
-    return compute_shock_profiles(mat, P0_barye, Pw, times=times_sec)
+    return compute_shock_profiles(mat, P0_Mbar * case.T0**wP2, Pw, times=times_sec *1e9)
 
 
 def build_piecewise_reference(
+    case,
     subsonic_data: dict,
     shock_data: dict,
-    x_shock_per_time: np.ndarray,
-    times: np.ndarray,
-) -> SimulationData:
+    times_sec: np.ndarray,
+) -> RadHydroData:
     """
-    Build a single SimulationData that is piecewise: subsonic for x < x_shock(t),
-    shock for x >= x_shock(t). Profiles are concatenated and sorted by x at each time.
+    Piecewise Shussman reference: subsonic (rear to Marshak front) + shock region.
+
+    Assumes ``subsonic_data`` and ``shock_data`` are valid and aligned in time.
+    For each time step:
+      - take subsonic profiles from x=0 up to the Marshak front,
+      - append shock profiles, offset in x and m so that the front is continuous.
     """
-    n_times = len(times)
-    x_list: List[np.ndarray] = []
+    times = np.asarray(times_sec, dtype=float)
+
     m_list: List[np.ndarray] = []
+    x_list: List[np.ndarray] = []
     rho_list: List[np.ndarray] = []
     p_list: List[np.ndarray] = []
     u_list: List[np.ndarray] = []
     e_list: List[np.ndarray] = []
+    T_list: List[np.ndarray] = []
+    E_rad_list: List[np.ndarray] = []
 
-    x_heat = subsonic_data["x_heat"]
-    m_heat = subsonic_data["m_heat"]
-    P_heat = subsonic_data["P_heat"]
-    rho_heat = subsonic_data["rho_heat"]
-    u_heat = subsonic_data["u_heat"]
-    # e from EOS: e = P / (rho * (gamma-1)); gamma - 1 = r
-    r = 0.25  # from case; subsonic doesn't return r in data
-    e_heat = P_heat / (rho_heat * r + 1e-30)
+    r_gas = float(case.r)
+    from project_3.rad_hydro_sim.simulation.radiation_step import KELVIN_PER_HEV, a_Hev
 
-    for i in range(n_times):
-        x_s = x_shock_per_time[i]
-        # Subsonic: take points with x <= x_shock (pre-shock region)
-        x_sub = x_heat[i, :]
-        mask_sub = x_sub <= x_s
-        if not np.any(mask_sub):
-            mask_sub = np.zeros_like(x_sub, dtype=bool)
-            mask_sub[0] = True
-        x_sub_sel = x_sub[mask_sub]
-        m_sub_sel = m_heat[i, :][mask_sub]
-        rho_sub_sel = rho_heat[i, :][mask_sub]
-        p_sub_sel = P_heat[i, :][mask_sub]
-        u_sub_sel = u_heat[i, :][mask_sub]
-        e_sub_sel = e_heat[i, :][mask_sub]
+    for k, _t in enumerate(times):
+        # Subsonic region (from boundary to Marshak front)
+        m_sub = np.asarray(subsonic_data["m_heat"][k, :], float)
+        x_sub = np.asarray(subsonic_data["x_heat"][k, :], float)
+        rho_sub = np.asarray(subsonic_data["rho_heat"][k, :], float)
+        p_sub = np.asarray(subsonic_data["P_heat"][k, :], float)
+        u_sub = np.asarray(subsonic_data["u_heat"][k, :], float)
+        T_sub = np.asarray(subsonic_data["T_heat"][k, :], float)
+        # Subsonic T_heat is 100*T0*... (T0 in Hev) -> T_Hev = T_sub/100
+        T_sub_Hev = T_sub / 100.0
+        # Ideal-gas-like specific internal energy, consistent with shock solver
+        e_sub = p_sub / (rho_sub * r_gas + 1e-30)
 
-        # Shock: x_shock and x_shock_prof from solver; place so shock front is at x_s
-        x_prof = np.asarray(shock_data["x_shock"][i], float)
-        rho_prof = np.asarray(shock_data["rho_shock"][i], float)
-        p_prof = np.asarray(shock_data["P_shock"][i], float)
-        u_prof = np.asarray(shock_data["u_shock"][i], float)
-        e_prof = np.asarray(shock_data["e_shock"][i], float)
-        m_prof = np.asarray(shock_data["m_shock"][i], float)
-        if x_prof.size == 0:
-            # Only subsonic (no shock profile at this time)
-            x_all = x_sub_sel
-            m_all = m_sub_sel
-            rho_all = rho_sub_sel
-            p_all = p_sub_sel
-            u_all = u_sub_sel
-            e_all = e_sub_sel
-        else:
-            x_front_shock = float(np.max(x_prof))
-            # Lab position: shock profile runs from (x_s - length) to x_s
-            x_shock_lab = x_s - (x_front_shock - x_prof)
-            # Only take shock points with x_shock_lab >= last subsonic point (avoid overlap gap)
-            x_min_join = float(x_sub_sel[-1]) if x_sub_sel.size else 0.0
-            mask_shock = x_shock_lab >= x_min_join
-            if not np.any(mask_shock):
-                mask_shock = np.ones_like(x_shock_lab, dtype=bool)
-            x_shock_sel = x_shock_lab[mask_shock]
-            m_shock_sel = m_prof[mask_shock]
-            rho_shock_sel = rho_prof[mask_shock]
-            p_shock_sel = p_prof[mask_shock]
-            u_shock_sel = u_prof[mask_shock]
-            e_shock_sel = e_prof[mask_shock]
-            # Concatenate and sort by x
-            x_all = np.concatenate([x_sub_sel, x_shock_sel])
-            m_all = np.concatenate([m_sub_sel, m_shock_sel])
-            rho_all = np.concatenate([rho_sub_sel, rho_shock_sel])
-            p_all = np.concatenate([p_sub_sel, p_shock_sel])
-            u_all = np.concatenate([u_sub_sel, u_shock_sel])
-            e_all = np.concatenate([e_sub_sel, e_shock_sel])
-            order = np.argsort(x_all)
-            x_all = x_all[order]
-            m_all = m_all[order]
-            rho_all = rho_all[order]
-            p_all = p_all[order]
-            u_all = u_all[order]
-            e_all = e_all[order]
+        # Shock region (coordinates measured from front in shock solver)
+        a = shock_data["m_shock"]
+        s = shock_data["m_shock"][k]
+        m_shock_rel = np.asarray(s, float)
+        x_shock_rel = np.asarray(shock_data["x_shock"][k], float)
+        rho_shock = np.asarray(shock_data["rho_shock"][k], float)
+        p_shock = np.asarray(shock_data["P_shock"][k], float)
+        u_shock = np.asarray(shock_data["u_shock"][k], float)
+        e_shock = np.asarray(shock_data["e_shock"][k], float)
+        T_shock = np.asarray(shock_data["T_shock"][k], float)
+        # Shock T is in Kelvin -> T_Hev = T_K / KELVIN_PER_HEV
+        T_shock_Hev = T_shock / KELVIN_PER_HEV
 
-        x_list.append(x_all)
-        m_list.append(m_all)
-        rho_list.append(rho_all)
-        p_list.append(p_all)
-        u_list.append(u_all)
-        e_list.append(e_all)
+        x_front = x_sub[-1]
+        m_front = m_sub[-1]
 
-    return SimulationData(
+        x_shock = x_shock_rel + x_front
+        m_shock = m_shock_rel + m_front
+
+        m_k = np.concatenate([m_sub, m_shock])
+        x_k = np.concatenate([x_sub, x_shock])
+        rho_k = np.concatenate([rho_sub, rho_shock])
+        p_k = np.concatenate([p_sub, p_shock])
+        u_k = np.concatenate([u_sub, u_shock])
+        e_k = np.concatenate([e_sub, e_shock])
+        T_k_Hev = np.concatenate([T_sub_Hev, T_shock_Hev])
+        E_rad_k = a_Hev * T_k_Hev**4
+
+        m_list.append(m_k)
+        x_list.append(x_k)
+        rho_list.append(rho_k)
+        p_list.append(p_k)
+        u_list.append(u_k)
+        e_list.append(e_k)
+        T_list.append(T_k_Hev)
+        E_rad_list.append(E_rad_k)
+    return RadHydroData(
         times=times,
         m=m_list,
         x=x_list,
@@ -286,20 +240,17 @@ def build_piecewise_reference(
         p=p_list,
         u=u_list,
         e=e_list,
-        label="Shussman (subsonic + shock)",
-        color="red",
-        linestyle="--",
+        T=T_list,
+        E_rad=E_rad_list,
+        label="Shussman (piecewise)",
+        color="green",
+        linestyle="-.",
     )
-
 
 def run_shussman_piecewise_reference(
     case,
     times_sec: np.ndarray,
-    x_list: List[np.ndarray],
-    rho_list: List[np.ndarray],
-    *,
-    subsonic_iternum: int = 3000,
-) -> Optional[SimulationData]:
+) -> Optional[RadHydroData]:
     """
     Build the piecewise Shussman reference (subsonic + shock) for comparison with rad_hydro.
 
@@ -316,28 +267,28 @@ def run_shussman_piecewise_reference(
         print(f"  Shussman solvers not available: {e}")
         return None
 
-    T0 = float(case.T0) if case.T0 is not None else 0.86
-    # 1) Diagnose shock front from rad_hydro
-    x_shock = diagnose_shock_front_at_times(times_sec, x_list, rho_list)
-
-    # 2) Subsonic profiles at same times
+    T0 = float(case.T0) 
+    # 1) Subsonic profiles at same times
+    print("Starting subsonic solving...")
     subsonic_data = compute_subsonic_profiles_at_times(
         case,
         times_sec,
         T0,
-        iternum=subsonic_iternum,
     )
-    P_front = subsonic_data["P_front"]
+    P_front = subsonic_data["P_heat"][-1,-1] # units = MBar
     _, wP2, wP3 = subsonic_data["Pw"]
 
-    # 3) Shock solver with appropriate drive
+    # 2) Shock solver with appropriate drive
+    print("Starting shock solving...")
     shock_data = compute_shock_profiles_at_times(case, times_sec, P_front, wP2, wP3)
 
-    # 4) Piecewise reference
+    # 3) Piecewise reference (subsonic + shock)
+    print("Starting shock solving...")
     ref = build_piecewise_reference(
+        case,
         subsonic_data,
         shock_data,
-        x_shock,
         times_sec,
     )
     return ref
+

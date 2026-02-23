@@ -5,7 +5,7 @@ Simulation loop: iterator, integrator, hydro_steps, radiation_step.
 from .iterator import simulate_rad_hydro
 from .integrator import step_rad_hydro
 from .radiation_step import (
-    K_per_Hev,
+    KELVIN_PER_HEV,
     a_Hev,
     radiation_step,
     calculate_temperature_from_specific_energy,
@@ -14,7 +14,7 @@ from .radiation_step import (
 __all__ = [
     "simulate_rad_hydro",
     "step_rad_hydro",
-    "K_per_Hev",
+    "KELVIN_PER_HEV",
     "a_Hev",
     "radiation_step",
     "calculate_temperature_from_specific_energy",

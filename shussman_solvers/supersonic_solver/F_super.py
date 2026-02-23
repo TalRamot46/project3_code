@@ -20,13 +20,12 @@ def F(t: float, x: np.ndarray, alpha: float, beta: float, tau: float) -> np.ndar
     Used by solve_ivp in solve_normalize_super for numerical integration.
     """
     w3 = -0.5 + 0.5 * (beta - alpha - 4) * tau
-    T, Tp = float(np.real(x[0])), float(np.real(x[1]))
+    T, Tp = float(x[0]), float(x[1])
     # xp(1) = x(2); xp(2) = (x(1)^(beta-alpha-4))*[w3*t*x(2)+tau*x(1)] - (alpha+3)*(1/x(1))*(x(2)^2)
-    # T^(beta-alpha-4) can be complex if T<0; take real part so integrator does not see complex.
     exp = beta - alpha - 4
     xp0 = Tp
-    base = (T ** exp) if T > 1e-12 else 0.0
-    term1 = np.real(base) * (w3 * t * Tp + tau * T)
-    term2 = (alpha + 3) * (Tp**2) / T if abs(T) > 1e-12 else 0.0
-    xp1 = float(np.real(term1 - term2))
+    base = (T ** exp)
+    term1 = base * (w3 * t * Tp + tau * T)
+    term2 = (alpha + 3) * (Tp**2) / T
+    xp1 = float(term1 - term2)
     return np.array([xp0, xp1], dtype=float)

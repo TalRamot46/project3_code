@@ -9,6 +9,20 @@ import numpy as np
 from .F_sub import F
 from .utils_sub import integrate_ode
 
+def is_bad_solution(sol):
+    if (not sol.success) or sol.t.size < 2:
+        return True
+    if abs(sol.t[-1] - 0.0) > 1e-12:
+        return True
+    y = sol.y
+    if not np.all(np.isfinite(y)):
+        return True
+    V = y[0, :]
+    P = y[2, :]
+    if np.any(V <= 0) or np.any(P <= 0):
+        return True
+    return False
+
 
 def solve_normalize(
     alpha: float,
@@ -17,7 +31,7 @@ def solve_normalize(
     mu: float,
     r: float,
     tau: float,
-    iternum: int = 3000,
+    iternum: int = 10,
     xsi0: float = 1.0,
     P0: float = 4.0,
 ):
@@ -33,6 +47,7 @@ def solve_normalize(
 
     t_out = None
     x_out = None
+    sol = None
 
     for i in range(2):
         for j in range(iternum):
@@ -41,16 +56,20 @@ def solve_normalize(
                 lambda t, y: F(t, y, alpha, beta, lambda_, mu, r, tau),
                 (float(a[i]), 0.0),
                 y0,
-                rtol=5e-3,
-                atol=5e-5,
-                max_step=1e-4,
-                first_step=1e-10,
+                method="RK45",
+                rtol=1e-3,
+                atol=1e-6,
+                max_step=None,
+                first_step=None,
             )
-            if not sol.success or sol.t.size < 2:
-                b[j + 1] = b[j] + 2.0 ** (-j + first_change)
+
+            step = 2.0 ** (- (j+1) + first_change)   # match MATLAB j starts at 1
+            if is_bad_solution(sol):
+                b[j + 1] = b[j] + step
             else:
-                b[j + 1] = b[j] - 2.0 ** (-j + first_change)
+                b[j + 1] = b[j] - step
             b[j + 1] = max(b[j + 1], 1e-6)
+
         t_out = np.asarray(sol.t, dtype=float)
         x_out = sol.y.T  # (n_t, 5)
 

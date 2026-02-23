@@ -14,7 +14,7 @@ def manager_sub(
     mat: MaterialSub,
     tau: float,
     *,
-    iternum: int = 3000,
+    iternum: int = 30,
     xsi0: float = 1.0,
     P0: float = 4.0,
 ):

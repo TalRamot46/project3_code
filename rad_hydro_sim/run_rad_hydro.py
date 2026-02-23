@@ -11,6 +11,7 @@ from project_3.rad_hydro_sim.problems.presets_utils import (
     get_preset_names,
     get_preset,
 )
+from project_3.rad_hydro_sim.output_paths import make_rad_hydro_output_paths
 from project_3.hydro_sim.plotting.hydro_plots import save_history_gif
 from project_3.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
 from project_3.rad_hydro_sim.plotting.slider import plot_history_slider
@@ -47,6 +48,7 @@ def plot_results(
     case: RadHydroCase,
     config: SimulationConfig,
     history=None,
+    preset_name: str | None = None,
 ) -> None:
     """
     Plot simulation results based on problem type.
@@ -55,29 +57,47 @@ def plot_results(
     - Final state plots
     - Interactive slider (if config.show_slider)
     - GIF animation (if config.gif_path)
+    Outputs go to results/rad_hydro_sim/figures/png and .../gif.
     """
-    # Auto-generate output paths for PNG and GIF based on case title
-    config = config.with_output_paths(case.title)
-    
-    # Plot final state
-    # if config.show_plot:
-    #     plot_final_state(x_cells, state, case, config)
+    # Use rad_hydro_sim figures dir; fallback to preset name if case.title is empty
+    case_name = case.title or preset_name or "rad_hydro_run"
+    png_path, gif_path = make_rad_hydro_output_paths(case_name)
+    config = SimulationConfig(
+        N=config.N,
+        CFL=config.CFL,
+        sigma_visc=config.sigma_visc,
+        store_every=config.store_every,
+        save_path=str(png_path),
+        gif_path=str(gif_path),
+        show_plot=config.show_plot,
+        show_slider=config.show_slider,
+    )
         
-    # Interactive slider
+    # Interactive slider (optionally save static PNG from current frame)
     if history is not None and config.show_slider:
-        plot_history_slider(history, case, show=True)
+        plot_history_slider(
+            history, case,
+            savepath=config.save_path,
+            show=True,
+        )
     
     # Save GIF
     if config.gif_path and history is not None:
         save_history_gif(history, case, gif_path=config.gif_path, fps=20, stride=2)
 
 
-
 def main():
-    """Run a simulation with a predefined preset."""
-    
+    """Run a simulation with a predefined preset.
+    Outputs: results/rad_hydro_sim/figures/png/<name>.png, .../gif/<name>.gif
+    """
     # ===== SELECT YOUR PRESET HERE =====
-    preset_name = "rad_hydro_constant_temperature_drive"  
+    # Preset = physical case name (SIMPLE_TEST_CASES key). Use constants from presets_config.
+    # Run list_presets() from presets_utils for a grouped list.
+    from project_3.rad_hydro_sim.problems.presets_config import (
+        PRESET_POWER_LAW,
+        PRESET_FIG_10,
+    )
+    preset_name = PRESET_FIG_10  
     
     # Get case and config from preset
     case, config = get_preset(preset_name)
@@ -87,8 +107,8 @@ def main():
     # Run simulation
     x_cells, state, meta, history = run_simulation(case, config)
     
-    # Plot results (will automatically save PNG and GIF)
-    plot_results(x_cells, state, case, config, history)
+    # Plot results (PNG/GIF under results/rad_hydro_sim/figures/)
+    plot_results(x_cells, state, case, config, history, preset_name=preset_name)
         
 
 if __name__ == "__main__":

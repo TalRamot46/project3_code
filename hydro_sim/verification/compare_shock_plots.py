@@ -51,9 +51,9 @@ def load_rad_hydro_history(history: RadHydroHistory, label: str = "Rad-Hydro (fu
         x_k = history.x[k]
         m_k = history.m[k]
         rho_k = history.rho[k]
-        p_k = history.p[k] / 1e12 # Convert Barye -> MBars
-        u_k = history.u[k] / 1e5 # Convert cm/s -> Km/s
-        e_k = history.e[k] / 1e9 # Convert erg/g -> hJ/g
+        p_k = history.p[k] # Convert Barye -> MBars
+        u_k = history.u[k] # Convert cm/s -> Km/s
+        e_k = history.e[k] # Convert erg/g -> hJ/g
         T_k = history.T[k]
         E_k = history.E_rad[k]
         x_list.append(x_k.copy() if hasattr(x_k, "copy") else np.asarray(x_k))

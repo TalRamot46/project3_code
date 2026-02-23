@@ -274,9 +274,9 @@ def run_hydro_only_comparison(
         x_min=float(case_rh.x_min),
         x_max=float(case_rh.x_max),
         t_end=float(case_rh.t_end),
-        rho0=float(case_rh.rho0) if case_rh.rho0 is not None else 1.0,
-        p0=float(case_rh.p0) if case_rh.p0 is not None else 1e-6,
-        u0=float(case_rh.u0) if case_rh.u0 is not None else 0.0,
+        rho0=float(case_rh.rho0),
+        p0=float(case_rh.p0),
+        u0=float(case_rh.u0),
         P0=1.0,
         tau=1.0,
         geom=planar(),
@@ -313,16 +313,17 @@ def run_hydro_only_comparison(
         ref_data.color = "red"
         ref_data.linestyle = "--"
         print(f"  Stored {len(ref_data.times)} time steps.")
-
+    
     if sim_data is None or ref_data is None:
         print("Need both rad_hydro and hydro_sim data for comparison.")
         return
-
+    print("max pressure in sim_data: ", np.max(sim_data.p))
+    print("max pressure in ref_data: ", np.max(ref_data.p))
     print("\nPlotting hydro comparison (rho, P, u, e vs x)...")
     if show_plot:
         plot_comparison_slider(
             sim_data, ref_data,
-            xaxis="x",
+            xaxis="m",
             show=True,
             title="Hydro-only: Rad-Hydro vs run_hydro",
         )
@@ -331,7 +332,7 @@ def run_hydro_only_comparison(
         plot_comparison_single_time(
             sim_data, ref_data,
             time=time_mid,
-            xaxis="x",
+            xaxis="m",
             savepath=str(png_path),
             show=False,
             title="Hydro-only: Rad-Hydro vs run_hydro",
@@ -515,12 +516,12 @@ def run_comparison(
 def main() -> None:
     """Entry point: select mode and run comparison."""
     # MODE = VerificationMode.FULL_RAD_HYDRO
-    MODE = VerificationMode.RADIATION_ONLY
-    # MODE = VerificationMode.HYDRO_ONLY
+    # MODE = VerificationMode.RADIATION_ONLY
+    MODE = VerificationMode.HYDRO_ONLY
 
     run_comparison(
         MODE,
-        skip_rad_hydro=True,
+        skip_rad_hydro=False,
         skip_diffusion=False,
         skip_supersonic=False,
         skip_hydro_sim=False,

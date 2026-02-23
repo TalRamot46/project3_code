@@ -68,6 +68,7 @@ def compute_profiles_for_report(
     x_heat = np.zeros((n_times, n_xi), dtype=float)
     # MATLAB: T_heat(i,:) = T0*times(i)^tau*(x(:,1))
     T_heat = np.zeros((n_times, n_xi), dtype=float)
+    E_heat = np.zeros((n_times, n_xi), dtype=float)
 
     for i in range(n_times):
         ti = times[i]
@@ -75,6 +76,7 @@ def compute_profiles_for_report(
         m_heat[i, :] = m0 * (T0 ** mw[1]) * (ti ** mw[2]) * (t_xi / xsi)
         x_heat[i, :] = m_heat[i, :] / mat.rho0
         T_heat[i, :] = T0 * (ti ** tau) * T_tilde
+        E_heat[i, :] = e0 * (T0 ** mw[1]) * (ti ** mw[2]) * (t_xi / xsi)
 
     return {
         "times": times,

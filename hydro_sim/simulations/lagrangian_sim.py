@@ -213,7 +213,7 @@ def simulate_lagrangian(
             else:
                 # Small initial timestep for stability
                 dt = 1e-13 if sim_type in (SimulationType.DRIVEN_SHOCK, SimulationType.SEDOV) else 1e-6 * t_end
-            print(dt)
+            # print(dt)
             dt_prev = dt
             if step > 3000 and step % 10 == 0:
                 pass
@@ -233,7 +233,7 @@ def simulate_lagrangian(
             if (step % store_every) == 0:
                 store_frame()
             
-            # pbar.update(dt)
+            pbar.update(dt)
 
     # Ensure last frame stored
     if times[-1] != state.t:

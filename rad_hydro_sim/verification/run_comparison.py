@@ -137,9 +137,9 @@ def run_radiation_only_comparison(
         print(f"  Stored {len(sim_data.times)} time steps.")
 
     # For debugging purposes:
-    import matplotlib.pyplot as plt
-    plt.plot(sim_data.x[-1], sim_data.T[-1], label="Rad-Hydro (radiation only)")
-    plt.show()
+    # import matplotlib.pyplot as plt
+    # plt.plot(sim_data.x[-1], sim_data.T[-1], label="Rad-Hydro (radiation only)")
+    # plt.show()
     
     ref_data = None
     if not skip_diffusion:

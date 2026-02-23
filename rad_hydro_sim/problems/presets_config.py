@@ -158,13 +158,13 @@ PRESET_TEST_CASES = {
         geom=planar(),
     ),
     PRESET_CONSTANT_T_RADIATION: RadHydroCase(
-        # Rosen's opacity parameters
-        g = 1.0 / (7200.0 * (KELVIN_PRE_HEV**1.5) * (19.32**0.2)),
+        # Rosen's opacity parameters (g, f match 1D Diffusion self-similar reference for verification)
+        g = 1.0 / 7200,
         alpha = 1.5,
         lambda_ = 0.2,
 
         # Rosen's specific energy parameters
-        f = 3.4e13 / ((KELVIN_PRE_HEV**1.6) * (19.32**0.14)),
+        f = 3.4e13,
         gamma = 1.6,
         mu = 0.14,
 

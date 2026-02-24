@@ -95,8 +95,9 @@ def update_nodes_from_pressure(state: RadHydroState, case: RadHydroCase, e_new, 
     # Apply velocity boundary conditions at full step
     u_new = _apply_velocity_bc_full(u_new, bc_left, bc_right)
 
+    # Time is advanced in the caller (step_rad_hydro) so we do not add dt here.
     new_state = RadHydroState(
-        t=state.t + dt,
+        t=state.t,
         x=state.x,
         u=u_new,
         a=a_new, # acceleration updated with new pressure

@@ -250,6 +250,6 @@ def simulate_lagrangian(
     )
 
     x_cells = 0.5 * (state.x[:-1] + state.x[1:])
-    meta = dict(case=case, sim_type=sim_type, geometry=geom)
+    meta = dict (case=case, sim_type=sim_type, geometry=geom)
     
     return x_cells, state, meta, history

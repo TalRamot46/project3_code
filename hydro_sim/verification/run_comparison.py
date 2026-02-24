@@ -106,7 +106,6 @@ def run_shussman_solver(case: ComparisonCase, save_path: str | None = None) -> S
         times=params['times'],
         save_npz=save_path,
     )
-    
     return load_shussman_data(save_path)
 
 
@@ -255,7 +254,7 @@ def main():
     """Run a comparison with a predefined preset."""
     
     # ===== SELECT YOUR PRESET HERE =====
-    PRESET = "gold_tau_neg"
+    PRESET = "gold_tau_0"
     # ===================================
     
     # List available presets for reference

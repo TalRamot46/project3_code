@@ -330,6 +330,9 @@ def plot_comparison_slider(
     
     x_sim = sim_data.m[k] if xaxis == "m" else sim_data.x[k]
     x_ref = ref_data.m[ref_k] if xaxis == "m" else ref_data.x[ref_k]
+
+    print("max x value in sim_data: ", np.max(x_sim))
+    print("max x value in ref_data: ", np.max(x_ref))
     
     # Create line objects
     lines = {}

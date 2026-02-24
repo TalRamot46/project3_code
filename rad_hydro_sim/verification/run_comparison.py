@@ -277,12 +277,11 @@ def run_hydro_only_comparison(
         rho0=float(case_rh.rho0),
         p0=float(case_rh.p0),
         u0=float(case_rh.u0),
-        P0=1.0,
-        tau=1.0,
+        P0=float(case_rh.P0),
+        tau=float(case_rh.tau),
         geom=planar(),
-        title="Power-law pressure drive (τ=1)",
+        title=f"Power-law pressure drive (τ={case_rh.tau})",
     )
-
     sim_data = None
     if not skip_rad_hydro:
         print(f"Running rad_hydro ({preset_name})...")
@@ -292,6 +291,9 @@ def run_hydro_only_comparison(
         )
         sim_data = load_rad_hydro_history(history_rh, label="Rad-Hydro (hydro only)")
         print(f"  Stored {len(sim_data.times)} time steps.")
+
+        print("max value in sim_data.m: ", np.max(sim_data.m))
+        print("max value of m should be ", driven_case.rho0 * driven_case.x_max)
 
     ref_data = None
     if not skip_hydro_sim:
@@ -317,8 +319,10 @@ def run_hydro_only_comparison(
     if sim_data is None or ref_data is None:
         print("Need both rad_hydro and hydro_sim data for comparison.")
         return
-    print("max pressure in sim_data: ", np.max(sim_data.p))
-    print("max pressure in ref_data: ", np.max(ref_data.p))
+
+
+    print("max x value in sim_data: ", np.max(sim_data.m))
+    print("max x value in ref_data: ", np.max(ref_data.m))
     print("\nPlotting hydro comparison (rho, P, u, e vs x)...")
     if show_plot:
         plot_comparison_slider(

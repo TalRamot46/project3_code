@@ -83,9 +83,8 @@ def supersonic_output_to_radiation_data(
     times_sec = times_dim * t_end_sec
     # T_heat = 100 * T0 * times^tau * T_tilde; with T0 in Hev we want T_hev = T_heat/100
     T_heat = profiles_dict["T_heat"]  # (n_times, n_xi)
-    E_heat = profiles_dict["E_heat"]  # (n_times, n_xi)
     T_list = [T_heat[i, :].copy() for i in range(T_heat.shape[0])]
-    E_rad_list = [E_heat[i, :].copy() for i in range(E_heat.shape[0])]
+    E_rad_list = [a_Hev*T_heat[i,:].copy()**4 for i in range(T_heat.shape[0])]
     x_list = [profiles_dict["x_heat"][i, :].copy() for i in range(T_heat.shape[0])]
     return RadiationData(
         times=times_sec,

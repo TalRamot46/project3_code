@@ -69,9 +69,9 @@ def manager_shock(mat: Material, tau: float,
     # e0 = (10^(12*ew(1))) * (10^(-9*(ew(3)-ew(1)*tau))) * z   * (mat.V0^ew(2))
     # u0 = (10^(12*uw(1))) * (10^(-9*(uw(3)-uw(1)*tau))) * utilda*(mat.V0^uw(2))/1e5
 
-    m0 = (10.0 ** (12.0 * mw[0])) * (10.0 ** (-9.0 * (mw[2] - mw[0] * tau))) * xsi * (mat.V0 ** mw[1])
-    e0 = (10.0 ** (12.0 * ew[0])) * (10.0 ** (-9.0 * (ew[2] - ew[0] * tau))) * z   * (mat.V0 ** ew[1])
-    u0 = (10.0 ** (12.0 * uw[0])) * (10.0 ** (-9.0 * (uw[2] - uw[0] * tau))) * utilda * (mat.V0 ** uw[1]) / 1e5
+    m0 = xsi * (mat.V0 ** mw[1])
+    e0 = z * (mat.V0 ** ew[1])
+    u0 = utilda * (mat.V0 ** uw[1])
 
     # Return in the same order as MATLAB manager
     return m0, mw, e0, ew, u0, uw, xsi, z, utilda, ufront, t, x

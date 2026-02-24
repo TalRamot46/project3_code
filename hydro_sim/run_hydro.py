@@ -196,7 +196,7 @@ def main():
 
     # Get case and config
     case, config = get_preset(preset_name)
-            
+
     # Run simulation
     x_cells, state, meta, history = run_simulation(case, config)
     

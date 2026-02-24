@@ -101,6 +101,7 @@ def compute_shock_profiles(
 
     for ti in times:
         ti = float(ti)
+        
         # times in MATLAB script: [10, 15, 25, 50, 75, 100] = physical time in 10^-9 s
 
         # MATLAB: m_shock(i,:)=m0*P0^mw(1)*times(i)^mw(3).*t'/xsi;
@@ -111,7 +112,7 @@ def compute_shock_profiles(
 
         # MATLAB: u_shock(i,:)=ufront*(P0*1e12)^uw(1)*times(i)^uw(3).*x(:,3)/utilda/1e5;
         # With P0_eff in Barye, (P0_eff) plays the role of (P0*1e12) in MATLAB -> u in cm/s
-        u_prof = ufront * (P0 ** uw0) * (ti ** uw2) * (u_tilde / utilda) / 1e5 if ti > 0 else np.zeros_like(t)
+        u_prof = ufront * (P0 ** uw0) * (ti ** uw2) * (u_tilde / utilda) if ti > 0 else np.zeros_like(t)
 
         # MATLAB: rho_shock(i,:)=1./(mat.V0*x(:,1));
         rho_prof = 1.0 / (float(mat.V0) * V_tilde)
@@ -173,8 +174,8 @@ if __name__ == "__main__":
     except ImportError:
         from shussman_solvers.shock_solver.materials_shock import au_supersonic_variant_1
     Au = au_supersonic_variant_1()
-    P0 = 2.71# Bar
-    Pw = [1.0, 0.0, -0.447]
+    P0 = 1 # Bar
+    Pw = [1.0, 0.0, 0]
     data = compute_shock_profiles(Au, P0, Pw)
     import matplotlib.pyplot as plt
     plt.plot(data["m_shock"][0], data["P_shock"][0])

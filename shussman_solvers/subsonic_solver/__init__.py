@@ -38,7 +38,6 @@ from .solve_for_tau_sub import solve_for_tau
 from .solve_normalize_sub import solve_normalize
 from .manager_sub import manager_sub
 from .profiles_for_report_sub import compute_profiles_for_report
-from .run_sub import run_sub
 
 __all__ = [
     "HEV_IN_KELVIN",
@@ -57,5 +56,4 @@ __all__ = [
     "solve_normalize",
     "manager_sub",
     "compute_profiles_for_report",
-    "run_sub",
 ]

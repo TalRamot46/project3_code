@@ -60,7 +60,7 @@ def run_hydro_simulation(case: ComparisonCase, config: ComparisonConfig) -> Simu
     print(f"  Domain: [{case.x_min:.2e}, {case.x_max:.2e}] cm")
     print(f"  t_end: {case.t_end:.2e} s")
     print(f"  N cells: {config.N}")
-    print(f"  P0: {case.P0}, τ: {case.tau}")
+    print(f"  P0: {case.P0_phys_Barye}, τ: {case.tau}")
     
     x_cells, state, meta, history = simulate_lagrangian(
         driven_case,
@@ -87,24 +87,27 @@ def run_shussman_solver(case: ComparisonCase, save_path: str | None = None) -> S
     Returns:
         SimulationData ready for comparison plotting
     """
-    from project_3.shussman_solvers.shock_solver.run_shock_solver import compute_shock_profiles
-    
+    from project_3.shussman_solvers.shock_solver.profiles_for_report_shock import compute_shock_profiles
     params = case.get_shussman_params()
     
     print("Running self-similar solver...")
     print(f"  Material: {params['material'].name}")
-    print(f"  P0: {params['P0']}")
+    print(f"  P0: {params['P0_phys_Barye']}")
     print(f"  Times: {len(params['times'])} snapshots")
     
     if save_path is None:
         save_path = str(Path(__file__).parent / "shock_profiles.npz")
     
-    compute_shock_profiles(
+    # Convert time to ns to input into shussman_solver!
+    times_ns = params['times'] * 1e9
+    data = compute_shock_profiles(  # pyright: ignore[reportCallIssue]
         mat=params['material'],
-        P0=params['P0'] * 1e4,
-        Pw=params['Pw'],
-        times_ns=params['times'] * 1e9,
-        save_npz=save_path,
+        P0_phys_Barye=params['P0_phys_Barye'],
+        tau=params['tau'],
+        Pw=None,
+        times_ns=times_ns,
+        patching_method=False,
+        save_npz=save_path
     )
     return load_shussman_data(save_path)
 
@@ -127,7 +130,7 @@ def run_comparison(case: ComparisonCase, config: ComparisonConfig) -> None:
     print("Shock Comparison: Hydro Simulation vs Self-Similar Solution")
     print("=" * 60)
     print(f"Case: {case.title}")
-    print(f"  P0: {case.P0}, τ: {case.tau}")
+    print(f"  P0: {case.P0_phys_Barye}, τ: {case.tau}")
     print(f"  ρ0: {case.rho0} g/cm³")
     print(f"  t_end: {case.t_end:.2e} s")
     print(f"  Domain: [{case.x_min:.2e}, {case.x_max:.2e}] cm")
@@ -262,7 +265,7 @@ def main():
     
     # Get case and config
     case, config = get_preset(PRESET)
-    config.skip_solver = True
+    config.skip_solver = False
     
     # Run comparison
     sim_data, ref_data, case, config, png_path, gif_path = run_comparison(case, config)

@@ -22,12 +22,12 @@ class RadHydroCase(ABC):
     base class to ensure a consistent interface.
     """
     # Rosen's opacity parameters
-    g: float
+    g_HeV: float
     alpha: float
     lambda_: float
 
     # Rosen's specific energy parameters
-    f: float
+    f_HeV: float
     gamma: float
     mu: float
 
@@ -70,5 +70,5 @@ class RadHydroCase(ABC):
         self,
     ) -> Tuple[float, float, float, float, float, float, float]:
         """Returns the parameters as a tuple for radiation step"""
-        return self.alpha, self.gamma, self.mu, self.f, self.chi, self.lambda_, self.g
+        return self.alpha, self.gamma, self.mu, self.f_HeV, self.chi, self.lambda_, self.g_HeV
     

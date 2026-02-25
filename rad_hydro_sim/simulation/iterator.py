@@ -33,7 +33,7 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> tuple:
     if case.initial_condition == "temperature, density":
         # If initial condition is given in terms of temperature, convert to specific energy
         T = np.full_like(x_cells, case.T_initial)
-        e = case.f * T**case.gamma * case.rho0**(-case.mu)
+        e = case.f_HeV * T**case.gamma * case.rho0**(-case.mu)
         rho = np.full_like(x_cells, case.rho0)
         p = (case.r + 1) * rho * e  # Ideal gas EOS
         E_rad=a_Hev * T**4
@@ -42,7 +42,7 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> tuple:
         p = np.full_like(x_cells, case.p0)
         u = np.full_like(x_nodes, case.u0)
         e = internal_energy_from_prho(p, rho, case.r+1)
-        T = calculate_temperature_from_specific_energy(e, rho, case.f, case.gamma, case.mu)  # Initial temperature from Rosen's model
+        T = calculate_temperature_from_specific_energy(e, rho, case.f_HeV, case.gamma, case.mu)  # Initial temperature from Rosen's model
         E_rad = np.zeros_like(x_cells)  # Assuming no initial radiation energy
         
     q = np.zeros_like(x_cells)

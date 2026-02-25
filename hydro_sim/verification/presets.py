@@ -35,7 +35,7 @@ COMPARISON_CASES: Dict[str, ComparisonCase] = {
     "gold_tau_0": ComparisonCase(
         gamma=1.25,
         rho0=19.32,
-        P0=1e12,
+        P0_phys_Barye=1e12,
         tau=0.0,
         Pw=(2.0, 0.0, 0.0),
         t_end=1e-9,
@@ -51,7 +51,7 @@ COMPARISON_CASES: Dict[str, ComparisonCase] = {
     "gold_tau_1": ComparisonCase(
         gamma=1.25,
         rho0=19.32,
-        P0=10.0,
+        P0_phys_Barye=10.0,
         tau=1.0,
         Pw=(2.0, 0.0, 1.0),  # Pw2 = tau for self-similar
         t_end=5e-3,
@@ -67,7 +67,7 @@ COMPARISON_CASES: Dict[str, ComparisonCase] = {
     "gold_tau_neg": ComparisonCase(
         gamma=1.25,
         rho0=19.32,
-        P0=2.71e8,
+        P0_phys_Barye=2.71e12,
         tau=-0.45,
         Pw=(0.0, 0.0, -0.45),
         t_end=1e-9,
@@ -83,7 +83,7 @@ COMPARISON_CASES: Dict[str, ComparisonCase] = {
     "gold_tau_0_hires": ComparisonCase(
         gamma=1.25,
         rho0=19.32,
-        P0=10.0,
+        P0_phys_Barye=10.0,
         tau=0.0,
         Pw=(2.0, 0.0, 0.0),
         t_end=100e-9,

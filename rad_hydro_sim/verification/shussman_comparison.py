@@ -101,8 +101,8 @@ def compute_subsonic_profiles_at_times(
     data = compute_profiles_for_report(
         mat,
         tau,
-        times=times_sec,
-        T0=T0_hev,
+        times_ns=times_sec,
+        T0_phys_HeV=T0_hev,
     )
     n_times, n_xi = data["m_heat"].shape
     # Compute position x from integral dm/rho

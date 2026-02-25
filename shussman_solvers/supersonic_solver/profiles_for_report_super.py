@@ -33,65 +33,41 @@ except ImportError:
 
 def compute_profiles_for_report(
     mat: MaterialSuper,
+    T0_phys_HeV: float,
     tau: float,
-    *,
-    times: np.ndarray,
-    T0: float,
+    times_ns: np.ndarray,
 ):
     """
     Compute mass, position, and temperature profiles at a sequence of times.
-
-    Parameters
-    ----------
-    mat : material
-    tau : temporal power-law exponent
-    times : 1D array of dimensionless times (default 0.01 to 1 step 0.01)
-    T0 : reference temperature scale (MATLAB T0=2)
-    iternum, xsi0 : passed to manager_super
-
-    Returns
-    -------
-    dict with: times, t, x, m_heat, x_heat, T_heat, m0, mw, e0, ew, xsi, z, A
-    - m_heat[i,:]: areal mass (g/cm^2) at each xi for time times[i]
-    - x_heat[i,:]: position (cm) = m_heat / rho0
-    - T_heat[i,:]: temperature; MATLAB uses 100*T0*times^tau*T_tilde (unit scaling by 100)
     """
+    times_ns = np.asarray(times_ns, dtype=float).ravel()
     m0, mw, e0, ew, xsi, z, A, t, x = manager_super(mat, tau)
     # Self-similar T (dimensionless)
     T_tilde = np.asarray(x[:, 0], dtype=float)
     t_xi = np.asarray(t, dtype=float)
 
-    n_times = len(times)
+    n_times = len(times_ns)
     n_xi = len(t_xi)
 
     m_heat = np.zeros((n_times, n_xi), dtype=float)
     x_heat = np.zeros((n_times, n_xi), dtype=float)
-    # MATLAB: T_heat(i,:) = T0*times(i)^tau*(x(:,1))
     T_heat = np.zeros((n_times, n_xi), dtype=float)
     E_heat = np.zeros((n_times, n_xi), dtype=float)
 
     for i in range(n_times):
-        ti = times[i]
+        ti = times_ns[i]
         # m_heat(i,:) = m0*T0^mw(2)*times(i)^mw(3) .* t'/xsi  (t and t' are column in MATLAB)
-        m_heat[i, :] = m0 * (T0 ** mw[1]) * (ti ** mw[2]) * (t_xi / xsi)
-        x_heat[i, :] = m_heat[i, :] / mat.rho0
-        T_heat[i, :] = T0 * (ti ** tau) * T_tilde
-        E_heat[i, :] = e0 * (T0 ** mw[1]) * (ti ** mw[2]) * (t_xi / xsi)
+        m_heat[i, :] = m0 * (T0_phys_HeV ** mw[1]) * (ti ** mw[2]) * (t_xi / xsi) # g/cm^2
+        x_heat[i, :] = m_heat[i, :] / mat.rho0 # cm
+        T_heat[i, :] = T0_phys_HeV * (ti ** tau) * T_tilde # HeV
+        E_heat[i, :] = e0 * (T0_phys_HeV ** mw[1]) * (ti ** mw[2]) * (t_xi / xsi) # hJ/cm^2 (internal unit conversion)
 
     return {
-        "times": times,
-        "t": t_xi,
-        "x": x,
+        "times": times_ns,
         "m_heat": m_heat,
         "x_heat": x_heat,
         "T_heat": T_heat,
-        "m0": m0,
-        "mw": mw,
-        "e0": e0,
-        "ew": ew,
-        "xsi": xsi,
-        "z": z,
-        "A": A,
+        "E_heat": E_heat,
     }
 
 
@@ -104,13 +80,9 @@ if __name__ == "__main__":
     # Example: Al with tau = 1/(4+alpha-2*beta) (constant-temperature-like scaling)
     mat = material_au()
     tau = 0.0
-
-    data = compute_profiles_for_report(mat, tau, times=np.array([1.0]), T0=1) # Corresponds to T0=10000K
-    print("m_heat shape:", data["m_heat"].shape)
-    print("xsi =", data["xsi"])
-    print("m0 =", data["m0"], "e0 =", data["e0"])
-
-
+    T0_phys_HeV = 1
+    times_ns = np.array([1.0])
+    data = compute_profiles_for_report(mat, T0_phys_HeV=T0_phys_HeV, tau=tau, times_ns=times_ns) # Corresponds to T0=10000K
     import matplotlib.pyplot as plt
-    plt.plot(data["x_heat"][0,:], data["T_heat"][0,:])
+    plt.plot(data["m_heat"][0,:], data["T_heat"][0,:])
     plt.show()

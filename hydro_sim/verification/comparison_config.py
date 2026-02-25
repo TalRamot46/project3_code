@@ -104,7 +104,7 @@ class ComparisonCase:
     rho0: float = 19.32  # Gold density
     p0: float = 1e-3     # Small background pressure
     u0: float = 0.0
-    P0: float = 10.0
+    P0_phys_Barye: float = 10.0
     tau: float = 0.0
     
     # Self-similar solver parameters
@@ -138,16 +138,17 @@ class ComparisonCase:
             p0=self.p0,
             u0=self.u0,
             tau=self.tau,
-            P0=self.P0,
+            P0=self.P0_phys_Barye,
         )
     
     def get_shussman_params(self) -> dict:
         """Get parameters for shussman_shock_solver."""
         return {
             'material': self.material,
-            'P0': self.P0,
-            'Pw': list(self.Pw),
+            'P0_phys_Barye': self.P0_phys_Barye,
+            'Pw': list(self.Pw) if self.Pw is not None else None,
             'times': self.times,
+            'tau': self.tau if self.tau is not None else None,
         }
     
     @property

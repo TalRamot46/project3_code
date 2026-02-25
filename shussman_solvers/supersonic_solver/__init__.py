@@ -19,12 +19,11 @@ Public API:
   - solve_normalize_super: solve_normalize
   - manager_super: manager_super
   - profiles_for_report_super: compute_profiles_for_report
-  - run_super: run_super
 """
 
 from .materials_super import (
     KELVIN_PRE_HEV,
-    STEFAN_BOLTZMANN,
+    STEFAN_BOLTZMANN_KELVIN,
     MaterialSuper,
     material_al,
     material_au,
@@ -37,11 +36,10 @@ from .utils_super import integrate_ode, mid, trapz
 from .solve_normalize_super import solve_normalize
 from .manager_super import manager_super
 from .profiles_for_report_super import compute_profiles_for_report
-from .run_super import run_super
 
 __all__ = [
     "KELVIN_PRE_HEV",
-    "STEFAN_BOLTZMANN",
+    "STEFAN_BOLTZMANN_KELVIN",
     "MaterialSuper",
     "material_al",
     "material_au",
@@ -55,5 +53,4 @@ __all__ = [
     "solve_normalize",
     "manager_super",
     "compute_profiles_for_report",
-    "run_super",
 ]

@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Union, Optional, Callable
 
+S_per_ns = 1e-9
 
 class SimulationType(str, Enum):
     """Supported simulation types."""
@@ -95,7 +96,7 @@ def _get_boundary_conditions(
         # Pressure-driven left, outflow right
         t = state.t
         if hasattr(case, 'P0') and hasattr(case, 'tau'):
-            p_drive = case.P0 * (t ** case.tau) if t > 0 else 0.0
+            p_drive = case.P0 * ((t / S_per_ns) ** case.tau) if t > 0 else 0.0
         else:
             p_drive = 0.0
         return {"type": "pressure", "p": p_drive}, "outflow"

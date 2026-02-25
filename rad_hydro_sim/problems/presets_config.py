@@ -40,12 +40,12 @@ _power_law_tau = -0.45
 PRESET_TEST_CASES = {
     PRESET_FIRST_ATTEMPT: RadHydroCase(
         # Rosen's opacity parameters
-        g = 1.0/7200,
+        g_HeV = 1.0/7200,
         alpha = 1.5,
         lambda_ = 0.2,
 
         # Rosen's specific energy parameters
-        f = 3.4e13,
+        f_HeV = 3.4e13,
         gamma = 1.6,
         mu = 0.14,
 
@@ -82,12 +82,12 @@ PRESET_TEST_CASES = {
     PRESET_POWER_LAW: RadHydroCase(
         # Rosen's opacity parameters
         # Rosen's opacity parameters
-        g = 1.0/7200,
+        g_HeV = 1.0/7200,
         alpha = 1.5,
         lambda_ = 0.2,
 
         # Rosen's specific energy parameters
-        f = 3.4e13,
+        f_HeV = 3.4e13,
         gamma = 1.6,
         mu = 0.14,
 
@@ -96,7 +96,7 @@ PRESET_TEST_CASES = {
 
         # Boundary conditions
         T0 = None,
-        P0 = 2.71e8,
+        P0 = 2.71e12,
         tau = _power_law_tau,
 
         # initial conditions
@@ -123,12 +123,12 @@ PRESET_TEST_CASES = {
     ),
     PRESET_CONSTANT_PRESSURE: RadHydroCase(
         # Rosen's opacity parameters
-        g = 1.0/7200,
+        g_HeV = 1.0/7200,
         alpha = 1.5,
         lambda_ = 0.2,
 
         # Rosen's specific energy parameters
-        f = 3.4e13,
+        f_HeV = 3.4e13,
         gamma = 1.6,
         mu = 0.14,
 
@@ -164,12 +164,12 @@ PRESET_TEST_CASES = {
     ),
     PRESET_CONSTANT_T_RADIATION: RadHydroCase(
         # Rosen's opacity parameters (g, f match 1D Diffusion self-similar reference for verification)
-        g = 1.0 / 7200,
+        g_HeV = 1.0 / 7200 / KELVIN_PER_HEV,
         alpha = 1.5,
         lambda_ = 0.2,
 
         # Rosen's specific energy parameters
-        f = 3.4e13,
+        f_HeV = 3.4e13,
         gamma = 1.6,
         mu = 0.14,
 
@@ -202,12 +202,12 @@ PRESET_TEST_CASES = {
     ),
     PRESET_RAD_HYDRO_CONSTANT_T: RadHydroCase(
         # Rosen's opacity parameters
-        g = 1.0 / (7200.0 * (KELVIN_PRE_HEV**1.5) * (19.32**0.2)),
+        g_HeV = 1.0 / (7200.0 * (KELVIN_PRE_HEV**1.5) * (19.32**0.2)),
         alpha = 1.5,
         lambda_ = 0.2,
 
         # Rosen's specific energy parameters
-        f = 3.4e13 / ((KELVIN_PRE_HEV**1.6) * (19.32**0.14)),
+        f_HeV = 3.4e13 / ((KELVIN_PRE_HEV**1.6) * (19.32**0.14)),
         gamma = 1.6,
         mu = 0.14,
 
@@ -240,12 +240,12 @@ PRESET_TEST_CASES = {
     ),
     PRESET_FIG_8: RadHydroCase(
         # Rosen's opacity parameters
-        g = 1.0 / 7200,
+        g_HeV = 1.0 / 7200,
         alpha = 1.5,
         lambda_ = 0.2,
 
         # Rosen's specific energy parameters
-        f = 3.4e13,
+        f_HeV = 3.4e13,
         gamma = 1.6,
         mu = 0.14,
 
@@ -278,12 +278,12 @@ PRESET_TEST_CASES = {
     ),
     PRESET_FIG_9: RadHydroCase(
         # Rosen's opacity parameters
-        g = 1.0 / 7200,
+        g_HeV = 1.0 / 7200,
         alpha = 1.5,
         lambda_ = 0.2,
 
         # Rosen's specific energy parameters
-        f = 3.4e13,
+        f_HeV = 3.4e13,
         gamma = 1.6,
         mu = 0.14,
 
@@ -316,12 +316,12 @@ PRESET_TEST_CASES = {
     ),
     PRESET_FIG_10: RadHydroCase(
         # Rosen's opacity parameters
-        g = 1.0 / 7200,
+        g_HeV = 1.0 / 7200,
         alpha = 1.5,
         lambda_ = 0.2,
 
         # Rosen's specific energy parameters
-        f = 3.4e13,
+        f_HeV = 3.4e13,
         gamma = 1.6,
         mu = 0.14,
 

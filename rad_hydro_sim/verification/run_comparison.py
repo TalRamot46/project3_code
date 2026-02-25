@@ -68,7 +68,7 @@ def run_supersonic_solver_reference(
     try:
         from project_3.shussman_solvers.supersonic_solver import (
             MaterialSuper,
-            STEFAN_BOLTZMANN,
+            STEFAN_BOLTZMANN_KELVIN,
             compute_profiles_for_report,
         )
     except ImportError as e:
@@ -84,7 +84,7 @@ def run_supersonic_solver_reference(
         rho0=float(case.rho0),
         f=float(case.f) ,
         g=float(case.g),
-        sigma=STEFAN_BOLTZMANN,
+        sigma=STEFAN_BOLTZMANN_KELVIN,
         r=float(case.r),
         name="Au_rad_hydro",
     )
@@ -515,8 +515,8 @@ def run_comparison(
 def main() -> None:
     """Entry point: select mode and run comparison."""
     # MODE = VerificationMode.FULL_RAD_HYDRO
-    # MODE = VerificationMode.RADIATION_ONLY
-    MODE = VerificationMode.HYDRO_ONLY
+    MODE = VerificationMode.RADIATION_ONLY
+    # MODE = VerificationMode.HYDRO_ONLY
     
     run_comparison(
         MODE,

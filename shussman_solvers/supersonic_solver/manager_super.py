@@ -54,8 +54,7 @@ def manager_super(
     ew[1] = mat.beta + mw[1]
     ew[2] = mat.beta * tau + mw[2]
 
-    # ---- Constant A (MATLAB: A = 3*mat.f*mat.beta/16/mat.sigma/mat.g*rho0**(-mu + lambda)) ----
-    A = 3.0 * mat.f * mat.beta / 16.0 / mat.sigma / mat.g * mat.rho0**(-mat.mu + mat.lambda_)
+    A = 3.0 * mat.f * mat.beta / 16.0 / mat.sigma / mat.g
 
     # ---- Solve ODE and normalize ----
     t, x = solve_normalize(mat.alpha, mat.beta, tau, iternum=100, xsi0=1, shooting_tol=1e-5)
@@ -74,6 +73,8 @@ def manager_super(
     m0 = (
         xsi
         * (A ** mw[0])
+        * (1e-9 ** (-mw[1] * tau))
+        * (KELVIN_PRE_HEV ** mw[1])
         * (1e-9 ** mw[2])
     )
 
@@ -83,6 +84,8 @@ def manager_super(
         z
         * mat.f
         * (A ** ew[0])
+        * (1e-9 ** (-ew[1] * tau))
+        * (KELVIN_PRE_HEV ** ew[1])
         * (1e-9 ** ew[2])
         / 1e9
         / 100.0

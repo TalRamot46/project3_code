@@ -98,10 +98,24 @@ def _as_list(arr):
 
 
 def load_shussman_data(npz_path: str | Path) -> SimulationData:
-    """Load data from shussman_shock_solver NPZ file."""
+    """Load data from shussman_shock_solver NPZ file.
+    Supports both formats: 'times_sec' (seconds) or 'times' (nanoseconds).
+    """
     data = np.load(npz_path, allow_pickle=True)
-    
-    times = np.asarray(data["times"], float)
+    files = list(data.files)
+
+    if "times_sec" in files:
+        times_sec = np.asarray(data["times_sec"], dtype=float)
+    elif "times" in files:
+        print("times in files")
+        times_ns = np.asarray(data["times"], dtype=float)
+        print("times_ns: ", times_ns)
+        times_sec = times_ns * 1e-9
+        print("times_sec: ", times_sec)
+    else:
+        raise KeyError(
+            f"NPZ archive has no 'times_sec' or 'times'. Keys present: {files}"
+        )
     
     # Load profiles
     m = _as_list(data["m_shock"])
@@ -120,7 +134,7 @@ def load_shussman_data(npz_path: str | Path) -> SimulationData:
         e = [p_i / (rho_i * (gamma - 1) + 1e-30) for p_i, rho_i in zip(p, rho)]
     
     return SimulationData(
-        times=times,
+        times=times_sec,
         m=m, x=x, rho=rho, p=p, u=u, e=e,
         label="Self-Similar (Shussman)",
         color="red",
@@ -326,8 +340,8 @@ def plot_comparison_slider(
     
     # Initial plot (k=0)
     k = 0
-    ref_k = interpolate_to_time(ref_data, all_times[k] * 1e9)
-    print("all_times[k] * 1e9: ", all_times[k] * 1e9)
+    ref_k = interpolate_to_time(ref_data, all_times[k])
+    print("all_times[k]: ", all_times[k])
     print("ref_k: ", ref_k)
     
     x_sim = sim_data.m[k] if xaxis == "m" else sim_data.x[k]
@@ -409,8 +423,8 @@ def plot_comparison_slider(
     
     def update(val):
         k = int(slider.val)
-        ref_k = interpolate_to_time(ref_data, all_times[k] * 1e9)
-        print("all_times[k] * 1e9: ", all_times[k] * 1e9)
+        ref_k = interpolate_to_time(ref_data, all_times[k])
+        print("all_times[k]: ", all_times[k])
         print("ref_k: ", ref_k)
         
         x_sim = sim_data.m[k] if xaxis == "m" else sim_data.x[k]

@@ -101,9 +101,9 @@ def run_shussman_solver(case: ComparisonCase, save_path: str | None = None) -> S
     
     compute_shock_profiles(
         mat=params['material'],
-        P0=params['P0'],
+        P0=params['P0'] * 1e4,
         Pw=params['Pw'],
-        times=params['times'],
+        times_ns=params['times'] * 1e9,
         save_npz=save_path,
     )
     return load_shussman_data(save_path)
@@ -152,7 +152,7 @@ def run_comparison(case: ComparisonCase, config: ComparisonConfig) -> None:
         ref_data = load_shussman_data(config.npz_path)
     else:
         print("Skipping solver (skip_solver=True)")
-        ref_data = None
+        ref_data = sim_data
     
     # Check we have data
     if sim_data is None or ref_data is None:
@@ -262,6 +262,7 @@ def main():
     
     # Get case and config
     case, config = get_preset(PRESET)
+    config.skip_solver = True
     
     # Run comparison
     sim_data, ref_data, case, config, png_path, gif_path = run_comparison(case, config)

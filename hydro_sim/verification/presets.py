@@ -67,9 +67,9 @@ COMPARISON_CASES: Dict[str, ComparisonCase] = {
     "gold_tau_neg": ComparisonCase(
         gamma=1.25,
         rho0=19.32,
-        P0=2.71e12,
+        P0=2.71e8,
         tau=-0.45,
-        Pw=(2.0, 0.0, -0.447),
+        Pw=(0.0, 0.0, -0.45),
         t_end=1e-9,
         x_max=15e-3 / 19.32,
         n_snapshots=10000,

@@ -96,7 +96,7 @@ PRESET_TEST_CASES = {
 
         # Boundary conditions
         T0 = None,
-        P0 = 2.71e12,
+        P0 = 2.71e8,
         tau = _power_law_tau,
 
         # initial conditions

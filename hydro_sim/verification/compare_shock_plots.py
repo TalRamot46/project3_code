@@ -326,10 +326,12 @@ def plot_comparison_slider(
     
     # Initial plot (k=0)
     k = 0
-    ref_k = interpolate_to_time(ref_data, all_times[k])
+    ref_k = interpolate_to_time(ref_data, all_times[k] * 1e9)
+    print("all_times[k] * 1e9: ", all_times[k] * 1e9)
+    print("ref_k: ", ref_k)
     
     x_sim = sim_data.m[k] if xaxis == "m" else sim_data.x[k]
-    x_ref = ref_data.m[ref_k] if xaxis == "m" else ref_data.x[ref_k]
+    x_ref = ref_data.m[ref_k] if xaxis == "m" else ref_data.x[ref_k] 
 
     print("max x value in sim_data: ", np.max(x_sim))
     print("max x value in ref_data: ", np.max(x_ref))
@@ -407,7 +409,9 @@ def plot_comparison_slider(
     
     def update(val):
         k = int(slider.val)
-        ref_k = interpolate_to_time(ref_data, all_times[k])
+        ref_k = interpolate_to_time(ref_data, all_times[k] * 1e9)
+        print("all_times[k] * 1e9: ", all_times[k] * 1e9)
+        print("ref_k: ", ref_k)
         
         x_sim = sim_data.m[k] if xaxis == "m" else sim_data.x[k]
         x_ref = ref_data.m[ref_k] if xaxis == "m" else ref_data.x[ref_k]

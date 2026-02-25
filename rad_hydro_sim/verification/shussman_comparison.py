@@ -152,7 +152,7 @@ def compute_shock_profiles_at_times(
     mat = _rad_hydro_case_to_material_shock(case)
     # Pw[0], Pw[1], Pw[2]: P0 exponent, T0 exponent, time exponent (tau)
     Pw = np.array([1, wP2, wP3], dtype=float)
-    return compute_shock_profiles(mat, P0_Barye * case.T0**wP2, Pw, times=times_sec)
+    return compute_shock_profiles(mat, P0_Barye * case.T0**wP2, Pw, times_ns=times_sec)
 
 
 def build_piecewise_reference(

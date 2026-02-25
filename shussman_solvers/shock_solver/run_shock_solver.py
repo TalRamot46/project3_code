@@ -31,7 +31,7 @@ def compute_shock_profiles(
     mat: Material,
     P0: float,
     Pw,
-    times=None,
+    times_ns,
     *,
     save_npz: str | None = None,
     drive_scaling: bool = True,
@@ -55,12 +55,6 @@ def compute_shock_profiles(
     All physical quantities in cgs: P in Barye, u in cm/s, T in K, rho in g/cm^3.
     """
     Pw = np.asarray(Pw, float)
-
-    if times is None:
-        times = np.array([1.0], float)
-    else:
-        times = np.asarray(times, float)
-
     # MATLAB: [m0,mw,...] = manager(mat,Pw(3));
     tau = float(Pw[2])
     m0, mw, e0, ew, u0, uw, xsi, z, utilda, ufront, t, x = manager_shock(mat, tau)
@@ -81,7 +75,7 @@ def compute_shock_profiles(
     Pw2 = float(Pw[2])
 
     out = {
-        "times": times,
+        "times": times_ns,
         "t": t,
         "x": x,
         "P0": P0,
@@ -99,7 +93,7 @@ def compute_shock_profiles(
         "dTdx": [],
     }
 
-    for ti in times:
+    for ti in times_ns:
         ti = float(ti)
         
         # times in MATLAB script: [10, 15, 25, 50, 75, 100] = physical time in 10^-9 s
@@ -156,7 +150,7 @@ def compute_shock_profiles(
         os.makedirs(os.path.dirname(save_npz) or ".", exist_ok=True)
         np.savez(
             save_npz,
-            times=times,
+            times=times_ns,
             t=t,
             x=x,
             P0=P0,
@@ -174,9 +168,10 @@ if __name__ == "__main__":
     except ImportError:
         from shussman_solvers.shock_solver.materials_shock import au_supersonic_variant_1
     Au = au_supersonic_variant_1()
-    P0 = 2.71e12 # Barye
+    P0 = 2.71e8 # Barye
     Pw = [0.0, 0.0, -0.45]
-    data = compute_shock_profiles(Au, P0, Pw)
+    times = np.array([1.0], float)  
+    data = compute_shock_profiles(Au, P0, Pw, times_ns=times)
     import matplotlib.pyplot as plt
-    plt.plot(data["m_shock"][0], data["T_shock"][0])
+    plt.plot(data["m_shock"][0], data["P_shock"][0])
     plt.show()

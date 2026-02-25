@@ -64,7 +64,7 @@ def compute_profiles_for_report(
         ti = times[i]
         m_heat[i, :] = m0 * (T0 ** mw[1]) * (ti ** mw[2]) * (t_xi / xsi)
         P_heat[i, :] = P0_out * (T0 ** Pw[1]) * (ti ** Pw[2]) * (x3 / Ptilda)
-        T_heat[i, :] = 100.0 * T0 * (ti ** tau) * (x3 * (x1 ** (1 - mat.mu))) ** (1.0 / mat.beta)
+        T_heat[i, :] = T0 * (ti ** tau) * (x3 * (x1 ** (1 - mat.mu))) ** (1.0 / mat.beta)
         u_heat[i, :] = u0 * (T0 ** uw[1]) * (ti ** uw[2]) * (x5 / utilda)
         rho_heat[i, :] = 1.0 / (V0 * (T0 ** Vw[1]) * (ti ** Vw[2]) * x1)
 
@@ -100,8 +100,8 @@ if __name__ == "__main__":
         from shussman_solvers.subsonic_solver.materials_sub import material_au
 
     mat = material_au()
-    tau = 0.3
-    data = compute_profiles_for_report(mat, tau, times=np.array([1.0]), T0=0.86) # Corresponds to T0=10000K
+    tau = 0.0
+    data = compute_profiles_for_report(mat, tau, times=np.array([1.0e-9]), T0=1) # Corresponds to T0=10000K
     import matplotlib.pyplot as plt
-    plt.plot(data["m_heat"][0,:], data["P_heat"][0,:])
+    plt.plot(data["m_heat"][0,:], data["T_heat"][0,:])
     plt.show()

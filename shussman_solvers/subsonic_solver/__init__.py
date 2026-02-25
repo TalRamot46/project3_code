@@ -24,7 +24,7 @@ Public API:
 
 from .materials_sub import (
     HEV_IN_KELVIN,
-    STEFAN_BOLTZMANN,
+    STEFAN_BOLTZMANN_KELVIN,
     MaterialSub,
     material_al,
     material_au,
@@ -42,7 +42,7 @@ from .run_sub import run_sub
 
 __all__ = [
     "HEV_IN_KELVIN",
-    "STEFAN_BOLTZMANN",
+    "STEFAN_BOLTZMANN_KELVIN",
     "MaterialSub",
     "material_al",
     "material_au",

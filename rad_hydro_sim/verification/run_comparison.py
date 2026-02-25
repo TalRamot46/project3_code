@@ -390,58 +390,53 @@ def run_full_rad_hydro_comparison(
         )
         sim_data = load_rad_hydro_history(history_rh)
         print(f"  Stored {len(sim_data.times)} time steps.")
-    if sim_data is None:
-        print("Need rad_hydro data for full rad_hydro comparison.")
-        return
 
-    # save the sim_data to rad_hydro_sim/data/
-    sim_npz = get_rad_hydro_npz_path(case_title, prefix="sim_data")
-    np.savez(
-        str(sim_npz),
-        times=sim_data.times, m=sim_data.m, x=sim_data.x,
-        rho=sim_data.rho, p=sim_data.p, u=sim_data.u, e=sim_data.e,
-        T=sim_data.T, E_rad=sim_data.E_rad,
-    )
-    print(f"Saved sim_data to {sim_npz}")
+        # save the sim_data to rad_hydro_sim/data/
+        sim_npz = get_rad_hydro_npz_path(case_title, prefix="sim_data")
+        np.savez(
+            str(sim_npz),
+            times=sim_data.times, m=sim_data.m, x=sim_data.x,
+            rho=sim_data.rho, p=sim_data.p, u=sim_data.u, e=sim_data.e,
+            T=sim_data.T, E_rad=sim_data.E_rad,
+        )
+        print(f"Saved sim_data to {sim_npz}")
 
-    # load sim_data back from the file (round-trip for debugging)
-    loaded = np.load(str(sim_npz), allow_pickle=True)
-    def _to_list_of_arrays(arr):
-        a = np.asarray(arr)
-        if a.dtype == object:
-            return [np.asarray(v, dtype=float) for v in a.tolist()]
-        if a.ndim == 2:
-            return [a[i, :].astype(float, copy=False) for i in range(a.shape[0])]
-        return [a.astype(float, copy=False)]
+        # load sim_data back from the file (round-trip for debugging)
+        loaded = np.load(str(sim_npz), allow_pickle=True)
+        def _to_list_of_arrays(arr):
+            a = np.asarray(arr)
+            if a.dtype == object:
+                return [np.asarray(v, dtype=float) for v in a.tolist()]
+            if a.ndim == 2:
+                return [a[i, :].astype(float, copy=False) for i in range(a.shape[0])]
+            return [a.astype(float, copy=False)]
 
-    sim_data = RadHydroData(
-        times=np.asarray(loaded["times"], dtype=float),
-        m=_to_list_of_arrays(loaded["m"]),
-        x=_to_list_of_arrays(loaded["x"]),
-        rho=_to_list_of_arrays(loaded["rho"]),
-        p=_to_list_of_arrays(loaded["p"]),
-        u=_to_list_of_arrays(loaded["u"]),
-        e=_to_list_of_arrays(loaded["e"]),
-        T=_to_list_of_arrays(loaded["T"]) if "T" in loaded else [],
-        E_rad=_to_list_of_arrays(loaded["E_rad"]) if "E_rad" in loaded else [],
-        label="Rad-Hydro (full)",
-        color="blue",
-        linestyle="-",
-    )
+        sim_data = RadHydroData(
+            times=np.asarray(loaded["times"], dtype=float),
+            m=_to_list_of_arrays(loaded["m"]),
+            x=_to_list_of_arrays(loaded["x"]),
+            rho=_to_list_of_arrays(loaded["rho"]),
+            p=_to_list_of_arrays(loaded["p"]),
+            u=_to_list_of_arrays(loaded["u"]),
+            e=_to_list_of_arrays(loaded["e"]),
+            T=_to_list_of_arrays(loaded["T"]) if "T" in loaded else [],
+            E_rad=_to_list_of_arrays(loaded["E_rad"]) if "E_rad" in loaded else [],
+            label="Rad-Hydro (full)",
+            color="blue",
+            linestyle="-",
+        )
 
     ref_data = None
     if not skip_shussman:
         print("Building Shussman piecewise reference (subsonic + shock)...")
         # sample 1 times from the sim_data.times
-        times_sec = np.linspace(sim_data.times[0] + 1e-16, sim_data.times[-1], 10000)
+        times_sec = np.linspace(0, case.t_end, 10000)
         print(f"times_sec: {times_sec}")
-        ref_data = run_shussman_piecewise_reference(case, times_sec)
-        if ref_data is not None:
-            print(f"  Reference has {len(ref_data.times)} time steps.")
-    if ref_data is None:
-        print("Could not build Shussman reference; skipping comparison.")
-        return
+        ref_data = run_shussman_piecewise_reference(case, times_sec, P0_Barye=2.71e12)
 
+    if skip_rad_hydro:
+        sim_data = ref_data
+        print(f"Copied ref_data to sim_data")
 
     print("\nPlotting full rad_hydro vs Shussman (rho, P, u, e vs x)...")
     if show_plot:
@@ -522,7 +517,7 @@ def main() -> None:
     # MODE = VerificationMode.FULL_RAD_HYDRO
     # MODE = VerificationMode.RADIATION_ONLY
     MODE = VerificationMode.HYDRO_ONLY
-
+    
     run_comparison(
         MODE,
         skip_rad_hydro=False,

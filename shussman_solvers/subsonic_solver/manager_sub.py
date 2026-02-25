@@ -55,7 +55,6 @@ def manager_sub(
     uw[1] = (mat.beta * (2 + mat.lambda_) - (4 + mat.alpha) * mat.mu) / tempW
     uw[2] = (mat.mu + mat.beta * (2 + mat.lambda_) * tau - (4 + mat.alpha) * mat.mu * tau) / tempW
 
-    A = 3 * mat.f * mat.beta / 16 / mat.sigma / mat.g
     B = (16 * mat.sigma * mat.g) / mat.beta / 3
     B = B * ((mat.r * mat.f) ** (-(4 + mat.alpha) / mat.beta))
 
@@ -73,44 +72,25 @@ def manager_sub(
         Ptilda
         * (B ** Pw[0])
         * ((mat.r * mat.f) ** (Pw[1] / mat.beta))
-        * (10.0 ** (-9 * (-Pw[1] * tau)))
-        / 1e12
-        * (HEV_IN_KELVIN ** Pw[1])
-        * (1e-9 ** Pw[2])
     )
     m0 = (
         xsi
         * (B ** mw[0])
         * ((mat.r * mat.f) ** (mw[1] / mat.beta))
-        * (10.0 ** (-9 * (-mw[1] * tau)))
-        * (HEV_IN_KELVIN ** mw[1])
-        * (1e-9 ** mw[2])
     )
     e0 = (
         z
         * (B ** ew[0])
         * ((mat.r * mat.f) ** (ew[1] / mat.beta))
-        * (10.0 ** (-9 * (-ew[1] * tau)))
-        * (HEV_IN_KELVIN ** ew[1])
-        * (1e-9 ** ew[2])
-        / 1e9
-        / 100.0
     )
     V0 = (
         (B ** Vw[0])
         * ((mat.r * mat.f) ** (Vw[1] / mat.beta))
-        * (10.0 ** (-9 * (-Vw[1] * tau)))
-        * (HEV_IN_KELVIN ** Vw[1])
-        * (1e-9 ** Vw[2])
     )
     u0 = (
         utilda
         * (B ** uw[0])
         * ((mat.r * mat.f) ** (uw[1] / mat.beta))
-        * (10.0 ** (-9 * (-uw[1] * tau)))
-        / 1e5
-        * (HEV_IN_KELVIN ** uw[1])
-        * (1e-9 ** uw[2])
     )
 
     return m0, mw, e0, ew, P0_out, Pw, V0, Vw, u0, uw, xsi, z, Ptilda, utilda, B, t, x

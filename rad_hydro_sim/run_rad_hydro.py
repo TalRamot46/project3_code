@@ -94,7 +94,7 @@ def main():
     # Preset = physical case name (SIMPLE_TEST_CASES key). Use constants from presets_config.
     # Run list_presets() from presets_utils for a grouped list.
     from project_3.rad_hydro_sim.problems.presets_config import (
-        PRESET_POWER_LAW,
+        PRESET_CONSTANT_PRESSURE,
         PRESET_FIG_10,
         PRESET_CONSTANT_T_RADIATION
     )

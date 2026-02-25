@@ -254,7 +254,7 @@ def main():
     """Run a comparison with a predefined preset."""
     
     # ===== SELECT YOUR PRESET HERE =====
-    PRESET = "gold_tau_0"
+    PRESET = "gold_tau_neg"
     # ===================================
     
     # List available presets for reference

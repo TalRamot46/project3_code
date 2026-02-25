@@ -120,7 +120,7 @@ def compute_shock_profiles(
         # MATLAB: T_shock = (...)^(1/mat.beta)/11605  (T in eV). We output T in Kelvin.
         # T_K = (P/(r*f*rho^(mu-1)))^(1/beta)
         T_prof = (
-            P_prof / float(mat.r) / float(mat.f) * (rho_prof ** (float(mat.mu) - 1.0))
+            (P0 * P_tilde * ti**Pw2 / float(mat.r) / float(mat.f)) * (rho_prof ** (float(mat.mu) - 1.0))
         ) ** (1.0 / float(mat.beta))
 
         # e = P/(rho*r) [cgs]
@@ -174,9 +174,9 @@ if __name__ == "__main__":
     except ImportError:
         from shussman_solvers.shock_solver.materials_shock import au_supersonic_variant_1
     Au = au_supersonic_variant_1()
-    P0 = 1 # Bar
-    Pw = [1.0, 0.0, 0]
+    P0 = 2.71e12 # Barye
+    Pw = [0.0, 0.0, -0.45]
     data = compute_shock_profiles(Au, P0, Pw)
     import matplotlib.pyplot as plt
-    plt.plot(data["m_shock"][0], data["P_shock"][0])
+    plt.plot(data["m_shock"][0], data["T_shock"][0])
     plt.show()

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 HEV_IN_KELVIN = 1_160_500.0
-STEFAN_BOLTZMANN = 5.670373e-5
+STEFAN_BOLTZMANN_KELVIN = 5.670373e-5
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,7 +37,7 @@ def material_al() -> MaterialSub:
     HeV = HEV_IN_KELVIN
     mat_f = 3.6e11 * (100**mat_beta) / (HeV**mat_beta)
     mat_g = 1.0 / (1487.0 * (HeV**mat_alpha))
-    mat_sigma = STEFAN_BOLTZMANN
+    mat_sigma = STEFAN_BOLTZMANN_KELVIN
     mat_r = 0.3
     return MaterialSub(
         mat_alpha, mat_beta, mat_lambda, mat_mu,
@@ -51,10 +51,9 @@ def material_au() -> MaterialSub:
     mat_beta = 1.6
     mat_lambda = 0.2
     mat_mu = 0.14
-    HeV = HEV_IN_KELVIN
-    mat_f = 3.4e13 / (HeV**mat_beta)
-    mat_g = 1.0 / (7200.0 * (HeV**mat_alpha))
-    mat_sigma = STEFAN_BOLTZMANN
+    mat_f = 3.4e13
+    mat_g = 1.0 / 7200
+    mat_sigma = STEFAN_BOLTZMANN_KELVIN * HEV_IN_KELVIN**4
     mat_r = 0.25
     return MaterialSub(
         mat_alpha, mat_beta, mat_lambda, mat_mu,
@@ -71,7 +70,7 @@ def material_be() -> MaterialSub:
     HeV = HEV_IN_KELVIN
     mat_f = 8.8053e13 / (HeV**mat_beta)
     mat_g = 1.0 / (402.8102 * (HeV**mat_alpha))
-    mat_sigma = STEFAN_BOLTZMANN
+    mat_sigma = STEFAN_BOLTZMANN_KELVIN
     mat_r = 0.5529
     return MaterialSub(
         mat_alpha, mat_beta, mat_lambda, mat_mu,
@@ -88,7 +87,7 @@ def material_cu() -> MaterialSub:
     HeV = HEV_IN_KELVIN
     mat_f = 5.7e13 / (HeV**mat_beta)
     mat_g = 1.0 / (2237.0 * (HeV**mat_alpha))
-    mat_sigma = STEFAN_BOLTZMANN
+    mat_sigma = STEFAN_BOLTZMANN_KELVIN
     mat_r = mat_mu / (mat_beta - 1.0)
     return MaterialSub(
         mat_alpha, mat_beta, mat_lambda, mat_mu,
@@ -105,7 +104,7 @@ def material_pb() -> MaterialSub:
     HeV = HEV_IN_KELVIN
     mat_f = 3.5e13 / (HeV**mat_beta)
     mat_g = 1.0 / (13333.0 * (HeV**mat_alpha))
-    mat_sigma = STEFAN_BOLTZMANN
+    mat_sigma = STEFAN_BOLTZMANN_KELVIN
     mat_r = 0.3442
     return MaterialSub(
         mat_alpha, mat_beta, mat_lambda, mat_mu,

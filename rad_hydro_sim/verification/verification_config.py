@@ -22,6 +22,7 @@ from enum import Enum
 from project_3.rad_hydro_sim.problems.presets_config import (
     PRESET_FIRST_ATTEMPT,
     PRESET_CONSTANT_T_RADIATION,
+    PRESET_CONSTANT_PRESSURE,
     PRESET_POWER_LAW,
     PRESET_FIG_8,
     PRESET_FIG_9,
@@ -41,8 +42,8 @@ class VerificationMode(str, Enum):
 # ============================================================================
 
 RADIATION_ONLY_PRESET = PRESET_CONSTANT_T_RADIATION   # constant_temperature_drive
-HYDRO_ONLY_PRESET = PRESET_POWER_LAW                  # power_law_pressure_drive
-FULL_RAD_HYDRO_PRESET = PRESET_FIG_9                 # fig_8_comparison
+HYDRO_ONLY_PRESET = PRESET_POWER_LAW                  # constant_pressure_drive
+FULL_RAD_HYDRO_PRESET = PRESET_FIG_8                 # fig_8_comparison
 
 # Map each verification mode to its preset name (SIMPLE_TEST_CASES key)
 MODE_TO_PRESET: dict[VerificationMode, str] = {

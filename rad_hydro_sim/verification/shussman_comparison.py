@@ -28,7 +28,7 @@ def _rad_hydro_case_to_material_sub(case) -> MaterialSub:
     """Build Shussman subsonic MaterialSub from RadHydroCase (Gold-like)."""
     from project_3.shussman_solvers.subsonic_solver.materials_sub import (
         MaterialSub,
-        STEFAN_BOLTZMANN,
+        STEFAN_BOLTZMANN_KELVIN,
         HEV_IN_KELVIN,
     )
     alpha = float(case.alpha)
@@ -37,9 +37,9 @@ def _rad_hydro_case_to_material_sub(case) -> MaterialSub:
     mu = float(case.mu)
     r = float(case.r)
     # Match material_au() units: f in J/g/HeV^beta, g in g/cm^2/HeV^alpha
-    f = float(case.f) / (HEV_IN_KELVIN ** beta)
-    g = float(case.g) / (HEV_IN_KELVIN ** alpha)
-    sigma = STEFAN_BOLTZMANN
+    f = float(case.f) 
+    g = float(case.g) 
+    sigma = STEFAN_BOLTZMANN_KELVIN * HEV_IN_KELVIN**4
     return MaterialSub(
         alpha=alpha,
         beta=beta,
@@ -101,7 +101,7 @@ def compute_subsonic_profiles_at_times(
     data = compute_profiles_for_report(
         mat,
         tau,
-        times=times_sec * 1e9,
+        times=times_sec,
         T0=T0_hev,
     )
     n_times, n_xi = data["m_heat"].shape
@@ -143,7 +143,7 @@ def fit_power_law_drive(times: np.ndarray, P_front: np.ndarray) -> Tuple[float, 
 def compute_shock_profiles_at_times(
     case,
     times_sec: np.ndarray,
-    P0_Mbar: float,
+    P0_Barye: float,
     wP2: float,
     wP3: float,
 ) -> dict:
@@ -152,7 +152,7 @@ def compute_shock_profiles_at_times(
     mat = _rad_hydro_case_to_material_shock(case)
     # Pw[0], Pw[1], Pw[2]: P0 exponent, T0 exponent, time exponent (tau)
     Pw = np.array([1, wP2, wP3], dtype=float)
-    return compute_shock_profiles(mat, P0_Mbar * case.T0**wP2, Pw, times=times_sec *1e9)
+    return compute_shock_profiles(mat, P0_Barye * case.T0**wP2, Pw, times=times_sec)
 
 
 def build_piecewise_reference(
@@ -250,6 +250,7 @@ def build_piecewise_reference(
 def run_shussman_piecewise_reference(
     case,
     times_sec: np.ndarray,
+    P0_Barye: float,
 ) -> Optional[RadHydroData]:
     """
     Build the piecewise Shussman reference (subsonic + shock) for comparison with rad_hydro.
@@ -277,10 +278,12 @@ def run_shussman_piecewise_reference(
     )
     P_front = subsonic_data["P_heat"][-1,-1] # units = MBar
     _, wP2, wP3 = subsonic_data["Pw"]
+    print("times_sec of ablation region: ", times_sec)
 
     # 2) Shock solver with appropriate drive
     print("Starting shock solving...")
-    shock_data = compute_shock_profiles_at_times(case, times_sec, P_front, wP2, wP3)
+    times_ns = times_sec * 1e9
+    shock_data = compute_shock_profiles_at_times(case, times_ns, P0_Barye, wP2, wP3)
 
     # 3) Piecewise reference (subsonic + shock)
     print("Starting shock solving...")
@@ -290,5 +293,6 @@ def run_shussman_piecewise_reference(
         shock_data,
         times_sec,
     )
+    print("times_sec of ablation region: ", times_sec)
     return ref
 

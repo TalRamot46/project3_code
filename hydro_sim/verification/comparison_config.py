@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Optional, Tuple
 from pathlib import Path
 from enum import Enum
+from datetime import datetime
 import numpy as np
 import sys
 
@@ -39,9 +40,9 @@ class PlotMode(str, Enum):
 # ============================================================================
 
 def get_output_dir() -> Path:
-    """Get the base output directory for comparison figures."""
+    """Get the base output directory for hydro_sim shock verification figures."""
     from project_3.hydro_sim.problems.simulation_config import get_results_dir
-    base = get_results_dir() / "verification_hydro_shock"
+    base = get_results_dir() / "hydro_sim_verification"
     base.mkdir(parents=True, exist_ok=True)
     return base
 
@@ -61,10 +62,12 @@ def make_output_paths(case_name: str) -> Tuple[Path, Path]:
     png_dir.mkdir(parents=True, exist_ok=True)
     gif_dir.mkdir(parents=True, exist_ok=True)
     
-    # Clean case name for filename
+    # Clean case name for filename and append timestamp so runs don't overwrite
     safe_name = case_name.replace(" ", "_").replace("=", "").replace("(", "").replace(")", "")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{safe_name}_{timestamp}"
     
-    return png_dir / f"{safe_name}.png", gif_dir / f"{safe_name}.gif"
+    return png_dir / f"{filename}.png", gif_dir / f"{filename}.gif"
 
 
 # ============================================================================

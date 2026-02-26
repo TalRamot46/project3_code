@@ -61,10 +61,6 @@ def solve_normalize(
         t_out = np.asarray(sol.t, dtype=float)
         x_out = sol.y.T  # (n_t, 2): x_out[:,0]=T, x_out[:,1]=T'
         T_at_zero = float(x_out[-1, 0])
-        print(i, "xsi =", a[i], "step =", 2.0**(-i + first_change), "T0 =", T_at_zero)
-
-
-        print("T_at_zero =", T_at_zero)
         if T_at_zero > 1.0:
             a[i + 1] = a[i] - step
         else:

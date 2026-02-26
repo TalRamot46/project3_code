@@ -31,6 +31,7 @@ if str(_REPO_PARENT) not in sys.path:
     sys.path.insert(0, str(_REPO_PARENT))
 
 from project_3.rad_hydro_sim.output_paths import get_rad_hydro_npz_path
+from project_3.rad_hydro_sim.plotting.gif import save_history_gif
 from project_3.rad_hydro_sim.verification.verification_config import (
     VerificationMode,
     get_preset_for_mode,
@@ -253,6 +254,16 @@ def run_radiation_only_comparison(
             extra_ref_data=[super_data] if super_data is not None else None,
         )
         print(f"Saved PNG: {png_path}")
+    if save_png and not skip_rad_hydro:
+        # Also save an animated GIF of the Rad-Hydro history for this case
+        save_history_gif(
+            history,
+            case,
+            gif_path=str(gif_path),
+            fps=10,
+            stride=max(1, len(history.t) // 50),
+        )
+        print(f"Saved GIF: {gif_path}")
     print("Radiation-only comparison done.")
 
 
@@ -397,9 +408,6 @@ def run_hydro_only_comparison(
         sim_data = load_rad_hydro_history(history_rh, label="Rad-Hydro (hydro only)")
         print(f"  Stored {len(sim_data.times)} time steps.")
 
-        print("max value in sim_data.m: ", np.max(sim_data.m))
-        print("max value of m should be ", driven_case.rho0 * driven_case.x_max)
-
     ref_data = None
     if not skip_hydro_sim:
         print("Running hydro_sim (matching driven shock)...")
@@ -455,6 +463,16 @@ def run_hydro_only_comparison(
             shock_data=shock_data,
         )
         print(f"Saved PNG: {png_path}")
+    if save_png and not skip_rad_hydro:
+          # Also save an animated GIF of the Rad-Hydro history for this hydro-only case
+        save_history_gif(
+            history_rh,
+            case_rh,
+            gif_path=str(gif_path),
+            fps=10,
+            stride=max(1, len(history_rh.t) // 50),
+        )
+        print(f"Saved GIF: {gif_path}")
     print("Hydro-only comparison done.")
 
 
@@ -573,6 +591,16 @@ def run_full_rad_hydro_comparison(
             title="Full rad_hydro vs Shussman (subsonic + shock)",
         )
         print(f"Saved PNG: {png_path}")
+    if save_png and not skip_rad_hydro:
+        # Also save an animated GIF of the Rad-Hydro history for this full rad_hydro case
+        save_history_gif(
+            history_rh,
+            case,
+            gif_path=str(gif_path),
+            fps=10,
+            stride=max(1, len(history_rh.t) // 50),
+        )
+        print(f"Saved GIF: {gif_path}")
     print("Full rad_hydro comparison done.")
 
 

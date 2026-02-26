@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Tuple
 from enum import Enum
+from datetime import datetime
 
 from project_3.rad_hydro_sim.problems.presets_config import (
     PRESET_FIRST_ATTEMPT,
@@ -68,21 +69,27 @@ def get_output_prefix_for_mode(mode: VerificationMode) -> str:
 # ============================================================================
 
 def get_verification_output_dir() -> Path:
-    """Base output directory for verification figures."""
+    """Base output directory for rad_hydro_sim verification figures."""
     from project_3.hydro_sim.problems.simulation_config import get_results_dir
-    base = get_results_dir() / "verification"
+    base = get_results_dir() / "rad_hydro_sim_verification"
     base.mkdir(parents=True, exist_ok=True)
     return base
 
 
 def make_verification_output_paths(case_name: str) -> Tuple[Path, Path]:
-    """(png_path, gif_path) for a given case name."""
+    """(png_path, gif_path) for a given case name.
+
+    Includes a timestamp in the filename so repeated runs of the same
+    preset do not overwrite previous results.
+    """
     base = get_verification_output_dir()
     png_dir = base / "png"
     gif_dir = base / "gif"
     png_dir.mkdir(parents=True, exist_ok=True)
     gif_dir.mkdir(parents=True, exist_ok=True)
     safe = case_name.replace(" ", "_").replace("=", "").replace("(", "").replace(")", "")
-    return png_dir / f"{safe}.png", gif_dir / f"{safe}.gif"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{safe}_{timestamp}"
+    return png_dir / f"{filename}.png", gif_dir / f"{filename}.gif"
 
 

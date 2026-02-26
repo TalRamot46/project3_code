@@ -170,7 +170,6 @@ def plot_profiles(npz_path: str | Path, *, quantity: str, xaxis: str,
         save_path = Path(save)
         save_path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(save_path, bbox_inches="tight")
-        print(f"Saved figure to: {save_path}")
 
     if show:
         plt.show()

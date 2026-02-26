@@ -20,7 +20,7 @@
   - **supersonic_solver/** — Radiation-diffusion solver (used by rad_hydro verification radiation-only).
   - **subsonic_solver/** — Subsonic self-similar solver (Python port of MATLAB).
 - **tests/** — Pytest tests (hydro_sim core: eos, grid, boundary, timestep, configs). Run with `pytest` from repo root (see below).
-- **results/** — Simulation outputs (figures, data). All runs and verification write here. Git-ignored except README and `.gitkeep`. Layout: `results/hydro_sim/`, `results/verification/`, `results/verification_hydro_shock/`.
+- **results/** — Simulation outputs (figures, data). All runs and verification write here. Git-ignored except README and `.gitkeep`. Layout: `results/hydro_sim/`, `results/rad_hydro_sim_verification/`, `results/hydro_sim_verification/`.
 - **docs/** — Documentation. Contains a **Git submodule** pointing to the **"Numerical problems"** LaTeX repo (shared with other projects). The submodule keeps its own history; project_3 only stores a reference. See **docs/README.md** for one-time setup (`git submodule add ...`), cloning with `--recurse-submodules`, and how to commit LaTeX changes. No separate branch in project_3 is needed for the .tex files.
 
 All verification is triggered from **rad_hydro_sim/verification/run_comparison.py** (set `MODE = RADIATION_ONLY` or `HYDRO_ONLY` in `main()`).
@@ -62,7 +62,7 @@ Run `make` from **inside** `project_3`. The Makefile sets `REPO_ROOT := $(abspat
 ## Outputs (results/)
 
 - **hydro_sim** and **rad_hydro_sim** (when using the shared `SimulationConfig` and `with_output_paths`) write figures to **results/hydro_sim/** (png/, gif/).
-- **Verification** (radiation-only and hydro-only) writes to **results/verification/** and **results/verification_hydro_shock/**.
+- **Verification** (radiation-only and hydro-only) writes to **results/rad_hydro_sim_verification/** and **results/hydro_sim_verification/**.
 - `get_results_dir()` is defined in `hydro_sim.problems.simulation_config` and used by verification configs so all outputs stay under `results/`.
 
 ---

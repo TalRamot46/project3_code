@@ -140,7 +140,7 @@ class SimulationConfig:
 SIMULATION_CONFIGS: Dict[str, SimulationConfig] = {
     # All outputs: slider + PNG at png_time_frac * t_end (default 0.5)
     "all_outputs": SimulationConfig(
-        N=1000,
+        N=200,
         CFL=1/3,
         sigma_visc=1.0,
         store_every=10,

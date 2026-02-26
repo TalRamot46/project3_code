@@ -79,9 +79,21 @@ def plot_radiation_comparison_single_time(
     handles.append(ht_ref)
     labels.append(ht_ref.get_label())
 
-    ax_t.set_ylabel(r"Temperature $T$ [Hev]", fontsize=11)
+    # Plot extra references (e.g. Supersonic solver)
+    if extra_ref_data:
+        for extra in extra_ref_data:
+            extra_k = _interpolate_to_time(extra, time)
+            ht_extra = add_curve(
+                ax_t, ax_e, extra, extra_k,
+                extra.color, extra.linestyle,
+                f"{extra.label}  t = {_format_time_legend(extra.times[extra_k])}",
+            )
+            handles.append(ht_extra)
+            labels.append(ht_extra.get_label())
+
+    ax_t.set_ylabel(r"Temperature $T$ [K]")
     ax_t.grid(True, alpha=0.35, linestyle="--")
-    ax_t.tick_params(axis="both", labelsize=10)
+    ax_t.tick_params(axis="both")
 
     # Clear x-axis tick overlap: limit number of ticks and use scientific notation
     for ax in axes:
@@ -90,17 +102,17 @@ def plot_radiation_comparison_single_time(
         sf.set_scientific(True)
         sf.set_powerlimits((-2, 2))
         ax.xaxis.set_major_formatter(sf)
-    ax_e.set_ylabel(r"$E_{\mathrm{rad}}$ [erg/cm³]", fontsize=11)
-    ax_e.set_xlabel(r"Position $x$ [cm]", fontsize=11)
+    ax_e.set_ylabel(r"$E_{\mathrm{rad}}$ [erg/cm³]")
+    ax_e.set_xlabel(r"Position $x$ [cm]")
     ax_e.grid(True, alpha=0.35, linestyle="--")
-    ax_e.tick_params(axis="both", labelsize=10)
+    ax_e.tick_params(axis="both")
     # E_rad axis: make exponent clear (e.g. "2×10⁹")
     ax_e.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
-    ax_e.yaxis.get_offset_text().set_fontsize(9)
+    ax_e.yaxis.get_offset_text().set_fontsize(10)
 
     if title is None:
         title = f"Radiation comparison at t ≈ {_format_time_legend(time)}"
-    fig.suptitle(title, fontsize=13, fontweight="medium", y=1.02)
+    fig.suptitle(title, fontsize=12, fontweight="medium", y=1.02)
     # Single legend above both panels, no overlap with data
     fig.legend(
         handles, labels,
@@ -108,7 +120,7 @@ def plot_radiation_comparison_single_time(
         bbox_to_anchor=(0.5, 0.98),
         ncol=min(3, len(handles)),
         frameon=True,
-        fontsize=9,
+        fontsize=10,
         columnspacing=1.2,
     )
     fig.tight_layout(rect=(0, 0, 1, 0.92))
@@ -172,14 +184,14 @@ def plot_radiation_comparison_slider(
         color=ref_data.color, linestyle="--", lw=2,
     )
 
-    ax_t.set_ylabel(r"$T$ [Hev]")
+    ax_t.set_ylabel(r"Temperature $T$ [K]")
     ax_t.legend(loc="best")
     ax_t.grid(True, alpha=0.3)
-    ax_e.set_ylabel(r"$E_{\mathrm{rad}}$")
-    ax_e.set_xlabel(r"$x$ [cm]")
+    ax_e.set_ylabel(r"$E_{\mathrm{rad}}$ [erg/cm³]")
+    ax_e.set_xlabel(r"Position $x$ [cm]")
     ax_e.grid(True, alpha=0.3)
 
-    title_text = fig.suptitle("", fontsize=12)
+    title_text = fig.suptitle("")
 
     def update(val):
         k = int(val)

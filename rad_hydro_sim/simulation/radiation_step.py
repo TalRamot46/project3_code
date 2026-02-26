@@ -21,10 +21,10 @@ def calculate_temperature_from_specific_energy(
      
 
 def calculate_beta_from_temperature_and_density(T: np.ndarray, rho: np.ndarray) -> np.ndarray:
-    return 4*a_Hev / (f * gamma) * T**(4-gamma) * rho**(mu - 1)
+    return 4*a_Kelvin / (f_Kelvin * gamma) * T**(4-gamma) * rho**(mu - 1)
 
 def calculate_sigma_from_temperature_and_density(T: np.ndarray, rho: np.ndarray) -> np.ndarray:
-    return 1.0 / (g * T**alpha * rho**(-lambda_ - 1))
+    return 1.0 / (g_Kelvin * T**alpha * rho**(-lambda_ - 1))
 
 def calculate_D_from_sigma(sigma: np.ndarray) -> np.ndarray:
     return c / (3 * sigma)
@@ -37,15 +37,15 @@ def calculate_abcd(sigma: np.ndarray, D: np.ndarray, A: np.ndarray, m_cells: np.
     """Returns the coefficients a, b, c, d for the implicit update of material energy and radiation energy density.
     a = [a1, a2, ..., aN], a_i^n = a[i-1] at time step n
     """
-    D_face_left = rho[:-2] * 2*D[:-2]*D[1:-1]/(D[:-2] + D[1:-1]) # Left face
-    D_face_right = rho[2:] * 2*D[1:-1]*D[2:]/(D[1:-1] + D[2:]) # Right face
+    D_face_left = rho[:-2] * (D[:-2] + D[1:-1]) / 2 # Left face
+    D_face_right = rho[2:] * (D[1:-1] + D[2:]) / 2 # Right face
     F = chi*c*sigma[1:-1]/(1 + A[1:-1])
     coeff = rho[1:-1] / (m_cells[1:-1]**2)
     a = -coeff * D_face_left
     c_coeff = -coeff * D_face_right
     # b = coeff * (D_face_right - D_face_left) + 1/dt + F # My version
     b = coeff * (D_face_right + D_face_left) + 1/dt + F # Corrected version with positive diffusion coefficients on the diagonal
-    UR_star = a_Hev * T_star[1:-1]**4
+    UR_star = a_Kelvin * T_star[1:-1]**4
     d = F * UR_star + (1/dt) * E_rad[1:-1]
 
     # check for nan values in the coefficients which would indicate a problem with the input parameters or the state    if np.any(np.isnan(a)):
@@ -135,8 +135,8 @@ def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydr
         new_e_material: Updated material specific energy in erg/g
         e_rad: Radiation energy density in erg/cm^3
     """
-    global alpha, gamma, mu, f, chi, lambda_, g
-    alpha, gamma, mu, f, chi, lambda_, g = rad_hydro_case._get_params()
+    global alpha, gamma, mu, f_Kelvin, chi, lambda_, g_Kelvin
+    alpha, gamma, mu, f_Kelvin, chi, lambda_, g_Kelvin = rad_hydro_case._get_params()
     e_star, rho, m_cells, E_rad, T_star = (
         state_star.e,
         state_star.rho,
@@ -146,7 +146,7 @@ def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydr
     )
 
     # calculating the opacity & specific energy from Rosen's model
-    T_star = calculate_temperature_from_specific_energy(e_star, rho, f, gamma, mu)
+    T_star = calculate_temperature_from_specific_energy(e_star, rho, f_Kelvin, gamma, mu)
     beta = calculate_beta_from_temperature_and_density(T_star, rho)
     sigma = calculate_sigma_from_temperature_and_density(T_star, rho)
     D = calculate_D_from_sigma(sigma)
@@ -156,22 +156,23 @@ def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydr
     a, b, c_coeff, d = calculate_abcd(sigma, D, A, m_cells, rho, E_rad, T_star, dt)
 
     t_drive = max(state_star.t, dt) # avoid t=0 for the power law drive
-    T_left = rad_hydro_case.T0 * t_drive**rad_hydro_case.tau
-    E_left = a_Hev * T_left**4
+    T_left = rad_hydro_case.T0_Kelvin * (t_drive/(10**-9))**rad_hydro_case.tau
+    E_left = a_Kelvin * T_left**4
     # print("t", state_star.t, "T_left", T_left, "E_left", E_left)
     d[0] -= a[0] * E_left
 
     # solving the tridiagonal system for radiation energy density
     new_E_rad = solve_tridiagonal(a, b, c_coeff, d)
-    new_E_rad[0] = E_left  # Left boundary condition: E_rad[0] = a_Hev * T_left^4 (consistent with the boundary condition for material energy)
+    new_E_rad[0] = E_left  # Left boundary condition: E_rad[0] = a_Kelvin * T_left^4 (consistent with the boundary condition for material energy)
     new_E_rad[-1] = 0 # Right boundary condition: E_rad[-1] = 0 (vacuum)
 
     # updating UR, T and material specific energy based on the new radiation energy density
-    UR_star = a_Hev * T_star**4   # length N (same as A and new_E_rad)
+    UR_star = a_Kelvin * T_star**4   # length N (same as A and new_E_rad)
     UR_star[0]  = E_left          # left boundary consistent
     UR_star[-1] = 1e-10             # right boundary vacuum
     new_UR = (A / (1 + A)) * new_E_rad + (1 / (1 + A)) * UR_star
+    new_Um = new_UR / gamma
 
-    new_T = (new_UR / a_Hev)**(1/4)  # calculating the temperature from the updated effective radiation energy density
-    new_e_material = f * new_T**gamma * rho**(-mu)  # Calculating the material specific energy from Rosen's model using the updated temperature and density
+    new_T = (new_UR / a_Kelvin)**(1/4)  # calculating the temperature from the updated effective radiation energy density
+    new_e_material = f_Kelvin * new_T**gamma * rho**(-mu)  # Calculating the material specific energy from Rosen's model using the updated temperature and density
     return new_e_material, new_T, new_E_rad

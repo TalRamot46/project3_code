@@ -22,12 +22,12 @@ class RadHydroCase(ABC):
     base class to ensure a consistent interface.
     """
     # Rosen's opacity parameters
-    g_HeV: float
+    g_Kelvin: float # defined such that e = g_Kelvin * T_Kelvin^alpha * rho^lambda_
     alpha: float
     lambda_: float
 
     # Rosen's specific energy parameters
-    f_HeV: float
+    f_Kelvin: float # defined such that e = f_Kelvin * T_Kelvin^gamma * mu^mu * rho^rho
     gamma: float
     mu: float
 
@@ -35,8 +35,8 @@ class RadHydroCase(ABC):
     chi: float
 
     # Boundary conditions
-    T0: float | Optional[float]
-    P0: float | Optional[float]
+    T0_Kelvin: float | Optional[float]
+    P0_Barye: float | Optional[float]
     tau: float
 
     # initial conditions
@@ -44,7 +44,7 @@ class RadHydroCase(ABC):
     p0: float | Optional[float]
     u0: float | Optional[float]
 
-    T_initial: float | Optional[float]
+    T_initial_Kelvin: float | Optional[float]
 
     # adiabatic index
     r: float # r = \gamma_adiabatic - 1
@@ -54,7 +54,7 @@ class RadHydroCase(ABC):
     # grid parameters
     x_min: float
     x_max: float
-    t_end: float 
+    t_sec_end: float 
 
     # for flags
     initial_condition: str # e.g. "pressure, velocity, density", 
@@ -70,5 +70,5 @@ class RadHydroCase(ABC):
         self,
     ) -> Tuple[float, float, float, float, float, float, float]:
         """Returns the parameters as a tuple for radiation step"""
-        return self.alpha, self.gamma, self.mu, self.f_HeV, self.chi, self.lambda_, self.g_HeV
+        return self.alpha, self.gamma, self.mu, self.f_Kelvin, self.chi, self.lambda_, self.g_Kelvin
     

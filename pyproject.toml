@@ -19,6 +19,7 @@ dev = [
 [project.scripts]
 run-hydro = "project_3.hydro_sim.run_hydro:main"
 run-rad-hydro = "project_3.rad_hydro_sim.run_rad_hydro:main"
+run-tests = "project_3.run_tests:main"
 
 # =============================================================================
 # Ruff configuration

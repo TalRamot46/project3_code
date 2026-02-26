@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, List, Optional, Tuple
 import numpy as np
 
 from project_3.rad_hydro_sim.verification.hydro_data import RadHydroData
+from project_3.rad_hydro_sim.simulation.radiation_step import KELVIN_PER_HEV
 
 if TYPE_CHECKING:
     from project_3.shussman_solvers.shock_solver.materials_shock import Material
@@ -99,10 +100,10 @@ def compute_subsonic_profiles_at_times(
     mat = _rad_hydro_case_to_material_sub(case)
     tau = float(case.tau) if case.tau is not None else 0.0  # constant T drive
     data = compute_profiles_for_report(
-        mat,
-        tau,
-        times_ns=times_sec,
+        mat = mat,
         T0_phys_HeV=T0_hev,
+        tau=tau,
+        times_ns=times_sec * 1e9,
     )
     n_times, n_xi = data["m_heat"].shape
     # Compute position x from integral dm/rho
@@ -250,7 +251,7 @@ def build_piecewise_reference(
 def run_shussman_piecewise_reference(
     case,
     times_sec: np.ndarray,
-    P0_Barye: float,
+    T0_Hev: float,
 ) -> Optional[RadHydroData]:
     """
     Build the piecewise Shussman reference (subsonic + shock) for comparison with rad_hydro.
@@ -268,13 +269,13 @@ def run_shussman_piecewise_reference(
         print(f"  Shussman solvers not available: {e}")
         return None
 
-    T0 = float(case.T0) 
+    T0_Hev = float(case.T0) / KELVIN_PER_HEV
     # 1) Subsonic profiles at same times
     print("Starting subsonic solving...")
     subsonic_data = compute_subsonic_profiles_at_times(
-        case,
-        times_sec,
-        T0,
+        case=case,
+        times_sec=times_sec,
+        T0_Hev=T0_Hev,
     )
     P_front = subsonic_data["P_heat"][-1,-1] # units = MBar
     _, wP2, wP3 = subsonic_data["Pw"]

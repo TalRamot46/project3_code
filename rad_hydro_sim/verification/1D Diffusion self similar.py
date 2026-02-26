@@ -1,45 +1,18 @@
 import os
+import sys
+from pathlib import Path
+
 import numpy as np
-import matplotlib
 import matplotlib.pyplot as plt
 
-# Project-wide plot style (standalone script: apply here)
-matplotlib.style.use("classic")
-matplotlib.rcParams.update({
-    "font.size": 18,
-    "font.family": "sans-serif",
-    "font.sans-serif": ["DejaVu Sans", "Arial", "Helvetica", "Liberation Sans", "sans-serif"],
-    "figure.facecolor": "white",
-    "axes.facecolor": "white",
-    "axes.labelsize": 18,
-    "axes.titlesize": 18,
-    "xtick.labelsize": 16,
-    "ytick.labelsize": 16,
-    "legend.fontsize": 16,
-    "figure.dpi": 100,
-    "savefig.dpi": 150,
-    "savefig.facecolor": "white",
-})
+# Use project-wide plot style (consistent fonts, units)
+_REPO_PARENT = Path(__file__).resolve().parent.parent.parent
+if str(_REPO_PARENT) not in sys.path:
+    sys.path.insert(0, str(_REPO_PARENT))
+from project_3.rad_hydro_sim.plotting import mpl_style  # noqa: F401 - apply project style
 import tqdm
-# -----------------------------
-# Parameters
-# -----------------------------
-# changing all simulation constants to cgs units.
-c = 3*10**10        # speed of light (cm/s)
-chi = 1000       # global multiplier χ  (new model)
-a_kelvin = 7.5646e-15    # radiation constant
-kind_of_D_face = "arithmetic"  # "harmonic", "arithmetic", "geometric"
-# self similarity model fudge factors
-f = 3.4 * 10**13          # fudge factor for sigma (new model) [erg/g]
-g = 1 / 7200      
-alpha = 1.5       # opacity exponent
-gamma = 1.6       # beta exponent
-lambda_param = 0.2
-mu = 0.14
-rho = 19.32      # initial density (g/cm^3)
-
 T_material_0_Kelvin = 300.0
-T_bath_kelvin = 1500000  # boundary temperature (K)
+T_bath_Kelvin = 1500000  # boundary temperature (K)
 eV_joule = 1.60218e-19  # J/eV
 erg_per_joule = 1.0e7   # erg/J
 eV = eV_joule * erg_per_joule  # erg 
@@ -50,16 +23,37 @@ Hev=1.0e2 * eV  # erg
 
 k_B_joule = 1.38065e-23  # J/K
 k_B = k_B_joule * erg_per_joule  # erg/K
-K_per_Hev = Hev / k_B  # in HeV
+KELVIN_PER_HEV = Hev / k_B  # in HeV
 
 # k_B = 1.3805e-16 erg/K
 # K_per_Hev = 1.1605e6 K/HeV
+a_kelvin = 7.5646e-15    # radiation constant
+a_hev = a_kelvin * (KELVIN_PER_HEV**4)  # radiation constant in HeV units
 
-a_hev = a_kelvin * (K_per_Hev**4)  # radiation constant in HeV units
+T_bath_hev = T_bath_Kelvin / KELVIN_PER_HEV 
+T_bath = T_bath_Kelvin
+T_material_0_hev = T_material_0_Kelvin / KELVIN_PER_HEV
 
-T_bath_hev = T_bath_kelvin / K_per_Hev 
-T_bath = T_bath_kelvin
-T_material_0_hev = T_material_0_Kelvin / K_per_Hev
+
+# -----------------------------
+# Parameters
+# -----------------------------
+# changing all simulation constants to cgs units.
+c = 3*10**10        # speed of light (cm/s)
+chi = 1000       # global multiplier χ  (new model)
+kind_of_D_face = "arithmetic"  # "harmonic", "arithmetic", "geometric"
+# self similarity model fudge factors (Kelvin-based Rosen coefficients)
+f_Kelvin = 3.4 * 10**13 / (KELVIN_PER_HEV**1.6 * 19.32**0.14)         # specific energy coefficient (legacy name, Kelvin-based)
+g_Kelvin = 1 / 7200 / (KELVIN_PER_HEV**1.6 * 19.32**0.14)              # opacity coefficient (legacy name, Kelvin-based)
+
+alpha = 1.5       # opacity exponent
+gamma = 1.6       # beta exponent
+lambda_param = 0.2
+mu = 0.14
+rho = 19.32      # initial density (g/cm^3)
+
+# Right boundary: T_right_Kelvin=0 -> vacuum (E_right=0); T_right_Kelvin>0 -> cold sink
+T_right_Kelvin = 300.0  # default: 300 K cold sink; set 0 for vacuum (match Rad-Hydro)
 
 # -----------------------------
 # Grid and time step
@@ -115,7 +109,7 @@ HEV_NS = "hev|ns"
 simulation_unit_system = CGS  # CGS or HEV_NS
 if simulation_unit_system == CGS:
     T_material_0 = T_material_0_Kelvin
-    T_bath = T_bath_kelvin
+    T_bath = T_bath_Kelvin
     a = a_kelvin
     dt = dt_sec
     t_final = t_final_sec
@@ -134,20 +128,19 @@ elif simulation_unit_system == HEV_NS:
 def sigma_of_T(T): 
     """Opacity σ(T). Placeholder: 1/σ(T) = g * T^α * ρ^(-λ-1)."""
     if simulation_unit_system == CGS:
-        T_Hev = T / K_per_Hev  # convert to HeV for sigma_of_T
-        return 1.0 / (g * T_Hev ** alpha * rho**(-lambda_param - 1))
+        return 1.0 / (g_Kelvin * T ** alpha * rho**(-lambda_param - 1))
     elif simulation_unit_system == HEV_NS:
-        return 1.0 / (g * T ** alpha * rho**(-lambda_param - 1))
+        return 1.0 / (g_Kelvin * T ** alpha * rho**(-lambda_param - 1))
 
 
 def beta_of_T(T): 
     """β(T). Placeholder used in your code."""
     if simulation_unit_system == CGS:
-        Cv_m = f * gamma * T ** (gamma - 1) * rho ** (-mu + 1)  # material specific heat
+        Cv_m = f_Kelvin * gamma * T ** (gamma - 1) * rho ** (-mu + 1)  # material specific heat
         Cv_R = 4.0 * a * T ** 3  # radiation specific heat
-        return Cv_R/Cv_m * K_per_Hev ** gamma
+        return Cv_R/Cv_m
     elif simulation_unit_system == HEV_NS:
-        return ((4.0 * a * rho ** (mu - 1)) / (f * gamma)) * T ** (4.0 - gamma)
+        return ((4.0 * a * rho ** (mu - 1)) / (f_Kelvin * gamma)) * T ** (4.0 - gamma)
 
 def D_of_T(T):
     """Diffusion coefficient D(T) = c / (3 σ(T))."""
@@ -158,11 +151,8 @@ def D_of_T(T):
 def U_m_of_T(UR):
     """Material internal energy U_m(T). Placeholder: U_m(T) = f*T^gamma*ρ^(-mu+1)."""
     if simulation_unit_system == CGS:
-        T_Hev = (UR / a) ** 0.25 / K_per_Hev
-        return f * T_Hev ** gamma * rho ** (-mu + 1)
-    elif simulation_unit_system == HEV_NS:
-        T_Hev = (UR / a) ** 0.25
-        return f * T_Hev ** gamma * rho ** (-mu + 1)
+        T = (UR / a) ** 0.25
+        return f_Kelvin * T ** gamma * rho ** (-mu + 1)
 
 
 # -----------------------------
@@ -186,15 +176,15 @@ def implicit_step_self_similar_model(E, UR, *, tau=0.0, t=0.0, dt_local=None):
     n_int = N - 2  # solve for i=1..N-2
 
     # Boundary conditions
-    
+    # E_right: vacuum (0) when T_right_Kelvin=0; cold sink otherwise (match Rad-Hydro for verification)
     if simulation_unit_system == CGS:
         t_ns = t * 1e9  # convert to ns for BC calculation
         E_left = a * (T_bath * (t_ns**tau)) ** 4
-        E_right = a * (300) ** 4
+        E_right = 0.0 if T_right_Kelvin <= 0 else a * (T_right_Kelvin ** 4)
 
     elif simulation_unit_system == HEV_NS:
         E_left = a * (T_bath * (t**tau)) ** 4
-        E_right = a * (300 / K_per_Hev) ** 4
+        E_right = 0.0 if T_right_Kelvin <= 0 else a * (T_right_Kelvin / KELVIN_PER_HEV) ** 4
 
     # Build D_i^n, beta_i^n, sigma_i^n from UR^n -> T^n
     Tn = (UR / a) ** 0.25
@@ -311,7 +301,7 @@ def run_time_loop(E, UR, tau, times_to_store, *, dtfac=0.05, dtmin=5e-15):
         if store_idx < len(times_to_store) and abs(t_next - times_to_store[store_idx]) < 0.5 * dt_local:
             if simulation_unit_system == CGS:
                 stored_Um.append(np.array(Um).copy())
-                stored_T.append(np.array((T / K_per_Hev)).copy())
+                stored_T.append(np.array(T).copy())
                 stored_t.append(t_next * 1e9)  # ns
             else:
                 stored_Um.append(np.array(Um).copy())
@@ -577,7 +567,7 @@ def plot_energies(stored_t, total_energies, tau):
     plt.loglog(stored_t, C_energy * np.array(stored_t) ** p_energy, label=f"Fit: t^{p_energy:.3f}")
     plt.loglog(stored_t, [theoretical_total_energy(ti, rho, T_bath_hev, tau) for ti in stored_t], label="Theoretical", linestyle="--")
     plt.xlabel("Time (ns)")
-    plt.ylabel("Total Energy (erg/cm^2)")
+    plt.ylabel("Total Energy (hJ/mm²)")
     plt.title(f"Total Energy vs Time (tau={tau}) (log-log scale)")
     plt.grid(True)
     plt.legend()
@@ -736,7 +726,7 @@ def data_for_comparison():
 
 def compare_with_linear_results():
     # changing global parameters for comparison
-    global tau, alpha, lambda_param, g, f, mu, gamma, L, dt, t_final, Nz, z, dz, T_bath_kelvin, T_bath, chi,\
+    global tau, alpha, lambda_param, g_Kelvin, f_Kelvin, mu, gamma, L, dt, t_final, Nz, z, dz, T_bath_Kelvin, T_bath, chi,\
             T_material_0, eps, sigma, show_plots, Nt, z, dz
     show_plots = False
     x_vals, E_data, U_data = data_for_comparison()
@@ -745,8 +735,8 @@ def compare_with_linear_results():
     tau = 0.0
     alpha = 0
     lambda_param = -1
-    g = 1
-    f = a_hev # a_hev = a_kelvin / (K_per_Hev**4)
+    g_Kelvin = 1
+    f_Kelvin = a_hev # a_hev = a_kelvin / (K_per_Hev**4)
     mu = 1
     gamma = 4
 

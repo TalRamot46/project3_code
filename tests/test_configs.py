@@ -101,6 +101,6 @@ def test_rad_hydro_presets_valid():
         assert isinstance(config, SimulationConfig), f"Bad config in rad preset {name}"
         assert hasattr(case, "x_min")
         assert hasattr(case, "x_max")
-        assert hasattr(case, "t_end")
+        assert hasattr(case, "t_sec_end")
         assert case.x_max > case.x_min
-        assert case.t_end > 0
+        assert case.t_sec_end > 0

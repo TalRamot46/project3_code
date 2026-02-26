@@ -80,25 +80,25 @@ def plot_riemann_results(
     # Density
     ax_rho.plot(x_cells, exact["rho"], linewidth=2, label="Exact")
     ax_rho.plot(x_cells, numerical["rho"], linestyle="None", marker="+", label="Numerical")
-    _style_axis(ax_rho, r"$\rho$", x_min, x_max)
+    _style_axis(ax_rho, r"$\rho$ [g/cm³]", x_min, x_max)
     ax_rho.legend()
     
     # Pressure
     ax_p.plot(x_cells, exact["p"], linewidth=2)
     ax_p.plot(x_cells, numerical["p"], linestyle="None", marker="+")
-    _style_axis(ax_p, r"$p$", x_min, x_max)
+    _style_axis(ax_p, r"$p$ [MBar]", x_min, x_max)
     
     # Velocity
     ax_u.plot(x_cells, exact["u"], linewidth=2)
     ax_u.plot(x_cells, numerical["u"], linestyle="None", marker="+")
-    _style_axis(ax_u, r"$u$", x_min, x_max)
-    ax_u.set_xlabel(r"$x$")
+    _style_axis(ax_u, r"$u$ [km/s]", x_min, x_max)
+    ax_u.set_xlabel(r"Position $x$ [cm]")
     
     # Energy
     ax_e.plot(x_cells, exact["e"], linewidth=2)
     ax_e.plot(x_cells, numerical["e"], linestyle="None", marker="+")
-    _style_axis(ax_e, r"$e$", x_min, x_max)
-    ax_e.set_xlabel(r"$x$")
+    _style_axis(ax_e, r"$e$ [hJ/g]", x_min, x_max)
+    ax_e.set_xlabel(r"Position $x$ [cm]")
     
     # Title
     title_extra = f" — {meta['title_extra']}" if meta.get('title_extra') else ""
@@ -109,7 +109,7 @@ def plot_riemann_results(
     fig.tight_layout()
     
     if savepath:
-        fig.savefig(savepath, dpi=200)
+        fig.savefig(savepath, dpi=200, facecolor='white', edgecolor='none')
         print(f"Saved figure to {savepath}")
     
     if show:
@@ -149,17 +149,17 @@ def plot_shock_results(
     m_cells = x_cells * case.rho0
 
     axes[0].plot(x_cells, state.rho, lw=2)
-    _style_axis(axes[0], r"$\rho$")
+    _style_axis(axes[0], r"$\rho$ [g/cm³]")
     
     axes[1].plot(x_cells, state.p, lw=2)
-    _style_axis(axes[1], r"$p$")
+    _style_axis(axes[1], r"$p$ [MBar]")
     
     axes[2].plot(x_cells, u_cells, lw=2)
-    _style_axis(axes[2], r"$u$")
+    _style_axis(axes[2], r"$u$ [km/s]")
     
     axes[3].plot(x_cells, state.e, lw=2)
-    _style_axis(axes[3], r"$e$")
-    axes[3].set_xlabel(r"$x$")
+    _style_axis(axes[3], r"$e$ [hJ/g]")
+    axes[3].set_xlabel(r"Position $x$ [cm]")
     
     # Title with case info
     title = case.title if hasattr(case, 'title') else "Driven Shock"
@@ -167,15 +167,14 @@ def plot_shock_results(
         fig.suptitle(
             f"{title}\n"
             f"$p(0,t)=P_0 t^{{\\tau}},\\; P_0={case.P0},\\; \\tau={case.tau},\\; t={state.t:.3e}$",
-            fontsize=12
         )
     else:
-        fig.suptitle(f"{title}, t={state.t:.3e}", fontsize=12)
+        fig.suptitle(f"{title}, t={state.t:.3e}")
     
     fig.tight_layout(rect=[0, 0.03, 1, 0.95])
     
     if savepath:
-        fig.savefig(savepath, dpi=200)
+        fig.savefig(savepath, dpi=200, facecolor='white', edgecolor='none')
         print(f"Saved figure to {savepath}")
     
     if show:
@@ -229,25 +228,24 @@ def plot_sedov_results(
         ax_e.plot(x_cells, exact["e"], 'r--', lw=1.5)
         ax_rho.legend()
     
-    _style_axis(ax_rho, r"$\rho$")
-    _style_axis(ax_p, r"$p$")
-    _style_axis(ax_u, r"$u$")
-    _style_axis(ax_e, r"$e$")
+    _style_axis(ax_rho, r"$\rho$ [g/cm³]")
+    _style_axis(ax_p, r"$p$ [MBar]")
+    _style_axis(ax_u, r"$u$ [km/s]")
+    _style_axis(ax_e, r"$e$ [hJ/g]")
     
-    ax_u.set_xlabel(r"$r$")
-    ax_e.set_xlabel(r"$r$")
+    ax_u.set_xlabel(r"Radius $r$ [cm]")
+    ax_e.set_xlabel(r"Radius $r$ [cm]")
     
     # Title
     title = case.title if hasattr(case, 'title') else "Sedov Explosion"
     fig.suptitle(
         f"{title}\n"
         f"$E_0={case.E0},\\; \\rho_0={case.rho0},\\; t={state.t:.3e}$",
-        fontsize=12
     )
     fig.tight_layout()
     
     if savepath:
-        fig.savefig(savepath, dpi=200)
+        fig.savefig(savepath, dpi=200, facecolor='white', edgecolor='none')
         print(f"Saved figure to {savepath}")
     
     if show:
@@ -289,16 +287,16 @@ def plot_history_slider(
     lines.append(axes[2].plot(history.m[k0], history.u[k0], lw=2)[0])
     lines.append(axes[3].plot(history.m[k0], history.e[k0], lw=2)[0])
     
-    axes[0].set_ylabel(r"$\rho$")
-    axes[1].set_ylabel(r"$p$")
-    axes[2].set_ylabel(r"$u$")
-    axes[3].set_ylabel(r"$e$")
-    axes[3].set_xlabel(r"$x$")
+    axes[0].set_ylabel(r"$\rho$ [g/cm³]")
+    axes[1].set_ylabel(r"$p$ [MBar]")
+    axes[2].set_ylabel(r"$u$ [km/s]")
+    axes[3].set_ylabel(r"$e$ [hJ/g]")
+    axes[3].set_xlabel(r"Position $x$ [cm]")
     
     for ax in axes:
         ax.grid(True, alpha=0.3)
     
-    title = fig.suptitle("", fontsize=12)
+    title = fig.suptitle("")
     
     def set_title(k):
         t = history.t[k]
@@ -336,7 +334,7 @@ def plot_history_slider(
     fig.tight_layout(rect=[0, 0.08, 1, 0.95])
     
     if savepath:
-        fig.savefig(savepath, dpi=200)
+        fig.savefig(savepath, dpi=200, facecolor='white', edgecolor='none')
         print(f"Saved slider figure (static) to {savepath}")
     
     if show:
@@ -377,16 +375,16 @@ def save_history_gif(
     lines.append(axes[2].plot(history.m[k0], history.u[k0], lw=2)[0])
     lines.append(axes[3].plot(history.m[k0], history.e[k0], lw=2)[0])
     
-    axes[0].set_ylabel(r"$\rho$")
-    axes[1].set_ylabel(r"$p$")
-    axes[2].set_ylabel(r"$u$")
-    axes[3].set_ylabel(r"$e$")
-    axes[3].set_xlabel(r"$x$")
+    axes[0].set_ylabel(r"$\rho$ [g/cm³]")
+    axes[1].set_ylabel(r"$p$ [MBar]")
+    axes[2].set_ylabel(r"$u$ [km/s]")
+    axes[3].set_ylabel(r"$e$ [hJ/g]")
+    axes[3].set_xlabel(r"Position $x$ [cm]")
     
     for ax in axes:
         ax.grid(True, alpha=0.3)
     
-    title = fig.suptitle("", fontsize=12)
+    title = fig.suptitle("")
     frame_ids = np.arange(0, len(history.t), stride)
     
     def init():

@@ -12,7 +12,7 @@ from project_3.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 from project_3.rad_hydro_sim.plotting.RadHydroHistory import RadHydroHistory
 from project_3.rad_hydro_sim.simulation.radiation_step import (
     calculate_temperature_from_specific_energy,
-    a_Hev
+    a_Kelvin
 )
 from project_3.hydro_sim.problems.simulation_config import SimulationConfig
 
@@ -32,17 +32,17 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> tuple:
 
     if case.initial_condition == "temperature, density":
         # If initial condition is given in terms of temperature, convert to specific energy
-        T = np.full_like(x_cells, case.T_initial)
-        e = case.f_HeV * T**case.gamma * case.rho0**(-case.mu)
+        T = np.full_like(x_cells, case.T_initial_Kelvin)
+        e = case.f_Kelvin * T**case.gamma * case.rho0**(-case.mu)
         rho = np.full_like(x_cells, case.rho0)
         p = (case.r + 1) * rho * e  # Ideal gas EOS
-        E_rad=a_Hev * T**4
+        E_rad=a_Kelvin * T**4
     elif case.initial_condition == "pressure, velocity, density":
         rho = np.full_like(x_cells, case.rho0)
         p = np.full_like(x_cells, case.p0)
         u = np.full_like(x_nodes, case.u0)
         e = internal_energy_from_prho(p, rho, case.r+1)
-        T = calculate_temperature_from_specific_energy(e, rho, case.f_HeV, case.gamma, case.mu)  # Initial temperature from Rosen's model
+        T = calculate_temperature_from_specific_energy(e, rho, case.f_Kelvin, case.gamma, case.mu)  # Initial temperature from Rosen's model
         E_rad = np.zeros_like(x_cells)  # Assuming no initial radiation energy
         
     q = np.zeros_like(x_cells)
@@ -67,7 +67,7 @@ def simulate_rad_hydro(
     state = initialize_problem(rad_hydro_case, simulation_config)
     state.a = compute_acceleration_nodes(state.x, state.p, state.q, state.m_cells, rad_hydro_case.geom, p_left=state.p[0], p_right=state.p[-1])
     
-    t_end = rad_hydro_case.t_end
+    t_end = rad_hydro_case.t_sec_end
     
     # ---- history buffers ----
     times = []

@@ -29,7 +29,7 @@ def run_simulation(
     The simulation type is automatically detected from the case class.
     """    
     print(f"Running simulation: {case.title}")
-    print(f"  r={case.r}, x∈[{case.x_min}, {case.x_max}], t_end={case.t_end}")
+    print(f"  r={case.r}, x∈[{case.x_min}, {case.x_max}], t_end={case.t_sec_end}")
     
     # Run simulation
     x_cells, state, meta, history = simulate_rad_hydro(
@@ -95,6 +95,7 @@ def main():
     # Run list_presets() from presets_utils for a grouped list.
     from project_3.rad_hydro_sim.problems.presets_config import (
         PRESET_CONSTANT_PRESSURE,
+        PRESET_FIG_8,
         PRESET_FIG_10,
         PRESET_CONSTANT_T_RADIATION
     )

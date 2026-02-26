@@ -62,9 +62,7 @@ def diffusion_output_to_radiation_data(
 
 def supersonic_output_to_radiation_data(
     profiles_dict: dict[str, Any],
-    t_end_sec: float,
-    T0_hev: float,
-    *,
+    times_sec: np.ndarray,
     label: str = "Supersonic solver (reference)",
     color: str = "green",
     linestyle: str = ":",
@@ -74,20 +72,18 @@ def supersonic_output_to_radiation_data(
 
     The solver uses dimensionless time in (0, 1]; we map to physical time as
     times_sec = profiles_dict["times"] * t_end_sec.
-    T_heat from the solver is 100*T0*times^tau*T_tilde; we convert to Hev as T_hev = T_heat/100
-    when T0 was passed in Hev. E_rad = a_Hev * T_hev^4 [erg/cm^3].
+    T_heat from the solver is 100*T0*times^tau*T_tilde; we convert to Kelvin as T_Kelvin = T_heat/100
+    when T0 was passed in Hev. E_rad = a_Kelvin * T_Kelvin^4 [erg/cm^3].
     """
-    from project_3.rad_hydro_sim.simulation.radiation_step import a_Hev
+    from project_3.rad_hydro_sim.simulation.radiation_step import a_Kelvin, KELVIN_PER_HEV
 
-    times_dim = np.asarray(profiles_dict["times"], dtype=float).ravel()
-    times_sec = times_dim * t_end_sec
-    # T_heat = 100 * T0 * times^tau * T_tilde; with T0 in Hev we want T_hev = T_heat/100
-    T_heat = profiles_dict["T_heat"]  # (n_times, n_xi)
-    T_list = [T_heat[i, :].copy() for i in range(T_heat.shape[0])]
-    E_rad_list = [a_Hev*T_heat[i,:].copy()**4 for i in range(T_heat.shape[0])]
-    x_list = [profiles_dict["x_heat"][i, :].copy() for i in range(T_heat.shape[0])]
+    # T_heat from solver is in HeV; convert to Kelvin: T_K = T_HeV * KELVIN_PER_HEV
+    T_heat_Kelvin = profiles_dict["T_heat"] * KELVIN_PER_HEV  # (n_times, n_xi)
+    T_list = [T_heat_Kelvin[i, :].copy() for i in range(T_heat_Kelvin.shape[0])]
+    E_rad_list = [a_Kelvin*T_heat_Kelvin[i,:].copy()**4 for i in range(T_heat_Kelvin.shape[0])]
+    x_list = [profiles_dict["x_heat"][i, :].copy() for i in range(T_heat_Kelvin.shape[0])]
     return RadiationData(
-        times=times_sec,
+        times=np.asarray(times_sec, dtype=float),
         x=x_list,
         T=T_list,
         E_rad=E_rad_list,

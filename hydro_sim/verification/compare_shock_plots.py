@@ -194,6 +194,7 @@ def plot_comparison_single_time(
     savepath: str | None = None,
     show: bool = True,
     title: str | None = None,
+    shock_data: HydroDataLike | None = None,
 ):
     """
     Plot 4-panel comparison (rho, P, u, e) at a single time.
@@ -206,10 +207,12 @@ def plot_comparison_single_time(
         savepath: Optional path to save figure
         show: Whether to display the figure
         title: Optional figure title
+        shock_data: Optional third dataset (e.g. shock solver P0*t^tau)
     """
     # Find closest time indices
     sim_idx = interpolate_to_time(sim_data, time)
     ref_idx = interpolate_to_time(ref_data, time)
+    shock_idx = interpolate_to_time(shock_data, time) if shock_data is not None else None
     
     actual_sim_time = sim_data.times[sim_idx]
     actual_ref_time = ref_data.times[ref_idx]
@@ -233,6 +236,10 @@ def plot_comparison_single_time(
     ax_u, ax_e = axes[1, 0], axes[1, 1]
     ax_T, ax_E_rad = axes[2, 0], axes[2, 1]
     
+    x_shock = shock_data.m[shock_idx] if shock_data and xaxis == "m" else (shock_data.x[shock_idx] if shock_data else None)
+    if shock_data is not None and x_shock is not None:
+        actual_shock_time = shock_data.times[shock_idx]
+
     # Plot density
     ax_rho.plot(x_sim, sim_data.rho[sim_idx], 
                 color=sim_data.color, linestyle=sim_data.linestyle, 
@@ -240,6 +247,10 @@ def plot_comparison_single_time(
     ax_rho.plot(x_ref, ref_data.rho[ref_idx], 
                 color=ref_data.color, linestyle=ref_data.linestyle, 
                 lw=2, label=f"{ref_data.label} (t={actual_ref_time:.2e})")
+    if shock_data is not None:
+        ax_rho.plot(x_shock, shock_data.rho[shock_idx], 
+                    color=shock_data.color, linestyle=shock_data.linestyle, 
+                    lw=2, label=f"{shock_data.label} (t={actual_shock_time:.2e})")
     ax_rho.set_ylabel(r"$\rho$ [g/cm³]")
     ax_rho.legend(loc="best", fontsize=9)
     ax_rho.grid(True, alpha=0.3)
@@ -249,6 +260,9 @@ def plot_comparison_single_time(
               color=sim_data.color, linestyle=sim_data.linestyle, lw=2)
     ax_p.plot(x_ref, ref_data.p[ref_idx], 
               color=ref_data.color, linestyle=ref_data.linestyle, lw=2)
+    if shock_data is not None:
+        ax_p.plot(x_shock, shock_data.p[shock_idx], 
+                  color=shock_data.color, linestyle=shock_data.linestyle, lw=2)
     ax_p.set_ylabel(r"$P$ [MBar]")
     ax_p.grid(True, alpha=0.3)
     
@@ -257,6 +271,9 @@ def plot_comparison_single_time(
               color=sim_data.color, linestyle=sim_data.linestyle, lw=2)
     ax_u.plot(x_ref, ref_data.u[ref_idx], 
               color=ref_data.color, linestyle=ref_data.linestyle, lw=2)
+    if shock_data is not None:
+        ax_u.plot(x_shock, shock_data.u[shock_idx], 
+                  color=shock_data.color, linestyle=shock_data.linestyle, lw=2)
     ax_u.set_ylabel(r"$u$ [km/s]")
     ax_u.set_xlabel(xlabel)
     ax_u.grid(True, alpha=0.3)
@@ -266,6 +283,9 @@ def plot_comparison_single_time(
               color=sim_data.color, linestyle=sim_data.linestyle, lw=2)
     ax_e.plot(x_ref, ref_data.e[ref_idx], 
               color=ref_data.color, linestyle=ref_data.linestyle, lw=2)
+    if shock_data is not None:
+        ax_e.plot(x_shock, shock_data.e[shock_idx], 
+                  color=shock_data.color, linestyle=shock_data.linestyle, lw=2)
     ax_e.set_ylabel(r"$e$ [hJ/g]")
     ax_e.set_xlabel(xlabel)
     ax_e.grid(True, alpha=0.3)
@@ -276,7 +296,7 @@ def plot_comparison_single_time(
                   color=sim_data.color, linestyle=sim_data.linestyle, lw=2)
         ax_T.plot(x_ref, ref_data.T[ref_idx], 
                   color=ref_data.color, linestyle=ref_data.linestyle, lw=2)
-    ax_T.set_ylabel(r"$T$ [Hev]")
+    ax_T.set_ylabel(r"$T$ [HeV]")
     ax_T.set_xlabel(xlabel)
     ax_T.grid(True, alpha=0.3)
 
@@ -286,18 +306,18 @@ def plot_comparison_single_time(
                   color=sim_data.color, linestyle=sim_data.linestyle, lw=2)
         ax_E_rad.plot(x_ref, ref_data.E_rad[ref_idx], 
                   color=ref_data.color, linestyle=ref_data.linestyle, lw=2)
-    ax_E_rad.set_ylabel(r"$E_{rad}$ [erg/cm³]")
+    ax_E_rad.set_ylabel(r"$E_{\mathrm{rad}}$ [erg/cm³]")
     ax_E_rad.set_xlabel(xlabel)
     ax_E_rad.grid(True, alpha=0.3)
     # Title
     if title is None:
         title = f"Shock Profile Comparison at t ≈ {time:.2e} s"
-    fig.suptitle(title, fontsize=14)
+    fig.suptitle(title, fontsize=12, fontweight="medium")
     fig.tight_layout()
     
     if savepath:
         Path(savepath).parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(savepath, dpi=200, bbox_inches='tight')
+        fig.savefig(savepath, dpi=200, bbox_inches='tight', facecolor='white', edgecolor='none')
     
     if show:
         plt.show()
@@ -317,6 +337,7 @@ def plot_comparison_slider(
     xaxis: str = "m",
     show: bool = True,
     title: str | None = None,
+    shock_data: HydroDataLike | None = None,
 ):
     """
     Interactive 4-panel comparison with time slider.
@@ -327,6 +348,7 @@ def plot_comparison_slider(
         xaxis: "m" for mass coordinate, "x" for position
         show: Whether to display the figure
         title: Optional figure title
+        shock_data: Optional third dataset (e.g. shock solver P0*t^τ)
     """
     # Use simulation times as reference
     all_times = sim_data.times
@@ -336,7 +358,7 @@ def plot_comparison_slider(
     ax_rho, ax_p = axes[0, 0], axes[0, 1]
     ax_u, ax_e = axes[1, 0], axes[1, 1]
     ax_T, ax_E_rad = axes[2, 0], axes[2, 1]
-    xlabel = r"Mass coordinate $m$" if xaxis == "m" else r"Position $x$"
+    xlabel = r"Mass coordinate $m$ [g/cm²]" if xaxis == "m" else r"Position $x$ [cm]"
     
     # Initial plot (k=0)
     k = 0
@@ -352,19 +374,37 @@ def plot_comparison_slider(
     
     # Create line objects
     lines = {}
+    shock_k = interpolate_to_time(shock_data, all_times[k]) if shock_data is not None else None
+    x_shock = shock_data.m[shock_k] if shock_data and xaxis == "m" else (shock_data.x[shock_k] if shock_data else None)
+
     lines['sim_rho'], = ax_rho.plot(x_sim, sim_data.rho[k], 
                                      color=sim_data.color, lw=2, label=sim_data.label)
     lines['ref_rho'], = ax_rho.plot(x_ref, ref_data.rho[ref_k], 
                                      color=ref_data.color, linestyle='--', lw=2, label=ref_data.label)
-    
+    if shock_data is not None:
+        lines['shock_rho'], = ax_rho.plot(x_shock, shock_data.rho[shock_k], 
+                                          color=shock_data.color, linestyle=shock_data.linestyle, lw=2, label=shock_data.label)
+    else:
+        lines['shock_rho'], = ax_rho.plot([], [], color="green", linestyle="-.", lw=2)
+
     lines['sim_p'], = ax_p.plot(x_sim, sim_data.p[k], color=sim_data.color, lw=2)
     lines['ref_p'], = ax_p.plot(x_ref, ref_data.p[ref_k], color=ref_data.color, linestyle='--', lw=2)
-    
+    if shock_data is not None:
+        lines['shock_p'], = ax_p.plot(x_shock, shock_data.p[shock_k], color=shock_data.color, linestyle=shock_data.linestyle, lw=2)
+    else:
+        lines['shock_p'], = ax_p.plot([], [], color="green", linestyle="-.")
     lines['sim_u'], = ax_u.plot(x_sim, sim_data.u[k], color=sim_data.color, lw=2)
     lines['ref_u'], = ax_u.plot(x_ref, ref_data.u[ref_k], color=ref_data.color, linestyle='--', lw=2)
-    
+    if shock_data is not None:
+        lines['shock_u'], = ax_u.plot(x_shock, shock_data.u[shock_k], color=shock_data.color, linestyle=shock_data.linestyle, lw=2)
+    else:
+        lines['shock_u'], = ax_u.plot([], [], color="green", linestyle="-.")
     lines['sim_e'], = ax_e.plot(x_sim, sim_data.e[k], color=sim_data.color, lw=2)
     lines['ref_e'], = ax_e.plot(x_ref, ref_data.e[ref_k], color=ref_data.color, linestyle='--', lw=2)
+    if shock_data is not None:
+        lines['shock_e'], = ax_e.plot(x_shock, shock_data.e[shock_k], color=shock_data.color, linestyle=shock_data.linestyle, lw=2)
+    else:
+        lines['shock_e'], = ax_e.plot([], [], color="green", linestyle="-.")
 
     # add temperature plots
 
@@ -384,7 +424,7 @@ def plot_comparison_slider(
         lines['sim_E_rad'], = ax_E_rad.plot([], [], color=sim_data.color, lw=2)
         lines['ref_E_rad'], = ax_E_rad.plot([], [], color=ref_data.color, linestyle='--', lw=2)
     
-    # Labels with units: rho[g/cc], P[MBar], u[km/s], e[hJ/g], T[Hev], E_rad[erg/cm³]
+    # Labels with units: rho[g/cm³], P[MBar], u[km/s], e[hJ/g], T[HeV], E_rad[erg/cm³]
     ax_rho.set_ylabel(r"$\rho$ [g/cm³]")
     ax_rho.legend(loc="best")
     ax_rho.grid(True, alpha=0.3)
@@ -400,14 +440,14 @@ def plot_comparison_slider(
     ax_e.set_xlabel(xlabel)
     ax_e.grid(True, alpha=0.3)
     
-    ax_T.set_ylabel(r"$T$ [Hev]")
+    ax_T.set_ylabel(r"$T$ [HeV]")
     ax_T.grid(True, alpha=0.3)
     
-    ax_E_rad.set_ylabel(r"$E_{rad}$ [erg/cm³]")
+    ax_E_rad.set_ylabel(r"$E_{\mathrm{rad}}$ [erg/cm³]")
     ax_E_rad.set_xlabel(xlabel)
     ax_E_rad.grid(True, alpha=0.3)
     
-    title_text = fig.suptitle("", fontsize=12)
+    title_text = fig.suptitle("")
     
     def set_title(k, ref_k):
         sim_t = sim_data.times[k]
@@ -424,23 +464,31 @@ def plot_comparison_slider(
     def update(val):
         k = int(slider.val)
         ref_k = interpolate_to_time(ref_data, all_times[k])
-        print("all_times[k]: ", all_times[k])
-        print("ref_k: ", ref_k)
+        shock_k = interpolate_to_time(shock_data, all_times[k]) if shock_data is not None else None
         
         x_sim = sim_data.m[k] if xaxis == "m" else sim_data.x[k]
         x_ref = ref_data.m[ref_k] if xaxis == "m" else ref_data.x[ref_k]
+        x_shock = shock_data.m[shock_k] if shock_data and xaxis == "m" else (shock_data.x[shock_k] if shock_data else np.array([]))
         
         lines['sim_rho'].set_data(x_sim, sim_data.rho[k])
         lines['ref_rho'].set_data(x_ref, ref_data.rho[ref_k])
+        if shock_data is not None:
+            lines['shock_rho'].set_data(x_shock, shock_data.rho[shock_k])
         
         lines['sim_p'].set_data(x_sim, sim_data.p[k])
         lines['ref_p'].set_data(x_ref, ref_data.p[ref_k])
+        if shock_data is not None:
+            lines['shock_p'].set_data(x_shock, shock_data.p[shock_k])
         
         lines['sim_u'].set_data(x_sim, sim_data.u[k])
         lines['ref_u'].set_data(x_ref, ref_data.u[ref_k])
+        if shock_data is not None:
+            lines['shock_u'].set_data(x_shock, shock_data.u[shock_k])
         
         lines['sim_e'].set_data(x_sim, sim_data.e[k])
         lines['ref_e'].set_data(x_ref, ref_data.e[ref_k])
+        if shock_data is not None:
+            lines['shock_e'].set_data(x_shock, shock_data.e[shock_k])
         
         if hasattr(sim_data, 'T') and sim_data.T and hasattr(ref_data, 'T') and ref_data.T:
             lines['sim_T'].set_data(x_sim, sim_data.T[k])
@@ -499,7 +547,7 @@ def plot_comparison_overlay(
     ax_rho, ax_p = axes[0, 0], axes[0, 1]
     ax_u, ax_e = axes[1, 0], axes[1, 1]
     
-    xlabel = r"Mass coordinate $m$" if xaxis == "m" else r"Position $x$"
+    xlabel = r"Mass coordinate $m$ [g/cm²]" if xaxis == "m" else r"Position $x$ [cm]"
     
     # Color gradients
     cmap_sim = plt.get_cmap("Blues")
@@ -535,17 +583,17 @@ def plot_comparison_overlay(
         ax_e.plot(x_ref, ref_data.e[ref_k], color=colors_ref[i], lw=1.5, linestyle='--')
     
     # Labels and styling
-    ax_rho.set_ylabel(r"$\rho$")
+    ax_rho.set_ylabel(r"$\rho$ [g/cm³]")
     ax_rho.grid(True, alpha=0.3)
     
-    ax_p.set_ylabel(r"$P$")
+    ax_p.set_ylabel(r"$P$ [MBar]")
     ax_p.grid(True, alpha=0.3)
     
-    ax_u.set_ylabel(r"$u$")
+    ax_u.set_ylabel(r"$u$ [km/s]")
     ax_u.set_xlabel(xlabel)
     ax_u.grid(True, alpha=0.3)
     
-    ax_e.set_ylabel(r"$e$")
+    ax_e.set_ylabel(r"$e$ [hJ/g]")
     ax_e.set_xlabel(xlabel)
     ax_e.grid(True, alpha=0.3)
     
@@ -559,12 +607,12 @@ def plot_comparison_overlay(
     
     if title is None:
         title = "Shock Profile Comparison (multiple times)"
-    fig.suptitle(title, fontsize=14)
+    fig.suptitle(title, fontsize=12, fontweight="medium")
     fig.tight_layout()
     
     if savepath:
         Path(savepath).parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(savepath, dpi=200, bbox_inches='tight')
+        fig.savefig(savepath, dpi=200, bbox_inches='tight', facecolor='white', edgecolor='none')
         print(f"Saved figure to {savepath}")
     
     if show:
@@ -604,7 +652,7 @@ def save_comparison_gif(
     ax_rho, ax_p = axes[0, 0], axes[0, 1]
     ax_u, ax_e = axes[1, 0], axes[1, 1]
     
-    xlabel = r"Mass coordinate $m$" if xaxis == "m" else r"Position $x$"
+    xlabel = r"Mass coordinate $m$ [g/cm²]" if xaxis == "m" else r"Position $x$ [cm]"
     
     # Initial plot
     k = 0
@@ -623,19 +671,19 @@ def save_comparison_gif(
     lines['sim_e'], = ax_e.plot(x_sim, sim_data.e[k], 'b-', lw=2)
     lines['ref_e'], = ax_e.plot(x_ref, ref_data.e[ref_k], 'r--', lw=2)
     
-    ax_rho.set_ylabel(r"$\rho$")
+    ax_rho.set_ylabel(r"$\rho$ [g/cm³]")
     ax_rho.legend(loc="best")
     ax_rho.grid(True, alpha=0.3)
-    ax_p.set_ylabel(r"$P$")
+    ax_p.set_ylabel(r"$P$ [MBar]")
     ax_p.grid(True, alpha=0.3)
-    ax_u.set_ylabel(r"$u$")
+    ax_u.set_ylabel(r"$u$ [km/s]")
     ax_u.set_xlabel(xlabel)
     ax_u.grid(True, alpha=0.3)
-    ax_e.set_ylabel(r"$e$")
+    ax_e.set_ylabel(r"$e$ [hJ/g]")
     ax_e.set_xlabel(xlabel)
     ax_e.grid(True, alpha=0.3)
     
-    title_text = fig.suptitle("", fontsize=12)
+    title_text = fig.suptitle("")
     
     frame_ids = np.arange(0, len(sim_data.times), stride)
     

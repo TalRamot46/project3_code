@@ -29,10 +29,13 @@ _DIFFUSION_SCRIPT_PATH = Path(__file__).resolve().parent / "1D Diffusion self si
 def run_diffusion_1d(
     x_max: float,
     t_end: float,
-    T_bath_hev: float,
+    T_bath_Kelvin: float,
     rho0: float,
     n_times: int = 30,
     Nz: int = 500,
+    f_Kelvin: float | None = None,
+    g_Kelvin: float | None = None,
+    T_right_Kelvin: float = 0.0,
 ) -> Tuple[np.ndarray, np.ndarray, List[np.ndarray], List[np.ndarray]]:
     """
     Run the 1D Diffusion self-similar code with given physical parameters.
@@ -43,14 +46,23 @@ def run_diffusion_1d(
         Domain length [cm].
     t_end : float
         Final time [s].
-    T_bath_hev : float
-        Boundary temperature [Hev].
+    T_bath_Kelvin : float
+        Boundary temperature [K].
     rho0 : float
         Initial density [g/cm^3].
     n_times : int
         Number of time snapshots to store.
     Nz : int
         Number of grid points for the diffusion solver.
+    f_Kelvin : float, optional
+        Hev-based specific energy coefficient (Rosen model). If None, use
+        the default value from the diffusion script.
+    g_Kelvin : float, optional
+        Hev-based opacity coefficient (Rosen model). If None, use the
+        default value from the diffusion script.
+    T_right_Kelvin : float, optional
+        Right boundary temperature [K]. Use 0 for vacuum (match Rad-Hydro).
+        Default 0 for verification; 300 for original cold-sink behavior.
 
     Returns
     -------
@@ -87,21 +99,17 @@ def run_diffusion_1d(
     # Script uses: L, t_final, T_bath (or T_bath_hev), rho, Nz, z, dz, dt, etc.
     diffusion.L = float(x_max)
     diffusion.t_final = float(t_end)
+    diffusion.t_final_sec = float(t_end)  # ensure CGS mode uses correct end time
     diffusion.Nz = int(Nz)
     diffusion.z = np.linspace(0.0, diffusion.L, diffusion.Nz)
     diffusion.dz = diffusion.z[1] - diffusion.z[0]
     diffusion.rho = float(rho0)
+    diffusion.T_bath_Kelvin = T_bath_Kelvin
+    diffusion.T_bath = T_bath_Kelvin
+    diffusion.f_Kelvin = f_Kelvin
+    diffusion.g_Kelvin = g_Kelvin
+    diffusion.T_right_Kelvin = T_right_Kelvin
 
-    # Boundary and initial T (script uses T_bath in Kelvin when CGS, T_bath_hev when HEV_NS)
-    # Keep script in CGS; it stores T in Hev (T/K_per_Hev). So set T_bath so that T_bath_hev is correct.
-    if hasattr(diffusion, "K_per_Hev"):
-        diffusion.T_bath_kelvin = T_bath_hev * diffusion.K_per_Hev
-        diffusion.T_bath = diffusion.T_bath_kelvin
-        diffusion.T_bath_hev = float(T_bath_hev)
-    else:
-        diffusion.T_bath_hev = float(T_bath_hev)
-
-    # Times to store (in seconds; script run_time_loop uses t in seconds internally)
     times_to_store = np.linspace(t_end * 0.05, t_end * 0.95, n_times)
 
     # Run the case (tau=0 for constant temperature drive). Script writes CSV under repo root.
@@ -117,14 +125,9 @@ def run_diffusion_1d(
         os.chdir(old_cwd)
 
     stored_t = np.asarray(result["stored_t"], dtype=float)
-    stored_T = result["stored_T"]  # list or (n_times, Nz); in Hev when CGS
+    stored_T = result["stored_T"]  # list or (n_times, Nz); in Kelvin when CGS
     z = np.asarray(diffusion.z, dtype=float)
-
-    # Script returns stored_t in ns when simulation_unit_system == CGS
-    if getattr(diffusion, "simulation_unit_system", None) == "cgs":
-        times_sec = stored_t * 1e-9
-    else:
-        times_sec = stored_t.copy()
+    times_sec = stored_t.copy() * 1e-9
 
     # Ensure T is list of 1d arrays
     if hasattr(stored_T, "shape") and stored_T.ndim == 2:
@@ -132,11 +135,10 @@ def run_diffusion_1d(
     else:
         T_list = [np.asarray(t, dtype=float).flatten() for t in stored_T]
 
-    # Radiation constant in Hev units (script has a_hev)
-    a_hev = getattr(diffusion, "a_hev", None)
-    if a_hev is None:
-        from project_3.rad_hydro_sim.simulation.radiation_step import a_Hev
-        a_hev = a_Hev
-    E_rad_list = [a_hev * T**4 for T in T_list]
+    # Radiation constant in Kelvin units (1D Diffusion uses a_kelvin lowercase)
+    a_Kelvin = getattr(diffusion, "a_Kelvin", None) or getattr(diffusion, "a_kelvin", None)
+    if a_Kelvin is None:
+        from project_3.rad_hydro_sim.simulation.radiation_step import a_Kelvin
+    E_rad_list = [a_Kelvin * T**4 for T in T_list]
 
     return times_sec, z, T_list, E_rad_list

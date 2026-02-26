@@ -40,31 +40,31 @@ def plot_history_slider(
     lines.append(axes[3].plot(x_axis, history.e[k0], lw=2)[0])
     lines.append(axes[4].plot(x_axis, history.T[k0], lw=2)[0])
     lines.append(axes[5].plot(x_axis, history.E_rad[k0], lw=2)[0])
-    axes[0].set_ylabel(r"$\rho$", fontsize=11)
-    axes[1].set_ylabel(r"$p$", fontsize=11)
-    axes[2].set_ylabel(r"$u$", fontsize=11)
-    axes[3].set_ylabel(r"$e$", fontsize=11)
-    axes[4].set_ylabel(r"$T$", fontsize=11)
-    axes[5].set_ylabel(r"$E_\mathrm{rad}$", fontsize=11)
-    axes[5].set_xlabel(r"$x$", fontsize=11)
+    axes[0].set_ylabel(r"$\rho$ [g/cm³]")
+    axes[1].set_ylabel(r"$p$ [MBar]")
+    axes[2].set_ylabel(r"$u$ [km/s]")
+    axes[3].set_ylabel(r"$e$ [hJ/g]")
+    axes[4].set_ylabel(r"$T$ [HeV]")
+    axes[5].set_ylabel(r"$E_{\mathrm{rad}}$ [erg/cm³]")
+    axes[5].set_xlabel(r"Mass coordinate $m$ [g/cm²]")
     
     for ax in axes:
         ax.grid(True, alpha=0.3)
     
-    title = fig.suptitle("", fontsize=12, fontweight="medium")
+    title = fig.suptitle("", fontweight="medium")
     
     def set_title(k):
         t = history.t[k]
         case_title = case.title if hasattr(case, 'title') else "Simulation"
-        if case.T0 is not None and case.tau is not None:
+        if case.T0_Kelvin is not None and case.tau is not None:
             title.set_text(
                 f"{case_title}\n"
-                f"$T(0,t)=T_0 t^{{\\tau}},\\; T_0={case.T0},\\; \\tau={case.tau},\\; t={t:.3e}$"
+                f"$T(0,t)=T_0 t^{{\\tau}},\\; T_0={case.T0_Kelvin},\\; \\tau={case.tau},\\; t={t:.3e}$"
             )
-        elif case.P0 is not None and case.tau is not None:
+        elif case.P0_Barye is not None and case.tau is not None:
             title.set_text(
                 f"{case_title}\n"
-                f"$P(0,t)=P_0 t^{{\\tau}},\\; P_0={case.P0},\\; \\tau={case.tau},\\; t={t:.3e}$"
+                f"$P(0,t)=P_0 t^{{\\tau}},\\; P_0={case.P0_Barye},\\; \\tau={case.tau},\\; t={t:.3e}$"
             )
         else:
             title.set_text(f"{case_title}, t={t:.3e}")

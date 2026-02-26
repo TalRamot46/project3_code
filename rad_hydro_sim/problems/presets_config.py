@@ -40,12 +40,12 @@ _power_law_tau = -0.45
 PRESET_TEST_CASES = {
     PRESET_FIRST_ATTEMPT: RadHydroCase(
         # Rosen's opacity parameters
-        g_HeV = 1.0/7200,
+        g_Kelvin = 1.0/7200,
         alpha = 1.5,
         lambda_ = 0.2,
 
         # Rosen's specific energy parameters
-        f_HeV = 3.4e13,
+        f_Kelvin = 3.4e13,
         gamma = 1.6,
         mu = 0.14,
 
@@ -53,15 +53,15 @@ PRESET_TEST_CASES = {
         chi = 1000,
 
         # Boundary conditions
-        T0 = 1, # Hev units
-        P0 = None,
+        T0_Kelvin = 1, # Hev units
+        P0_Barye = None,
         tau = 1.0,
 
         # initial conditions
         rho0 = 1.0,
         p0 = 1e-6,
         u0 = .00,
-        T_initial = None,
+        T_initial_Kelvin = None,
 
         # adiabatic index
         r = 0.25, # r = \gamma_adiabatic - 1
@@ -71,7 +71,7 @@ PRESET_TEST_CASES = {
         # grid parameters
         x_min = 0.0,
         x_max = 6e-5,
-        t_end = 1.0e-9,
+        t_sec_end = 1.0e-9,
 
         initial_condition="pressure, velocity, density",
         scenario="hydro_only",
@@ -82,12 +82,12 @@ PRESET_TEST_CASES = {
     PRESET_POWER_LAW: RadHydroCase(
         # Rosen's opacity parameters
         # Rosen's opacity parameters
-        g_HeV = 1.0/7200,
+        g_Kelvin = 1.0/7200,
         alpha = 1.5,
         lambda_ = 0.2,
 
         # Rosen's specific energy parameters
-        f_HeV = 3.4e13,
+        f_Kelvin = 3.4e13,
         gamma = 1.6,
         mu = 0.14,
 
@@ -95,8 +95,8 @@ PRESET_TEST_CASES = {
         chi = 1000,
 
         # Boundary conditions
-        T0 = None,
-        P0 = 2.71e12,
+        T0_Kelvin = None,
+        P0_Barye = 2.71e12,
         tau = _power_law_tau,
 
         # initial conditions
@@ -104,7 +104,7 @@ PRESET_TEST_CASES = {
         p0 = 1e-6,
         u0 = 0.0,
 
-        T_initial = None,
+        T_initial_Kelvin = None,
 
         # adiabatic index
         r = 0.25, # r = \gamma_adiabatic - 1
@@ -114,7 +114,7 @@ PRESET_TEST_CASES = {
         # grid parameters
         x_min = 0.0,
         x_max = 15e-3 / 19.32,
-        t_end = 1e-9,
+        t_sec_end = 1e-9,
 
         initial_condition="pressure, velocity, density",
         scenario="hydro_only",
@@ -123,12 +123,12 @@ PRESET_TEST_CASES = {
     ),
     PRESET_CONSTANT_PRESSURE: RadHydroCase(
         # Rosen's opacity parameters
-        g_HeV = 1.0/7200,
+        g_Kelvin = 1.0/7200,
         alpha = 1.5,
         lambda_ = 0.2,
 
         # Rosen's specific energy parameters
-        f_HeV = 3.4e13,
+        f_Kelvin = 3.4e13,
         gamma = 1.6,
         mu = 0.14,
 
@@ -136,8 +136,8 @@ PRESET_TEST_CASES = {
         chi = 1000,
 
         # Boundary conditions
-        T0 = None,
-        P0 = 1e12,
+        T0_Kelvin = None,
+        P0_Barye = 1e12,
         tau = 0.0,
 
         # initial conditions
@@ -145,7 +145,7 @@ PRESET_TEST_CASES = {
         p0 = 1e-6,
         u0 = 0.0,
 
-        T_initial = None,
+        T_initial_Kelvin = None,
 
         # adiabatic index
         r = 0.25, # r = \gamma_adiabatic - 1
@@ -155,7 +155,7 @@ PRESET_TEST_CASES = {
         # grid parameters
         x_min = 0.0,
         x_max = 5e-3 / 19.32,
-        t_end = 1e-9,
+        t_sec_end = 1e-9,
 
         initial_condition="pressure, velocity, density",
         scenario="hydro_only",
@@ -163,13 +163,13 @@ PRESET_TEST_CASES = {
         geom=planar(),
     ),
     PRESET_CONSTANT_T_RADIATION: RadHydroCase(
-        # Rosen's opacity parameters (g, f match 1D Diffusion self-similar reference for verification)
-        g_HeV = 1.0 / 7200 / KELVIN_PER_HEV,
+        # Rosen's opacity parameters (g uses alpha=1.5, lambda_=0.2 for KELVIN and rho exponents)
+        g_Kelvin = 1.0 / (7200 * KELVIN_PER_HEV**1.5),
         alpha = 1.5,
         lambda_ = 0.2,
 
         # Rosen's specific energy parameters
-        f_HeV = 3.4e13,
+        f_Kelvin = 3.4e13 / (KELVIN_PER_HEV**1.6),
         gamma = 1.6,
         mu = 0.14,
 
@@ -177,23 +177,23 @@ PRESET_TEST_CASES = {
         chi = 1000,
 
         # Boundary conditions
-        T0 = 1.0,
-        P0 = None,
+        T0_Kelvin = 1 * KELVIN_PER_HEV,  # 1,160,500 K
+        P0_Barye = None,
         tau = 0.0,
 
         # initial conditions
         rho0 = 19.32,
         p0 = None,
         u0 = None,
-        T_initial = 300 / KELVIN_PER_HEV, # 300 K in Hev
+        T_initial_Kelvin = 300,  # 300 K
 
         # adiabatic index
-        r = 0.25, # r = \gamma_adiabatic - 1
-        
+        r = 0.25,  # r = \gamma_adiabatic - 1
+
         # grid parameters
         x_min = 0,
-        x_max = 6e-5, # 6e-5
-        t_end = 1.0e-9, # 1.0e-9
+        x_max = 6e-5,
+        t_sec_end = 1.0e-9,
 
         initial_condition="temperature, density",
         scenario="radiation_only",
@@ -202,12 +202,12 @@ PRESET_TEST_CASES = {
     ),
     PRESET_RAD_HYDRO_CONSTANT_T: RadHydroCase(
         # Rosen's opacity parameters
-        g_HeV = 1.0 / (7200.0 * (KELVIN_PRE_HEV**1.5) * (19.32**0.2)),
+        g_Kelvin = 1.0 / (7200.0 * (KELVIN_PRE_HEV**1.5) * (19.32**0.2)),
         alpha = 1.5,
         lambda_ = 0.2,
 
         # Rosen's specific energy parameters
-        f_HeV = 3.4e13 / ((KELVIN_PRE_HEV**1.6) * (19.32**0.14)),
+        f_Kelvin = 3.4e13 / ((KELVIN_PRE_HEV**1.6) * (19.32**0.14)),
         gamma = 1.6,
         mu = 0.14,
 
@@ -215,15 +215,15 @@ PRESET_TEST_CASES = {
         chi = 1000,
 
         # Boundary conditions
-        T0 = 1,
-        P0 = None,
+        T0_Kelvin = 1,
+        P0_Barye = None,
         tau = 0.0,
 
         # initial conditions
         rho0 = 19.32,
         p0 = None,
         u0 = None,
-        T_initial = 300 / KELVIN_PER_HEV, # 300 K in Hev
+        T_initial_Kelvin = 300 / KELVIN_PER_HEV, # 300 K in Hev
 
         # adiabatic index
         r = 0.25, # r = \gamma_adiabatic - 1
@@ -231,7 +231,7 @@ PRESET_TEST_CASES = {
         # grid parameters
         x_min = 0,
         x_max = 3e-4,
-        t_end = 1.0e-9,
+        t_sec_end = 1.0e-9,
 
         initial_condition="temperature, density",
         scenario="full_rad_hydro",
@@ -240,12 +240,12 @@ PRESET_TEST_CASES = {
     ),
     PRESET_FIG_8: RadHydroCase(
         # Rosen's opacity parameters
-        g_HeV = 1.0 / 7200,
+        g_Kelvin = 1.0 / (7200 * KELVIN_PER_HEV**1.5),
         alpha = 1.5,
         lambda_ = 0.2,
 
         # Rosen's specific energy parameters
-        f_HeV = 3.4e13,
+        f_Kelvin = 3.4e13 / (KELVIN_PER_HEV**1.6),
         gamma = 1.6,
         mu = 0.14,
 
@@ -253,15 +253,15 @@ PRESET_TEST_CASES = {
         chi = 1000,
 
         # Boundary conditions
-        T0 = 1,
-        P0 = None,
+        T0_Kelvin = 1 * KELVIN_PER_HEV,
+        P0_Barye = None,
         tau = 0,
 
         # initial conditions
         rho0 = 19.32,
         p0 = None,
         u0 = None,
-        T_initial = 300 / KELVIN_PER_HEV, # 300 K in Hev
+        T_initial_Kelvin = 300 / KELVIN_PER_HEV, # 300 K in Hev
 
         # adiabatic index
         r = 0.25, # r = \gamma_adiabatic - 1
@@ -269,21 +269,21 @@ PRESET_TEST_CASES = {
         # grid parameters
         x_min = 0,
         x_max = 1.5e-3 / 19.32, # m_max = 1.5 mg/cm^2
-        t_end = 2e-10,
+        t_sec_end = 2e-10,
 
         initial_condition="temperature, density",
-        scenario="full_rad_hydro",
+        scenario="radiation_only",
         title="Fig 8 comparison (τ=0, Shussman verification)",
         geom=planar(),
     ),
     PRESET_FIG_9: RadHydroCase(
         # Rosen's opacity parameters
-        g_HeV = 1.0 / 7200,
+        g_Kelvin = 1.0 / 7200,
         alpha = 1.5,
         lambda_ = 0.2,
 
         # Rosen's specific energy parameters
-        f_HeV = 3.4e13,
+        f_Kelvin = 3.4e13,
         gamma = 1.6,
         mu = 0.14,
 
@@ -291,15 +291,15 @@ PRESET_TEST_CASES = {
         chi = 1000,
 
         # Boundary conditions
-        T0 = 1,
-        P0 = None,
+        T0_Kelvin = 1,
+        P0_Barye = None,
         tau = 0.123,
 
         # initial conditions
         rho0 = 19.32,
         p0 = None,
         u0 = None,
-        T_initial = 300 / KELVIN_PER_HEV, # 300 K in Hev
+        T_initial_Kelvin = 300 / KELVIN_PER_HEV, # 300 K in Hev
 
         # adiabatic index
         r = 0.25, # r = \gamma_adiabatic - 1
@@ -307,7 +307,7 @@ PRESET_TEST_CASES = {
         # grid parameters
         x_min = 0,
         x_max = 1.5e-3 / 19.32, # m_max = 1.5 mg/cm^2
-        t_end = 2e-10,
+        t_sec_end = 2e-10,
 
         initial_condition="temperature, density",
         scenario="full_rad_hydro",
@@ -316,12 +316,12 @@ PRESET_TEST_CASES = {
     ),
     PRESET_FIG_10: RadHydroCase(
         # Rosen's opacity parameters
-        g_HeV = 1.0 / 7200,
+        g_Kelvin = 1.0 / 7200,
         alpha = 1.5,
         lambda_ = 0.2,
 
         # Rosen's specific energy parameters
-        f_HeV = 3.4e13,
+        f_Kelvin = 3.4e13,
         gamma = 1.6,
         mu = 0.14,
 
@@ -329,15 +329,15 @@ PRESET_TEST_CASES = {
         chi = 1000,
 
         # Boundary conditions
-        T0 = 1,
-        P0 = None,
+        T0_Kelvin = 1,
+        P0_Barye = None,
         tau = 0.17,
 
         # initial conditions
         rho0 = 19.32,
         p0 = None,
         u0 = None,
-        T_initial = 300 / KELVIN_PER_HEV, # 300 K in Hev
+        T_initial_Kelvin = 300 / KELVIN_PER_HEV, # 300 K in Hev
 
         # adiabatic index
         r = 0.25, # r = \gamma_adiabatic - 1
@@ -345,7 +345,7 @@ PRESET_TEST_CASES = {
         # grid parameters
         x_min = 0,
         x_max = 1.5e-3 / 19.32,
-        t_end = 1.5e-10,
+        t_sec_end = 1.5e-10,
 
         initial_condition="temperature, density",
         scenario="full_rad_hydro",

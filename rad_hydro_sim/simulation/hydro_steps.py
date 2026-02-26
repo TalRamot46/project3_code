@@ -59,6 +59,7 @@ def get_e_star_from_hydro(
     num = state.e - 0.5 * (state.p + state.q + q_new) * (dV / state.m_cells)
     den = 1.0 + 0.5 * r * rho_new * (dV / state.m_cells)
     e_star = num / den
+    
 
     state_star = RadHydroState(
         t=state.t,

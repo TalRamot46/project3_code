@@ -122,7 +122,7 @@ def solve_tridiagonal(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray
         return x
         
 
-def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydroCase) -> RadHydroState:
+def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydroCase) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Updates the material specific energy & radiation energy density based on the coupling between matter and radiation.
     
@@ -133,6 +133,7 @@ def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydr
         
     Returns:
         new_e_material: Updated material specific energy in erg/g
+        new_T: Updated temperature in K
         e_rad: Radiation energy density in erg/cm^3
     """
     global alpha, gamma, mu, f_Kelvin, chi, lambda_, g_Kelvin
@@ -171,8 +172,19 @@ def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydr
     UR_star[0]  = E_left          # left boundary consistent
     UR_star[-1] = 1e-10             # right boundary vacuum
     new_UR = (A / (1 + A)) * new_E_rad + (1 / (1 + A)) * UR_star
-    new_Um = new_UR / gamma
+    new_Um = new_UR / beta
 
     new_T = (new_UR / a_Kelvin)**(1/4)  # calculating the temperature from the updated effective radiation energy density
-    new_e_material = f_Kelvin * new_T**gamma * rho**(-mu)  # Calculating the material specific energy from Rosen's model using the updated temperature and density
+    new_Tm = (new_Um / a_Kelvin)**(1/4)
+    new_e_material = f_Kelvin * new_Tm**gamma * rho**(-mu)  # Calculating the material specific energy from Rosen's model using the updated temperature and density
+
+    # Explicitly enforce boundary conditions for T and e_material (avoids wrong BC when coupling yields incorrect values at boundaries)
+    if rad_hydro_case.T0_Kelvin is not None:
+        new_T[0] = T_left
+        new_e_material[0] = f_Kelvin * T_left**gamma * rho[0] ** (-mu)
+    # Right boundary: vacuum (E_rad=0) => cold material
+    T_right = (new_E_rad[-1] / a_Kelvin) ** (1 / 4) if new_E_rad[-1] > 0 else 1e-10
+    new_T[-1] = T_right
+    new_e_material[-1] = f_Kelvin * T_right**gamma * rho[-1] ** (-mu)
+
     return new_e_material, new_T, new_E_rad

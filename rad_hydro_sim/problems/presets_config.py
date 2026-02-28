@@ -255,13 +255,13 @@ PRESET_TEST_CASES = {
         # Boundary conditions
         T0_Kelvin = 1 * KELVIN_PER_HEV,
         P0_Barye = None,
-        tau = 0,
+        tau = 0.0,
 
         # initial conditions
         rho0 = 19.32,
         p0 = None,
         u0 = None,
-        T_initial_Kelvin = 300 / KELVIN_PER_HEV, # 300 K in Hev
+        T_initial_Kelvin = 300, # 300 K in Hev
 
         # adiabatic index
         r = 0.25, # r = \gamma_adiabatic - 1

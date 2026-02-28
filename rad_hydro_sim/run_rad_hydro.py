@@ -99,7 +99,7 @@ def main():
         PRESET_FIG_10,
         PRESET_CONSTANT_T_RADIATION
     )
-    preset_name = PRESET_CONSTANT_T_RADIATION  
+    preset_name = PRESET_FIG_8  
     
     # Get case and config from preset
     case, config = get_preset(preset_name)

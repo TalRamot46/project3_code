@@ -657,8 +657,8 @@ def run_comparison(
 
 def main() -> None:
     """Entry point: select mode and run comparison."""
-    MODE = VerificationMode.FULL_RAD_HYDRO
-    # MODE = VerificationMode.RADIATION_ONLY
+    # MODE = VerificationMode.FULL_RAD_HYDRO
+    MODE = VerificationMode.RADIATION_ONLY
     # MODE = VerificationMode.HYDRO_ONLY
     
     run_comparison(

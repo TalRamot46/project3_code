@@ -159,7 +159,6 @@ def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydr
     t_drive = max(state_star.t, dt) # avoid t=0 for the power law drive
     T_left = rad_hydro_case.T0_Kelvin * (t_drive/(10**-9))**rad_hydro_case.tau
     E_left = a_Kelvin * T_left**4
-    # print("t", state_star.t, "T_left", T_left, "E_left", E_left)
     d[0] -= a[0] * E_left
 
     # solving the tridiagonal system for radiation energy density
@@ -172,11 +171,9 @@ def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydr
     UR_star[0]  = E_left          # left boundary consistent
     UR_star[-1] = 1e-10             # right boundary vacuum
     new_UR = (A / (1 + A)) * new_E_rad + (1 / (1 + A)) * UR_star
-    new_Um = new_UR / beta
 
-    new_T = (new_UR / a_Kelvin)**(1/4)  # calculating the temperature from the updated effective radiation energy density
-    new_Tm = (new_Um / a_Kelvin)**(1/4)
-    new_e_material = f_Kelvin * new_Tm**gamma * rho**(-mu)  # Calculating the material specific energy from Rosen's model using the updated temperature and density
+    new_T = (new_UR / a_Kelvin)**(1/4)
+    new_e_material = f_Kelvin * new_T**gamma * rho**(-mu)
 
     # Explicitly enforce boundary conditions for T and e_material (avoids wrong BC when coupling yields incorrect values at boundaries)
     if rad_hydro_case.T0_Kelvin is not None:

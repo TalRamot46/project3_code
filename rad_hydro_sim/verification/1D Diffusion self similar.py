@@ -12,7 +12,7 @@ if str(_REPO_PARENT) not in sys.path:
 from project_3.rad_hydro_sim.plotting import mpl_style  # noqa: F401 - apply project style
 import tqdm
 T_material_0_Kelvin = 300.0
-T_bath_Kelvin = 1500000  # boundary temperature (K)
+T_bath_kelvin = 1500000  # boundary temperature (K)
 eV_joule = 1.60218e-19  # J/eV
 erg_per_joule = 1.0e7   # erg/J
 eV = eV_joule * erg_per_joule  # erg 
@@ -30,8 +30,8 @@ KELVIN_PER_HEV = Hev / k_B  # in HeV
 a_kelvin = 7.5646e-15    # radiation constant
 a_hev = a_kelvin * (KELVIN_PER_HEV**4)  # radiation constant in HeV units
 
-T_bath_hev = T_bath_Kelvin / KELVIN_PER_HEV 
-T_bath = T_bath_Kelvin
+T_bath_hev = T_bath_kelvin / KELVIN_PER_HEV 
+T_bath = T_bath_kelvin
 T_material_0_hev = T_material_0_Kelvin / KELVIN_PER_HEV
 
 
@@ -109,7 +109,7 @@ HEV_NS = "hev|ns"
 simulation_unit_system = CGS  # CGS or HEV_NS
 if simulation_unit_system == CGS:
     T_material_0 = T_material_0_Kelvin
-    T_bath = T_bath_Kelvin
+    T_bath = T_bath_kelvin
     a = a_kelvin
     dt = dt_sec
     t_final = t_final_sec
@@ -726,7 +726,7 @@ def data_for_comparison():
 
 def compare_with_linear_results():
     # changing global parameters for comparison
-    global tau, alpha, lambda_param, g_Kelvin, f_Kelvin, mu, gamma, L, dt, t_final, Nz, z, dz, T_bath_Kelvin, T_bath, chi,\
+    global tau, alpha, lambda_param, g_Kelvin, f_Kelvin, mu, gamma, L, dt, t_final, Nz, z, dz, T_bath_kelvin, T_bath, chi,\
             T_material_0, eps, sigma, show_plots, Nt, z, dz
     show_plots = False
     x_vals, E_data, U_data = data_for_comparison()

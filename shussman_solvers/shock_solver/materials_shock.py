@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import numpy as np
 
 HEV_IN_KELVIN = 1_160_500.0  # 1 HeV in Kelvin (as used in your MATLAB)
+STEFAN_BOLTZMANN_KELVIN = 5.670373e-5
 
 @dataclass(frozen=True, slots=True)
 class Material:

@@ -77,6 +77,7 @@ def compute_profiles_for_report(
         "T_heat": T_heat,
         "u_heat": u_heat,
         "rho_heat": rho_heat,
+        "Pw": Pw,
     }
 
 if __name__ == "__main__":

@@ -480,6 +480,34 @@ def run_hydro_only_comparison(
 # Full rad_hydro: constant T drive vs Shussman (subsonic + shock)
 # =============================================================================
 
+
+def _pad_rad_hydro_data_to_min_frames(data, min_frames: int = 2):
+    """Duplicate the last frame so data has at least min_frames entries (for slider)."""
+    from project_3.rad_hydro_sim.verification.hydro_data import RadHydroData
+
+    n = len(data.times)
+    if n >= min_frames or n == 0:
+        return data
+    times = np.asarray(data.times, dtype=float)
+    t0 = float(times[-1]) if n > 0 else 0.0
+    pad = min_frames - n
+    new_times = np.concatenate([times, np.full(pad, t0 * 1.001)])  # slight offset for distinct labels
+    new_m = list(data.m) + [np.array(data.m[-1], copy=True) for _ in range(pad)]
+    new_x = list(data.x) + [np.array(data.x[-1], copy=True) for _ in range(pad)]
+    new_rho = list(data.rho) + [np.array(data.rho[-1], copy=True) for _ in range(pad)]
+    new_p = list(data.p) + [np.array(data.p[-1], copy=True) for _ in range(pad)]
+    new_u = list(data.u) + [np.array(data.u[-1], copy=True) for _ in range(pad)]
+    new_e = list(data.e) + [np.array(data.e[-1], copy=True) for _ in range(pad)]
+    new_T = list(data.T) + [np.array(data.T[-1], copy=True) for _ in range(pad)] if data.T else []
+    E_list = list(data.E_rad or [])
+    new_E = E_list + [np.array(E_list[-1], copy=True) for _ in range(pad)] if E_list else []
+    return RadHydroData(
+        times=new_times, m=new_m, x=new_x, rho=new_rho, p=new_p, u=new_u, e=new_e,
+        T=new_T, E_rad=new_E if new_E else None,
+        label=data.label, color=data.color, linestyle=data.linestyle,
+    )
+
+
 def run_full_rad_hydro_comparison(
     skip_rad_hydro: bool = False,
     skip_shussman: bool = False,
@@ -560,15 +588,23 @@ def run_full_rad_hydro_comparison(
     ref_data = None
     if not skip_shussman:
         print("Building Shussman piecewise reference (subsonic + shock)...")
-        # sample 1 times from the sim_data.times
-        times_sec = np.linspace(0, case.t_sec_end, 10000)
+        if skip_rad_hydro:
+            # Ensure multiple frames for slider when ref_data becomes sim_data
+            n_times = 100
+            t_start = max(case.t_sec_end * 0.01, 1e-15)
+            times_sec = np.linspace(t_start, case.t_sec_end, n_times)
+        else:
+            times_sec = np.linspace(0, case.t_sec_end, 10000)
         time_ns = times_sec * 1e9
-        T0_Hev = float(case.T0_Kelvin)/KELVIN_PER_HEV  # pyright: ignore[reportArgumentType]
-        print(f"times_ns: {time_ns}")
-        ref_data = run_shussman_piecewise_reference(case, times_ns=time_ns, T0_Hev=T0_Hev)
+        T0_HeV = float(case.T0_Kelvin)/KELVIN_PER_HEV  # pyright: ignore[reportArgumentType]
+        ref_data = run_shussman_piecewise_reference(case, times_ns=time_ns, T0_HeV=T0_HeV)
 
     if skip_rad_hydro:
         sim_data = ref_data
+        # Ensure at least 2 frames so the slider functions
+        if sim_data is not None and len(sim_data.times) < 2:
+            sim_data = _pad_rad_hydro_data_to_min_frames(sim_data, min_frames=2)
+        ref_data = sim_data
         print(f"Copied ref_data to sim_data")
 
     print("\nPlotting full rad_hydro vs Shussman (rho, P, u, e vs x)...")
@@ -674,7 +710,6 @@ def main() -> None:
         show_plot=True,
         save_png=True,
     )
-
 
 if __name__ == "__main__":
     main()

@@ -20,6 +20,7 @@ except ImportError:
     from shussman_solvers.shock_solver.materials_shock import Material
     from shussman_solvers.shock_solver.manager_shock import manager_shock
 
+KELVIN_PER_HEV = 1_160_500
 _DEFAULT_NPZ = str(Path(__file__).resolve().parent / "shock_profiles.npz")
 
 
@@ -44,13 +45,13 @@ def compute_shock_profiles(
 
     if patching_method and Pw is not None:
         Pw = np.asarray(Pw, float)
-        tau = Pw[2]
+        m0, mw, e0, ew, u0, uw, xsi, z, utilda, ufront, t, x = manager_shock(mat, Pw[2])  # pyright: ignore[reportArgumentType]
     elif not patching_method and tau is not None:
         tau = float(tau)
+        m0, mw, e0, ew, u0, uw, xsi, z, utilda, ufront, t, x = manager_shock(mat, tau)  # pyright: ignore[reportArgumentType]
     else:
         raise ValueError("Either Pw or tau must be provided when patching_method is True")
 
-    m0, mw, e0, ew, u0, uw, xsi, z, utilda, ufront, t, x = manager_shock(mat, tau)  # pyright: ignore[reportArgumentType]
 
     # MATLAB: t = flipud(t); x = flipud(x);
     t = np.asarray(t, float)[::-1]
@@ -88,27 +89,29 @@ def compute_shock_profiles(
         # separating into cases if patching method is used or not
         if patching_method and Pw is not None:
             P_prof = P0_phys_Barye * (ti ** Pw[2]) * P_tilde if ti > 0 else np.zeros_like(t)
-            T_prof = (
-                (P0_phys_Barye * P_prof / float(mat.r) / float(mat.f)) * (rho_prof ** (float(mat.mu) - 1.0))
-            ) ** (1.0 / float(mat.beta))
+            T_prof = ( # temperature in Kelvin!!!
+                (P_prof / float(mat.r) / float(mat.f)) 
+                * (rho_prof ** (float(mat.mu) - 1.0))
+            ) ** (1.0 / float(mat.beta)) / KELVIN_PER_HEV # / 11605.0 instead to convert to eV
         elif not patching_method and tau is not None:
             P_prof = P0_phys_Barye * (ti ** tau) * P_tilde if ti > 0 else np.zeros_like(t)
-            T_prof = (
-                (P0_phys_Barye * P_prof / float(mat.r) / float(mat.f)) * (rho_prof ** (float(mat.mu) - 1.0))
-            ) ** (1.0 / float(mat.beta))
-        else:
+            T_prof = ( # temperature in HeV !!! Matlab uses T in eV
+                (P_prof / float(mat.r) / float(mat.f)) 
+                * (rho_prof ** (float(mat.mu) - 1.0)) 
+            ) ** (1.0 / float(mat.beta)) / KELVIN_PER_HEV # / 11605.0 instead to convert to eV
+        else:    
             raise ValueError("Either Pw or tau must be provided when patching_method is True")
 
 
-        e_prof = P_prof / (rho_prof * float(mat.r))
-        
-        out["m_shock"].append(m_prof)
-        out["x_shock"].append(x_prof)
-        out["P_shock"].append(P_prof)
-        out["u_shock"].append(u_prof)
-        out["rho_shock"].append(rho_prof)
-        out["e_shock"].append(e_prof)
-        out["T_shock"].append(T_prof)
+    e_prof = P_prof / (rho_prof * float(mat.r))
+    
+    out["m_shock"].append(m_prof)
+    out["x_shock"].append(x_prof)
+    out["P_shock"].append(P_prof)
+    out["u_shock"].append(u_prof)
+    out["rho_shock"].append(rho_prof)
+    out["e_shock"].append(e_prof)
+    out["T_shock"].append(T_prof)
 
     if save_npz and not patching_method:  
         save_npz = str(save_npz)
@@ -135,10 +138,12 @@ if __name__ == "__main__":
     except ImportError:
         from shussman_solvers.shock_solver.materials_shock import au_supersonic_variant_1
     Au = au_supersonic_variant_1()
-    P0 = 2.71e12 # Barye
+    P0_Barye = 2.71e12 # Barye
     tau = -0.45
     times = np.array([1.0], float)  
-    data = compute_shock_profiles(Au, P0, tau, Pw = None, times_ns=times, patching_method=False, save_npz=None)
+    data = compute_shock_profiles(Au, P0_Barye, tau, Pw = None, times_ns=times, patching_method=False, save_npz=None)
+    data = compute_shock_profiles(Au, P0_Barye, tau=None, Pw = [0,0, -0.45], times_ns=times, patching_method=True, save_npz=None)
     import matplotlib.pyplot as plt
-    plt.plot(data["m_shock"][0], data["P_shock"][0])
+    plt.plot(data["m_shock"][0], data["T_shock"][0])
+    # temperature in Kelvin!!!
     plt.show()

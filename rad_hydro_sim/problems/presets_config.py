@@ -20,6 +20,7 @@ PRESET_POWER_LAW = "constant_pressure_drive"
 PRESET_CONSTANT_PRESSURE = "power_law_pressure_drive"
 PRESET_CONSTANT_T_RADIATION = "constant_temperature_drive"
 PRESET_RAD_HYDRO_CONSTANT_T = "rad_hydro_constant_temperature_drive"
+PRESET_FIG_7 = "fig_7_comparison"
 PRESET_FIG_8 = "fig_8_comparison"
 PRESET_FIG_9 = "fig_9_comparison"
 PRESET_FIG_10 = "fig_10_comparison"
@@ -236,6 +237,44 @@ PRESET_TEST_CASES = {
         initial_condition="temperature, density",
         scenario="full_rad_hydro",
         title="Full rad-hydro constant T drive (Au, 300 K)",
+        geom=planar(),
+    ),
+    PRESET_FIG_7: RadHydroCase(
+        # Rosen's opacity parameters
+        g_Kelvin = 1.0 / (7200 * KELVIN_PER_HEV**1.5),
+        alpha = 1.5,
+        lambda_ = 0.2,
+
+        # Rosen's specific energy parameters
+        f_Kelvin = 3.4e13 / (KELVIN_PER_HEV**1.6),
+        gamma = 1.6,
+        mu = 0.14,
+
+        # coupling factor
+        chi = 1000,
+
+        # Boundary conditions
+        T0_Kelvin = 1 * KELVIN_PER_HEV,
+        P0_Barye = None,
+        tau = 0.0,
+
+        # initial conditions
+        rho0 = 19.32,
+        p0 = None,
+        u0 = None,
+        T_initial_Kelvin = 300, # 300 K in Hev
+
+        # adiabatic index
+        r = 0.25, # r = \gamma_adiabatic - 1
+
+        # grid parameters
+        x_min = 0,
+        x_max = 15e-3 / 19.32, # m_max = 15 mg/cm^2
+        t_sec_end = 1e-9,
+
+        initial_condition="temperature, density",
+        scenario="radiation_only",
+        title="Fig 7 comparison (T0=1 HeV, τ=0, t=1 ns, Shussman verification)",
         geom=planar(),
     ),
     PRESET_FIG_8: RadHydroCase(

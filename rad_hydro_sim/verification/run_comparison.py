@@ -481,8 +481,8 @@ def run_hydro_only_comparison(
 # =============================================================================
 
 
-def _pad_rad_hydro_data_to_min_frames(data, min_frames: int = 2):
-    """Duplicate the last frame so data has at least min_frames entries (for slider)."""
+def _pad_rad_hydro_data_to_min_frames(data, min_frames: int = 2, t_end_ns: float | None = None):
+    """Duplicate frames so data has at least min_frames entries (for slider)."""
     from project_3.rad_hydro_sim.verification.hydro_data import RadHydroData
 
     n = len(data.times)
@@ -491,7 +491,8 @@ def _pad_rad_hydro_data_to_min_frames(data, min_frames: int = 2):
     times = np.asarray(data.times, dtype=float)
     t0 = float(times[-1]) if n > 0 else 0.0
     pad = min_frames - n
-    new_times = np.concatenate([times, np.full(pad, t0 * 1.001)])  # slight offset for distinct labels
+    t_pad = t_end_ns if t_end_ns is not None else t0 * 1.001
+    new_times = np.concatenate([times, np.full(pad, t_pad)])
     new_m = list(data.m) + [np.array(data.m[-1], copy=True) for _ in range(pad)]
     new_x = list(data.x) + [np.array(data.x[-1], copy=True) for _ in range(pad)]
     new_rho = list(data.rho) + [np.array(data.rho[-1], copy=True) for _ in range(pad)]
@@ -589,21 +590,21 @@ def run_full_rad_hydro_comparison(
     if not skip_shussman:
         print("Building Shussman piecewise reference (subsonic + shock)...")
         if skip_rad_hydro:
-            # Ensure multiple frames for slider when ref_data becomes sim_data
-            n_times = 100
-            t_start = max(case.t_sec_end * 0.01, 1e-15)
-            times_sec = np.linspace(t_start, case.t_sec_end, n_times)
+            # 0.01 ns to t_end (1 ns), 100 frames for slider
+            t_min = max(case.t_sec_end / 100, 1e-15)
+            times_sec = np.linspace(t_min, case.t_sec_end, 100)
         else:
             times_sec = np.linspace(0, case.t_sec_end, 10000)
-        time_ns = times_sec * 1e9
+        time_ns = np.atleast_1d(times_sec * 1e9).ravel()
         T0_HeV = float(case.T0_Kelvin)/KELVIN_PER_HEV  # pyright: ignore[reportArgumentType]
         ref_data = run_shussman_piecewise_reference(case, times_ns=time_ns, T0_HeV=T0_HeV)
 
     if skip_rad_hydro:
         sim_data = ref_data
-        # Ensure at least 2 frames so the slider functions
+        # Ensure at least 2 frames so the slider functions; pad frame uses t_end (1 ns)
         if sim_data is not None and len(sim_data.times) < 2:
-            sim_data = _pad_rad_hydro_data_to_min_frames(sim_data, min_frames=2)
+            t_end_ns = float(case.t_sec_end) * 1e9
+            sim_data = _pad_rad_hydro_data_to_min_frames(sim_data, min_frames=2, t_end_ns=t_end_ns)
         ref_data = sim_data
         print(f"Copied ref_data to sim_data")
 

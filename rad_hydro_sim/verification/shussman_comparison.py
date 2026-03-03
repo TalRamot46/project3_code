@@ -209,7 +209,6 @@ def run_shussman_piecewise_reference(
     )
     P_front = subsonic_data["P_heat"][-1,-1] # units = MBar
     _, _, wP3 = subsonic_data["Pw"]
-    print("times_ns of ablation region: ", times_ns)
 
     # 2) Shock solver with appropriate drive
     print("Starting shock solving...")
@@ -220,8 +219,11 @@ def run_shussman_piecewise_reference(
                                             patching_method=True, save_npz=None)
 
     # making sure that both shocK_data and subsonic_data include T in Kelvin (they both return T in HeV)
-    subsonic_data["T_heat"] = subsonic_data["T_heat"]
-    shock_data["T_shock"] = shock_data["T_shock"] 
+    import matplotlib.pyplot as plt
+    plt.plot(subsonic_data["m_heat"][-1], subsonic_data["T_heat"][-1])
+    plt.plot(shock_data["m_shock"][-1], shock_data["T_shock"][-1])
+    plt.show()
+    
 
     # 3) Piecewise reference (subsonic + shock [+ unperturbed to m_max])
     print("Starting building piecewise reference...")

@@ -103,15 +103,15 @@ def compute_shock_profiles(
             raise ValueError("Either Pw or tau must be provided when patching_method is True")
 
 
-    e_prof = P_prof / (rho_prof * float(mat.r))
-    
-    out["m_shock"].append(m_prof)
-    out["x_shock"].append(x_prof)
-    out["P_shock"].append(P_prof)
-    out["u_shock"].append(u_prof)
-    out["rho_shock"].append(rho_prof)
-    out["e_shock"].append(e_prof)
-    out["T_shock"].append(T_prof)
+        e_prof = P_prof / (rho_prof * float(mat.r))
+        
+        out["m_shock"].append(m_prof)
+        out["x_shock"].append(x_prof)
+        out["P_shock"].append(P_prof)
+        out["u_shock"].append(u_prof)
+        out["rho_shock"].append(rho_prof)
+        out["e_shock"].append(e_prof)
+        out["T_shock"].append(T_prof)
 
     if save_npz and not patching_method:  
         save_npz = str(save_npz)

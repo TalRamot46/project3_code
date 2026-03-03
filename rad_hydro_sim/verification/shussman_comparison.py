@@ -80,48 +80,6 @@ def _rad_hydro_case_to_material_shock(case) -> Material:
     )
 
 
-def compute_subsonic_profiles_at_times(
-    case,
-    times_sec: np.ndarray,
-    T0_hev: float,
-    *,
-    iternum: int = 3000,
-    xsi0: float = 1.0,
-    P0_norm: float = 4.0,
-) -> dict:
-    """
-    Run subsonic solver at the given times (seconds) and T0 (HeV).
-    Returns dict with times, m_heat, P_heat, rho_heat, u_heat, x_heat (position in cm),
-    and P_front (pressure at heat front, shape (n_times,)) for use as drive.
-    """
-    from project_3.shussman_solvers.subsonic_solver.profiles_for_report_sub import (
-        compute_profiles_for_report,
-    )
-    mat = _rad_hydro_case_to_material_sub(case)
-    tau = float(case.tau) if case.tau is not None else 0.0  # constant T drive
-    data = compute_profiles_for_report(
-        mat = mat,
-        T0_phys_HeV=T0_hev,
-        tau=tau,
-        times_ns=times_sec * 1e9,
-    )
-    n_times, n_xi = data["m_heat"].shape
-    # Compute position x from integral dm/rho
-    x_heat = np.zeros((n_times, n_xi), dtype=float)
-    for i in range(n_times):
-        m = data["m_heat"][i, :]
-        rho = data["rho_heat"][i, :]
-        x_heat[i, 0] = 0.0
-        for j in range(1, n_xi):
-            dm = m[j] - m[j - 1]
-            rho_mid = 0.5 * (rho[j] + rho[j - 1])
-            x_heat[i, j] = x_heat[i, j - 1] + dm / (rho_mid + 1e-30)
-    data["x_heat"] = x_heat
-    # Pressure at the front (last grid point = heat front)
-    data["P_front"] = data["P_heat"][:, -1].copy()
-    return data
-
-
 def fit_power_law_drive(times: np.ndarray, P_front: np.ndarray) -> Tuple[float, float]:
     """
     Fit P_front(t) = P0 * t^tau (power-law drive).
@@ -139,21 +97,6 @@ def fit_power_law_drive(times: np.ndarray, P_front: np.ndarray) -> Tuple[float, 
     log_P0 = np.mean(logp - tau * logt)
     P0 = np.exp(log_P0)
     return float(P0), float(tau)
-
-
-def compute_shock_profiles_at_times(
-    case,
-    times_sec: np.ndarray,
-    P0_Barye: float,
-    wP2: float,
-    wP3: float,
-) -> dict:
-    """Run shock solver with power-law drive P = P0 * t^tau. P0 in Barye (cgs)."""
-    from project_3.shussman_solvers.shock_solver.run_shock_solver import compute_shock_profiles
-    mat = _rad_hydro_case_to_material_shock(case)
-    # Pw[0], Pw[1], Pw[2]: P0 exponent, T0 exponent, time exponent (tau)
-    Pw = np.array([1, wP2, wP3], dtype=float)
-    return compute_shock_profiles(mat, P0_Barye * case.T0**wP2, Pw, times_ns=times_sec)
 
 
 def build_piecewise_reference(
@@ -250,8 +193,8 @@ def build_piecewise_reference(
 
 def run_shussman_piecewise_reference(
     case,
-    times_sec: np.ndarray,
-    T0_Hev: float,
+    times_ns: np.ndarray,
+    T0_HeV: float,
 ) -> Optional[RadHydroData]:
     """
     Build the piecewise Shussman reference (subsonic + shock) for comparison with rad_hydro.
@@ -260,40 +203,44 @@ def run_shussman_piecewise_reference(
     at those times, fits P_front(t) = P0*t^tau, runs shock solver with that drive,
     then builds piecewise reference.
     """
-    try:
-        from project_3.shussman_solvers.subsonic_solver.profiles_for_report_sub import (
-            compute_profiles_for_report,
-        )
-        from project_3.shussman_solvers.shock_solver.run_shock_solver import compute_shock_profiles
-    except ImportError as e:
-        print(f"  Shussman solvers not available: {e}")
-        return None
+    # importing the subsonic & shock solvers
+    from project_3.shussman_solvers.subsonic_solver.profiles_for_report_sub import compute_profiles_for_report
+    from project_3.shussman_solvers.shock_solver.profiles_for_report_shock import (
+        compute_shock_profiles,
+    )
 
-    T0_Hev = float(case.T0) / KELVIN_PER_HEV
+
+    T0_HeV = float(case.T0_Kelvin) / KELVIN_PER_HEV
     # 1) Subsonic profiles at same times
     print("Starting subsonic solving...")
-    subsonic_data = compute_subsonic_profiles_at_times(
-        case=case,
-        times_sec=times_sec,
-        T0_Hev=T0_Hev,
+    mat = _rad_hydro_case_to_material_sub(case)
+    tau = float(case.tau) if case.tau is not None else 0.0  # constant T drive
+    subsonic_data = compute_profiles_for_report(
+        mat = mat,
+        T0_phys_HeV=T0_HeV,
+        tau=tau,
+        times_ns=times_ns,
     )
     P_front = subsonic_data["P_heat"][-1,-1] # units = MBar
-    _, wP2, wP3 = subsonic_data["Pw"]
-    print("times_sec of ablation region: ", times_sec)
+    _, _, wP3 = subsonic_data["Pw"]
+    print("times_ns of ablation region: ", times_ns)
 
     # 2) Shock solver with appropriate drive
     print("Starting shock solving...")
-    times_ns = times_sec * 1e9
-    shock_data = compute_shock_profiles_at_times(case, times_ns, P0_Barye, wP2, wP3)
-
+    mat = _rad_hydro_case_to_material_shock(case)
+    # Pw[0], Pw[1], Pw[2]: P0 exponent, T0 exponent, time exponent (tau)
+    Pw = np.array([1, _, tau], dtype=float)
+    shock_data = compute_shock_profiles(mat, P_front, tau=tau, Pw=Pw, times_ns=times_ns, 
+                                            patching_method=True, save_npz=None)
+    
     # 3) Piecewise reference (subsonic + shock)
-    print("Starting shock solving...")
+    print("Starting building piecewise reference...")
     ref = build_piecewise_reference(
         case,
         subsonic_data,
         shock_data,
-        times_sec,
+        times_ns,
     )
-    print("times_sec of ablation region: ", times_sec)
+    print("times_ns of ablation region: ", times_ns)
     return ref
 

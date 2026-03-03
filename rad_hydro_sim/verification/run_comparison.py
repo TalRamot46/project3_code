@@ -562,8 +562,10 @@ def run_full_rad_hydro_comparison(
         print("Building Shussman piecewise reference (subsonic + shock)...")
         # sample 1 times from the sim_data.times
         times_sec = np.linspace(0, case.t_sec_end, 10000)
-        print(f"times_sec: {times_sec}")
-        ref_data = run_shussman_piecewise_reference(case, times_sec, T0_Hev=float(case.T0_Kelvin)/KELVIN_PER_HEV)
+        time_ns = times_sec * 1e9
+        T0_Hev = float(case.T0_Kelvin)/KELVIN_PER_HEV  # pyright: ignore[reportArgumentType]
+        print(f"times_ns: {time_ns}")
+        ref_data = run_shussman_piecewise_reference(case, times_ns=time_ns, T0_Hev=T0_Hev)
 
     if skip_rad_hydro:
         sim_data = ref_data
@@ -663,7 +665,7 @@ def main() -> None:
     
     run_comparison(
         MODE,
-        skip_rad_hydro=False,
+        skip_rad_hydro=True,
         skip_diffusion=False,
         skip_supersonic=False,
         skip_hydro_sim=False,

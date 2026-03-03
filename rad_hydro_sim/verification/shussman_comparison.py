@@ -109,7 +109,15 @@ def build_piecewise_reference(
     rho0: Optional[float] = None,
     T_initial_Kelvin: Optional[float] = None,
 ) -> RadHydroData:
-    """Piecewise Shussman: subsonic (density crossover) + shock [+ unperturbed tail]."""
+    """Piecewise Shussman: subsonic (density crossover) + shock [+ unperturbed tail].
+
+    Exact translation of the MATLAB concatenation logic:
+        m_trans  = max(m_heat(i,:));
+        relevant = find(m_shock(i,:) >= m_trans);
+        relevant = relevant(1:end-1);
+        relevant_heat = find(rho_heat(i,:) <= rho_shock(i,relevant(1)));
+        final    = [heat(relevant_heat), shock(relevant)];
+    """
     from project_3.rad_hydro_sim.simulation.radiation_step import KELVIN_PER_HEV, a_Hev
 
     times = np.asarray(times_sec, dtype=float).ravel()
@@ -121,49 +129,68 @@ def build_piecewise_reference(
     m_list, x_list, rho_list, p_list, u_list, e_list, T_list, E_list = [], [], [], [], [], [], [], []
 
     for k in range(n):
-        m_h, x_h = np.asarray(subsonic_data["m_heat"][k], float), np.asarray(subsonic_data["x_heat"][k], float)
-        rho_h, P_h = np.asarray(subsonic_data["rho_heat"][k], float), np.asarray(subsonic_data["P_heat"][k], float)
-        u_h, T_h = np.asarray(subsonic_data["u_heat"][k], float), np.asarray(subsonic_data["T_heat"][k], float)
+        m_h = np.asarray(subsonic_data["m_heat"][k], float)
+        rho_h = np.asarray(subsonic_data["rho_heat"][k], float)
+        P_h = np.asarray(subsonic_data["P_heat"][k], float)
+        u_h = np.asarray(subsonic_data["u_heat"][k], float)
+        T_h = np.asarray(subsonic_data["T_heat"][k], float)
+
         m_sr = np.asarray(shock_data["m_shock"][k], float)
-        x_sr = np.asarray(shock_data["x_shock"][k], float)
-        rho_s, P_s = np.asarray(shock_data["rho_shock"][k], float), np.asarray(shock_data["P_shock"][k], float)
+        rho_s = np.asarray(shock_data["rho_shock"][k], float)
+        P_s = np.asarray(shock_data["P_shock"][k], float)
         u_s = np.asarray(shock_data["u_shock"][k], float)
         e_s = np.asarray(shock_data["e_shock"][k], float)
-        T_s = np.asarray(shock_data["T_shock"][k], float) / KELVIN_PER_HEV
+        T_s = np.asarray(shock_data["T_shock"][k], float)
 
-        m_trans, x_front = float(np.max(m_h)), float(x_h[-1])
-        m_s, x_s = m_sr + m_trans, x_sr + x_front
-        rel = np.where(m_s >= m_trans)[0]
-        rel = rel[:-1] if len(rel) > 1 else rel
+        # MATLAB: m_trans = max(m_heat(i,:))
+        m_trans = float(np.max(m_h))
+
+        # MATLAB: relevant = find(m_shock(i,:) >= m_trans)  — raw, NO shift
+        rel = np.where(m_sr >= m_trans)[0]
+
+        # MATLAB: relevant = relevant(1:end-1)  — drop last element
+        if len(rel) > 1:
+            rel = rel[:-1]
+        else:
+            rel = np.array([], dtype=int)
 
         if len(rel) == 0:
-            m_k, x_k = m_h, x_h
-            rho_k, p_k, u_k = rho_h, P_h, u_h
-            e_k, T_k = P_h / (rho_h * r_gas + 1e-30), T_h
+            m_k = m_h.copy()
+            rho_k = rho_h.copy()
+            p_k = P_h.copy()
+            u_k = u_h.copy()
+            T_k = T_h.copy()
+            e_k = P_h / (rho_h * r_gas + 1e-30)
         else:
+            # MATLAB: relevant_heat = find(rho_heat(i,:) <= rho_shock(i,relevant(1)))
             rh = np.where(rho_h <= rho_s[rel[0]])[0]
-            m_k = np.concatenate([m_h[rh], m_s[rel]])
-            x_k = np.concatenate([x_h[rh], x_s[rel]])
+
+            # MATLAB: [heat(relevant_heat), shock(relevant)]  — raw arrays, NO shift
+            m_k = np.concatenate([m_h[rh], m_sr[rel]])
             rho_k = np.concatenate([rho_h[rh], rho_s[rel]])
             p_k = np.concatenate([P_h[rh], P_s[rel]])
             u_k = np.concatenate([u_h[rh], u_s[rel]])
-            e_k = np.concatenate([P_h[rh] / (rho_h[rh] * r_gas + 1e-30), e_s[rel]])
             T_k = np.concatenate([T_h[rh], T_s[rel]])
+            e_k = np.concatenate([P_h[rh] / (rho_h[rh] * r_gas + 1e-30), e_s[rel]])
 
+        # Unperturbed tail (MATLAB pads from max(m_shock) to 1.2*max(m_shock) at rho0)
         if m_max and rho0 and T_initial_Kelvin and m_max > m_k[-1]:
+            T0_HeV = float(T_initial_Kelvin) / KELVIN_PER_HEV
             e0 = float(case.f_Kelvin) * (float(T_initial_Kelvin) ** float(case.gamma)) * (float(rho0) ** (-float(case.mu)))
-            p0, T0 = r_gas * rho0 * e0, float(T_initial_Kelvin) / KELVIN_PER_HEV
-            m_end = float(m_k[-1])
-            m_ε = m_end + 1e-12  # step point: sharp jump to unperturbed
-            x_ε = float(x_k[-1]) + (m_ε - m_end) / float(rho_k[-1])
-            x_max = x_ε + (m_max - m_ε) / rho0
-            m_k = np.concatenate([m_k, [m_ε, m_max]])
-            x_k = np.concatenate([x_k, [x_ε, x_max]])
-            rho_k = np.concatenate([rho_k, [rho0, rho0]])
-            p_k = np.concatenate([p_k, [p0, p0]])
-            u_k = np.concatenate([u_k, [0.0, 0.0]])
-            e_k = np.concatenate([e_k, [e0, e0]])
-            T_k = np.concatenate([T_k, [T0, T0]])
+            p0 = r_gas * rho0 * e0
+            m_tail_start = float(m_k[-1])
+            n_tail = max(2, int(100 * (m_max - m_tail_start) / max(m_max, 1e-30)))
+            m_tail = np.linspace(m_tail_start, m_max, n_tail)[1:]
+            m_k = np.concatenate([m_k, m_tail])
+            rho_k = np.concatenate([rho_k, np.full(len(m_tail), rho0)])
+            p_k = np.concatenate([p_k, np.full(len(m_tail), p0)])
+            u_k = np.concatenate([u_k, np.zeros(len(m_tail))])
+            e_k = np.concatenate([e_k, np.full(len(m_tail), e0)])
+            T_k = np.concatenate([T_k, np.full(len(m_tail), T0_HeV)])
+
+        # Compute x from m and rho (x_heat from subsonic solver is invalid)
+        dm = np.diff(m_k, prepend=0.0)
+        x_k = np.cumsum(np.abs(dm) / (rho_k + 1e-30))
 
         E_list.append(a_Hev * T_k**4)
         m_list.append(m_k)
@@ -218,13 +245,6 @@ def run_shussman_piecewise_reference(
     shock_data = compute_shock_profiles(mat, P_front, tau=None, Pw=Pw, times_ns=times_ns, 
                                             patching_method=True, save_npz=None)
 
-    # making sure that both shocK_data and subsonic_data include T in Kelvin (they both return T in HeV)
-    import matplotlib.pyplot as plt
-    plt.plot(subsonic_data["m_heat"][-1], subsonic_data["T_heat"][-1])
-    plt.plot(shock_data["m_shock"][-1], shock_data["T_shock"][-1])
-    plt.show()
-    
-
     # 3) Piecewise reference (subsonic + shock [+ unperturbed to m_max])
     print("Starting building piecewise reference...")
     rho0 = float(case.rho0) if case.rho0 is not None else None
@@ -239,6 +259,6 @@ def run_shussman_piecewise_reference(
         rho0=rho0,
         T_initial_Kelvin=T_init,
     )
-    print("times_ns of ablation region: ", times_ns)
+
     return ref
 

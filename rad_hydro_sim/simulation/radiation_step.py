@@ -172,9 +172,19 @@ def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydr
     UR_star[-1] = 1e-10             # right boundary vacuum
     new_UR = (A / (1 + A)) * new_E_rad + (1 / (1 + A)) * UR_star
 
-    new_T = (new_UR / a_Kelvin)**(1/4)
-    new_e_material = f_Kelvin * new_T**gamma * rho**(-mu)
+    # Convert new_UR to new_Um using beta (definition: beta = dU_R/dU_m => dU_m = dU_R/beta)
+    # Linearization: U_m^{n+1} = U_m^* + (U_R^{n+1} - U_R^*) / beta
+    Um_star = rho * e_star
+    new_Um = Um_star + (new_UR - UR_star) / beta
 
+    # Radiation temperature: T_rad from U_R = a T^4
+    new_T = (new_UR / a_Kelvin) ** (1 / 4)
+
+    # Material specific energy directly from U_m: e = U_m / rho
+    new_e_material = new_Um / rho
+
+    # need to think if the following part is necessary, I think it is not - 
+    # but Cursor is suggesting it.
     # Explicitly enforce boundary conditions for T and e_material (avoids wrong BC when coupling yields incorrect values at boundaries)
     if rad_hydro_case.T0_Kelvin is not None:
         new_T[0] = T_left
@@ -182,6 +192,5 @@ def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydr
     # Right boundary: vacuum (E_rad=0) => cold material
     T_right = (new_E_rad[-1] / a_Kelvin) ** (1 / 4) if new_E_rad[-1] > 0 else 1e-10
     new_T[-1] = T_right
-    new_e_material[-1] = f_Kelvin * T_right**gamma * rho[-1] ** (-mu)
 
     return new_e_material, new_T, new_E_rad

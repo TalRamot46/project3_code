@@ -273,7 +273,7 @@ PRESET_TEST_CASES = {
         t_sec_end = 1e-9,
 
         initial_condition="temperature, density",
-        scenario="radiation_only",
+        scenario="full_rad_hydro",
         title="Fig 7 comparison (T0=1 HeV, τ=0, t=1 ns, Shussman verification)",
         geom=planar(),
     ),

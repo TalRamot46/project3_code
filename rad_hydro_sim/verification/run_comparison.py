@@ -117,6 +117,7 @@ def run_radiation_only_comparison(
     skip_supersonic: bool = False,
     show_plot: bool = True,
     save_png: bool = True,
+    save_gif: bool = True,
 ) -> None:
     """Run rad_hydro (radiation_only preset), 1D Diffusion, and Supersonic solver; compare T, E_rad."""
     from project_3.rad_hydro_sim.problems.presets_utils import get_preset
@@ -254,7 +255,7 @@ def run_radiation_only_comparison(
             extra_ref_data=[super_data] if super_data is not None else None,
         )
         print(f"Saved PNG: {png_path}")
-    if save_png and not skip_rad_hydro:
+    if save_gif:
         # Also save an animated GIF of the Rad-Hydro history for this case
         save_history_gif(
             history,
@@ -357,6 +358,7 @@ def run_hydro_only_comparison(
     skip_shock_solver: bool = False,
     show_plot: bool = True,
     save_png: bool = True,
+    save_gif: bool = True,
 ) -> None:
     """Run rad_hydro and hydro_sim and shock solver with matching P0*t^tau; compare rho, p, u, e."""
     from project_3.rad_hydro_sim.problems.presets_utils import get_preset
@@ -463,7 +465,7 @@ def run_hydro_only_comparison(
             shock_data=shock_data,
         )
         print(f"Saved PNG: {png_path}")
-    if save_png and not skip_rad_hydro:
+    if save_gif:
           # Also save an animated GIF of the Rad-Hydro history for this hydro-only case
         save_history_gif(
             history_rh,
@@ -514,6 +516,7 @@ def run_full_rad_hydro_comparison(
     skip_shussman: bool = False,
     show_plot: bool = True,
     save_png: bool = True,
+    save_gif: bool = True,
 ) -> None:
     """
     Run rad_hydro with constant temperature drive and compare to piecewise Shussman
@@ -571,6 +574,8 @@ def run_full_rad_hydro_comparison(
                 return [a[i, :].astype(float, copy=False) for i in range(a.shape[0])]
             return [a.astype(float, copy=False)]
 
+        T_raw = _to_list_of_arrays(loaded["T"]) if "T" in loaded else []
+        T_hev = [t_arr / KELVIN_PER_HEV for t_arr in T_raw]
         sim_data = RadHydroData(
             times=np.asarray(loaded["times"], dtype=float),
             m=_to_list_of_arrays(loaded["m"]),
@@ -579,7 +584,7 @@ def run_full_rad_hydro_comparison(
             p=_to_list_of_arrays(loaded["p"]),
             u=_to_list_of_arrays(loaded["u"]),
             e=_to_list_of_arrays(loaded["e"]),
-            T=_to_list_of_arrays(loaded["T"]) if "T" in loaded else [],
+            T=T_hev,
             E_rad=_to_list_of_arrays(loaded["E_rad"]) if "E_rad" in loaded else [],
             label="Rad-Hydro (full)",
             color="blue",
@@ -624,13 +629,13 @@ def run_full_rad_hydro_comparison(
             sim_data,
             ref_data,
             time=time_mid,
-            xaxis="x",
+            xaxis="m",
             savepath=str(png_path),
             show=False,
             title="Full rad_hydro vs Shussman (subsonic + shock)",
         )
         print(f"Saved PNG: {png_path}")
-    if save_png and not skip_rad_hydro:
+    if save_gif:
         # Also save an animated GIF of the Rad-Hydro history for this full rad_hydro case
         save_history_gif(
             history_rh,
@@ -702,7 +707,7 @@ def main() -> None:
     
     run_comparison(
         MODE,
-        skip_rad_hydro=True,
+        skip_rad_hydro=False,
         skip_diffusion=False,
         skip_supersonic=False,
         skip_hydro_sim=False,

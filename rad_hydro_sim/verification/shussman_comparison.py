@@ -250,11 +250,12 @@ def run_shussman_piecewise_reference(
     rho0 = float(case.rho0) if case.rho0 is not None else None
     T_init = float(case.T_initial_Kelvin) if case.T_initial_Kelvin is not None else None
     m_max = float(case.x_max) * float(case.rho0) if (case.x_max is not None and rho0 is not None) else None
+    times_sec = times_ns / 1e9
     ref = build_piecewise_reference(
         case,
         subsonic_data,
         shock_data,
-        times_ns,
+        times_sec,
         m_max=m_max,
         rho0=rho0,
         T_initial_Kelvin=T_init,

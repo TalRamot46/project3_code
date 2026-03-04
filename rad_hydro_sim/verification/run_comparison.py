@@ -504,9 +504,12 @@ def _pad_rad_hydro_data_to_min_frames(data, min_frames: int = 2, t_end_ns: float
     new_T = list(data.T) + [np.array(data.T[-1], copy=True) for _ in range(pad)] if data.T else []
     E_list = list(data.E_rad or [])
     new_E = E_list + [np.array(E_list[-1], copy=True) for _ in range(pad)] if E_list else []
+    Tm_list = list(data.T_material or [])
+    new_Tm = Tm_list + [np.array(Tm_list[-1], copy=True) for _ in range(pad)] if Tm_list else []
     return RadHydroData(
         times=new_times, m=new_m, x=new_x, rho=new_rho, p=new_p, u=new_u, e=new_e,
         T=new_T, E_rad=new_E if new_E else None,
+        T_material=new_Tm,
         label=data.label, color=data.color, linestyle=data.linestyle,
     )
 
@@ -561,6 +564,7 @@ def run_full_rad_hydro_comparison(
             times=sim_data.times, m=sim_data.m, x=sim_data.x,
             rho=sim_data.rho, p=sim_data.p, u=sim_data.u, e=sim_data.e,
             T=sim_data.T, E_rad=sim_data.E_rad,
+            T_material=sim_data.T_material if sim_data.T_material else [],
         )
         print(f"Saved sim_data to {sim_npz}")
 
@@ -576,6 +580,8 @@ def run_full_rad_hydro_comparison(
 
         T_raw = _to_list_of_arrays(loaded["T"]) if "T" in loaded else []
         T_hev = [t_arr / KELVIN_PER_HEV for t_arr in T_raw]
+        Tm_raw = _to_list_of_arrays(loaded["T_material"]) if "T_material" in loaded else []
+        Tm_hev = [t_arr / KELVIN_PER_HEV for t_arr in Tm_raw]
         sim_data = RadHydroData(
             times=np.asarray(loaded["times"], dtype=float),
             m=_to_list_of_arrays(loaded["m"]),
@@ -586,6 +592,7 @@ def run_full_rad_hydro_comparison(
             e=_to_list_of_arrays(loaded["e"]),
             T=T_hev,
             E_rad=_to_list_of_arrays(loaded["E_rad"]) if "E_rad" in loaded else [],
+            T_material=Tm_hev,
             label="Rad-Hydro (full)",
             color="blue",
             linestyle="-",

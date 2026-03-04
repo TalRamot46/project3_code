@@ -47,13 +47,15 @@ def load_rad_hydro_history(history: RadHydroHistory, label: str = "Rad-Hydro (fu
     e_list: list[np.ndarray] = []
     T_list: list[np.ndarray] = []
     E_rad_list: list[np.ndarray] = []
+    T_material_list: list[np.ndarray] = []
+    has_T_material = hasattr(history, "T_material") and history.T_material is not None
     for k in range(nt):
         x_k = history.x[k]
         m_k = history.m[k]
         rho_k = history.rho[k]
-        p_k = history.p[k] # Convert Barye -> MBars
-        u_k = history.u[k] # Convert cm/s -> Km/s
-        e_k = history.e[k] # Convert erg/g -> hJ/g
+        p_k = history.p[k]
+        u_k = history.u[k]
+        e_k = history.e[k]
         T_k = history.T[k]
         E_k = history.E_rad[k]
         x_list.append(x_k.copy() if hasattr(x_k, "copy") else np.asarray(x_k))
@@ -68,16 +70,20 @@ def load_rad_hydro_history(history: RadHydroHistory, label: str = "Rad-Hydro (fu
         if E_k is not None:
             e_arr = E_k
             E_rad_list.append(e_arr.copy() if hasattr(e_arr, "copy") else np.asarray(e_arr))
+        if has_T_material:
+            Tm_k = history.T_material[k]
+            T_material_list.append(Tm_k.copy() if hasattr(Tm_k, "copy") else np.asarray(Tm_k))
     return RadHydroData(
         times=times,
         m=m_list,
         x=x_list,
         rho=rho_list,
-        p=p_list, # Convert Barye -> 
+        p=p_list,
         u=u_list,
         e=e_list,
         T=T_list,
         E_rad=E_rad_list,
+        T_material=T_material_list,
         label=label,
         color="blue",
         linestyle="-",
@@ -231,10 +237,12 @@ def plot_comparison_single_time(
     print(sim_data.times[sim_idx])
 
     # Create figure
-    fig, axes = plt.subplots(3, 2, figsize=(12, 8), sharex=True)
+    fig, axes = plt.subplots(4, 2, figsize=(12, 11), sharex=True)
     ax_rho, ax_p = axes[0, 0], axes[0, 1]
     ax_u, ax_e = axes[1, 0], axes[1, 1]
-    ax_T, ax_E_rad = axes[2, 0], axes[2, 1]
+    ax_Tm, ax_T = axes[2, 0], axes[2, 1]
+    ax_E_rad = axes[3, 0]
+    axes[3, 1].set_visible(False)
     
     x_shock = shock_data.m[shock_idx] if shock_data and xaxis == "m" else (shock_data.x[shock_idx] if shock_data else None)
     if shock_data is not None and x_shock is not None:
@@ -290,13 +298,22 @@ def plot_comparison_single_time(
     ax_e.set_xlabel(xlabel)
     ax_e.grid(True, alpha=0.3)
 
-    # plot temperature (if present)
+    # plot material temperature (simulation only; reference typically doesn't have it)
+    _has_Tm = hasattr(sim_data, 'T_material') and sim_data.T_material
+    if _has_Tm:
+        ax_Tm.plot(x_sim, sim_data.T_material[sim_idx],
+                   color=sim_data.color, linestyle=sim_data.linestyle, lw=2)
+    ax_Tm.set_ylabel(r"$T_{\mathrm{mat}}$ [HeV]")
+    ax_Tm.set_xlabel(xlabel)
+    ax_Tm.grid(True, alpha=0.3)
+
+    # plot radiation temperature (if present)
     if hasattr(sim_data, 'T') and sim_data.T and hasattr(ref_data, 'T') and ref_data.T:
         ax_T.plot(x_sim, sim_data.T[sim_idx], 
                   color=sim_data.color, linestyle=sim_data.linestyle, lw=2)
         ax_T.plot(x_ref, ref_data.T[ref_idx], 
                   color=ref_data.color, linestyle=ref_data.linestyle, lw=2)
-    ax_T.set_ylabel(r"$T$ [HeV]")
+    ax_T.set_ylabel(r"$T_{\mathrm{rad}}$ [HeV]")
     ax_T.set_xlabel(xlabel)
     ax_T.grid(True, alpha=0.3)
 
@@ -353,11 +370,13 @@ def plot_comparison_slider(
     # Use simulation times as reference
     all_times = sim_data.times
     
-    fig, axes = plt.subplots(3, 2, figsize=(12, 9), sharex=True)
-    plt.subplots_adjust(bottom=0.15)
+    fig, axes = plt.subplots(4, 2, figsize=(12, 12), sharex=True)
+    plt.subplots_adjust(bottom=0.12)
     ax_rho, ax_p = axes[0, 0], axes[0, 1]
     ax_u, ax_e = axes[1, 0], axes[1, 1]
-    ax_T, ax_E_rad = axes[2, 0], axes[2, 1]
+    ax_Tm, ax_T = axes[2, 0], axes[2, 1]
+    ax_E_rad = axes[3, 0]
+    axes[3, 1].set_visible(False)
     xlabel = r"Mass coordinate $m$ [g/cm²]" if xaxis == "m" else r"Position $x$ [cm]"
     
     # Initial plot (k=0)
@@ -406,9 +425,14 @@ def plot_comparison_slider(
     else:
         lines['shock_e'], = ax_e.plot([], [], color="green", linestyle="-.")
 
-    # add temperature plots
+    # T_material (simulation only)
+    _has_Tm = hasattr(sim_data, 'T_material') and sim_data.T_material
+    if _has_Tm:
+        lines['sim_Tm'], = ax_Tm.plot(x_sim, sim_data.T_material[k], color=sim_data.color, lw=2)
+    else:
+        lines['sim_Tm'], = ax_Tm.plot([], [], color=sim_data.color, lw=2)
 
-    # T and E_rad (optional; plot only if present)
+    # T_rad and E_rad (optional; plot only if present)
     _has_T = hasattr(sim_data, 'T') and sim_data.T and hasattr(ref_data, 'T') and ref_data.T
     _has_E_rad = hasattr(sim_data, 'E_rad') and sim_data.E_rad and hasattr(ref_data, 'E_rad') and ref_data.E_rad
     if _has_T:
@@ -424,23 +448,23 @@ def plot_comparison_slider(
         lines['sim_E_rad'], = ax_E_rad.plot([], [], color=sim_data.color, lw=2)
         lines['ref_E_rad'], = ax_E_rad.plot([], [], color=ref_data.color, linestyle='--', lw=2)
     
-    # Labels with units: rho[g/cm³], P[MBar], u[km/s], e[hJ/g], T[HeV], E_rad[erg/cm³]
     ax_rho.set_ylabel(r"$\rho$ [g/cm³]")
     ax_rho.legend(loc="best")
     ax_rho.grid(True, alpha=0.3)
     
-    ax_p.set_ylabel(r"$P$ [MBar]")
+    ax_p.set_ylabel(r"$P$ [Barye]")
     ax_p.grid(True, alpha=0.3)
     
-    ax_u.set_ylabel(r"$u$ [km/s]")
-    ax_u.set_xlabel(xlabel)
+    ax_u.set_ylabel(r"$u$ [cm/s]")
     ax_u.grid(True, alpha=0.3)
     
-    ax_e.set_ylabel(r"$e$ [hJ/g]")
-    ax_e.set_xlabel(xlabel)
+    ax_e.set_ylabel(r"$e$ [erg/g]")
     ax_e.grid(True, alpha=0.3)
     
-    ax_T.set_ylabel(r"$T$ [HeV]")
+    ax_Tm.set_ylabel(r"$T_{\mathrm{mat}}$ [HeV]")
+    ax_Tm.grid(True, alpha=0.3)
+    
+    ax_T.set_ylabel(r"$T_{\mathrm{rad}}$ [HeV]")
     ax_T.grid(True, alpha=0.3)
     
     ax_E_rad.set_ylabel(r"$E_{\mathrm{rad}}$ [erg/cm³]")
@@ -453,7 +477,7 @@ def plot_comparison_slider(
         sim_t = sim_data.times[k]
         ref_t = ref_data.times[ref_k]
         base_title = title if title else "Shock Comparison"
-        title_text.set_text(f"{base_title}\nSim: t={sim_t:.2e}, Ref: t={ref_t:.2e}")
+        title_text.set_text(f"{base_title}\Simulatuion: t={sim_t:.2e}, Reference: t={ref_t:.2e}")
     
     set_title(k, ref_k)
     
@@ -490,6 +514,8 @@ def plot_comparison_slider(
         if shock_data is not None:
             lines['shock_e'].set_data(x_shock, shock_data.e[shock_k])
         
+        if _has_Tm:
+            lines['sim_Tm'].set_data(x_sim, sim_data.T_material[k])
         if hasattr(sim_data, 'T') and sim_data.T and hasattr(ref_data, 'T') and ref_data.T:
             lines['sim_T'].set_data(x_sim, sim_data.T[k])
             lines['ref_T'].set_data(x_ref, ref_data.T[ref_k])

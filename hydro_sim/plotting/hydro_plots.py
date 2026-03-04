@@ -48,6 +48,11 @@ def _create_6panel_vertical_figure(sharex: bool = True, figsize: tuple = (7, 10)
     fig, axes = plt.subplots(6, 1, figsize=figsize, sharex=sharex)
     return fig, axes
 
+def _create_7panel_vertical_figure(sharex: bool = True, figsize: tuple = (7, 12)):
+    """Create a vertical 7-panel figure for rad-hydro variables (adds T_material)."""
+    fig, axes = plt.subplots(7, 1, figsize=figsize, sharex=sharex)
+    return fig, axes
+
 
 # ============================================================================
 # Riemann Problem Plotting
@@ -157,7 +162,7 @@ def plot_shock_results(
     axes[2].plot(x_cells, u_cells, lw=2)
     _style_axis(axes[2], r"$u$ [km/s]")
     
-    axes[3].plot(x_cells, state.e, lw=2)
+    axes[3].plot(x_cells, state.e_material, lw=2)
     _style_axis(axes[3], r"$e$ [hJ/g]")
     axes[3].set_xlabel(r"Position $x$ [cm]")
     
@@ -218,7 +223,7 @@ def plot_sedov_results(
     ax_rho.plot(x_cells, state.rho, 'b-', lw=2, label="Numerical")
     ax_p.plot(x_cells, state.p, 'b-', lw=2)
     ax_u.plot(x_cells, u_cells, 'b-', lw=2)
-    ax_e.plot(x_cells, state.e, 'b-', lw=2)
+    ax_e.plot(x_cells, state.e_material, 'b-', lw=2)
     
     # Exact solution if provided
     if exact is not None:

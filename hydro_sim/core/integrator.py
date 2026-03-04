@@ -77,7 +77,7 @@ def step_lagrangian(state: HydroState,
 
     # (16) energy update
     dV = V_new - state.V
-    num = state.e - 0.5 * (state.p + state.q + q_new) * (dV / m_cells)
+    num = state.e_material - 0.5 * (state.p + state.q + q_new) * (dV / m_cells)
     den = 1.0 + 0.5 * (gamma - 1.0) * rho_new * (dV / m_cells)
     e_new = num / den
 
@@ -105,7 +105,7 @@ def step_lagrangian(state: HydroState,
         a=a_new,
         V=V_new,
         rho=rho_new,
-        e=e_new,
+        e_material=e_new,
         p=p_new,
         q=q_new,
         m_cells=m_cells
@@ -185,7 +185,7 @@ def _get_boundary_pressures(bc_left, bc_right, p_cells, t):
     elif bc_left == "reflective":
         # For reflective BC, use ghost cell with same pressure (dp/dn = 0)
         p_left = p_cells[0]
-    
+
     # Right boundary
     if isinstance(bc_right, dict) and bc_right.get("type") == "pressure":
         p_right = bc_right["p"]

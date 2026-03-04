@@ -137,10 +137,10 @@ def init_driven_shock(x_nodes: np.ndarray, case: DrivenShockCase) -> tuple:
         a=a_nodes,
         V=V_cells,
         rho=rho,
-        e=e,
+        e_material=e,
         p=p,
         q=q,
-        m_cells=m_cells
+        m_cells=m_cells,
     )
     return state
 

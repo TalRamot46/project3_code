@@ -39,8 +39,9 @@ class RadHydroData:
     p: List[np.ndarray]             # list of (N,) arrays - pressure
     u: List[np.ndarray]             # list of (N,) arrays - velocity
     e: List[np.ndarray]             # list of (N,) arrays - specific internal energy
-    T: List[np.ndarray] = field(default_factory=list)      # list of (N,) arrays - temperature [Hev]
+    T: List[np.ndarray] = field(default_factory=list)      # list of (N,) arrays - radiation temperature [Hev]
     E_rad: Optional[List[np.ndarray]] = field(default_factory=list)  # list of (N,) arrays - radiation energy [erg/cm^3]
+    T_material: List[np.ndarray] = field(default_factory=list)  # list of (N,) arrays - material temperature [Hev]
     label: str = "Rad-Hydro"
     color: str = "blue"
     linestyle: str = "-"

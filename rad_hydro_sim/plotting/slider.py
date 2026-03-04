@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 
 from project_3.hydro_sim.simulations.lagrangian_sim import HydroHistory
-from project_3.hydro_sim.plotting.hydro_plots import _create_6panel_vertical_figure
+from project_3.hydro_sim.plotting.hydro_plots import _create_7panel_vertical_figure
 from project_3.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 
 def plot_history_slider(
@@ -29,7 +29,9 @@ def plot_history_slider(
     # Use mass coordinate for x-axis when available (consistent with update)
     x_axis = history.m[k0] if hasattr(history, "m") else history.x[k0]
     
-    fig, axes = _create_6panel_vertical_figure()
+    has_T_material = hasattr(history, "T_material") and history.T_material is not None
+
+    fig, axes = _create_7panel_vertical_figure()
     plt.subplots_adjust(bottom=0.12)
     
     # Initial lines (same abscissa as in update)
@@ -38,15 +40,17 @@ def plot_history_slider(
     lines.append(axes[1].plot(x_axis, history.p[k0], lw=2)[0])
     lines.append(axes[2].plot(x_axis, history.u[k0], lw=2)[0])
     lines.append(axes[3].plot(x_axis, history.e[k0], lw=2)[0])
-    lines.append(axes[4].plot(x_axis, history.T[k0], lw=2)[0])
-    lines.append(axes[5].plot(x_axis, history.E_rad[k0], lw=2)[0])
+    lines.append(axes[4].plot(x_axis, history.T_material[k0] if has_T_material else history.T[k0], lw=2)[0])
+    lines.append(axes[5].plot(x_axis, history.T[k0], lw=2)[0])
+    lines.append(axes[6].plot(x_axis, history.E_rad[k0], lw=2)[0])
     axes[0].set_ylabel(r"$\rho$ [g/cm³]")
-    axes[1].set_ylabel(r"$p$ [MBar]")
-    axes[2].set_ylabel(r"$u$ [km/s]")
-    axes[3].set_ylabel(r"$e$ [hJ/g]")
-    axes[4].set_ylabel(r"$T$ [HeV]")
-    axes[5].set_ylabel(r"$E_{\mathrm{rad}}$ [erg/cm³]")
-    axes[5].set_xlabel(r"Mass coordinate $m$ [g/cm²]")
+    axes[1].set_ylabel(r"$p$ [Barye]")
+    axes[2].set_ylabel(r"$u$ [cm/s]")
+    axes[3].set_ylabel(r"$e_{\mathrm{mat}}$ [erg/g]")
+    axes[4].set_ylabel(r"$T_{\mathrm{mat}}$ [K]")
+    axes[5].set_ylabel(r"$T_{\mathrm{rad}}$ [K]")
+    axes[6].set_ylabel(r"$E_{\mathrm{rad}}$ [erg/cm³]")
+    axes[6].set_xlabel(r"Mass coordinate $m$ [g/cm²]")
     
     for ax in axes:
         ax.grid(True, alpha=0.3)
@@ -81,8 +85,9 @@ def plot_history_slider(
         lines[1].set_data(history.m[k], history.p[k])
         lines[2].set_data(history.m[k], history.u[k])
         lines[3].set_data(history.m[k], history.e[k])
-        lines[4].set_data(history.m[k], history.T[k])
-        lines[5].set_data(history.m[k], history.E_rad[k])
+        lines[4].set_data(history.m[k], history.T_material[k] if has_T_material else history.T[k])
+        lines[5].set_data(history.m[k], history.T[k])
+        lines[6].set_data(history.m[k], history.E_rad[k])
         set_title(k)
         
         for ax in axes:
@@ -108,5 +113,4 @@ def plot_history_slider(
         plt.close(fig)
     
     return fig, axes
-
 

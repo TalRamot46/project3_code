@@ -128,7 +128,7 @@ def plot_results(
         
         plot_riemann_results(
             x_cells=x_cells,
-            numerical=dict(rho=state.rho, p=state.p, u=u_num, e=state.e),
+            numerical=dict(rho=state.rho, p=state.p, u=u_num, e=state.e_material),
             exact=dict(rho=rho_ex, p=p_ex, u=u_ex, e=e_ex),
             meta=dict(
                 test_id=case.title or "Riemann",

@@ -164,10 +164,10 @@ def init_sedov(x_nodes: np.ndarray, case: SedovExplosionCase) -> tuple:
         a=a_nodes,
         V=V_cells,
         rho=rho,
-        e=e,
+        e_material=e,
         p=p,
         q=q,
-        m_cells=m_cells
+        m_cells=m_cells,
     )
     
     return state

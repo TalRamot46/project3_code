@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Union, Optional, Callable
 
-S_per_ns = 1e-9
+SEC_PER_NS = 1e-9
 
 class SimulationType(str, Enum):
     """Supported simulation types."""
@@ -96,7 +96,7 @@ def _get_boundary_conditions(
         # Pressure-driven left, outflow right
         t = state.t
         if hasattr(case, 'P0') and hasattr(case, 'tau'):
-            p_drive = case.P0 * ((t / S_per_ns) ** case.tau) if t > 0 else 0.0
+            p_drive = case.P0 * ((t / SEC_PER_NS) ** case.tau) if t > 0 else 0.0
         else:
             p_drive = 0.0
         return {"type": "pressure", "p": p_drive}, "outflow"
@@ -196,7 +196,7 @@ def simulate_lagrangian(
         RHOs.append(state.rho.copy())
         Ps.append(state.p.copy())
         Us.append(u_cells.copy())
-        Es.append(state.e.copy())
+        Es.append(state.e_material.copy())
     
     store_frame()
     dt_prev = np.inf

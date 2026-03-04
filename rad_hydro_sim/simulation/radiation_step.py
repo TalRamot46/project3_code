@@ -18,13 +18,19 @@ def calculate_temperature_from_specific_energy(
     e_material: np.ndarray, rho: np.ndarray, f: float, gamma: float, mu: float
 ) -> np.ndarray:
     return ((e_material / f) * rho**mu) ** (1/gamma)
-     
 
-def calculate_beta_from_temperature_and_density(T: np.ndarray, rho: np.ndarray) -> np.ndarray:
-    return 4*a_Kelvin / (f_Kelvin * gamma) * T**(4-gamma) * rho**(mu - 1)
 
-def calculate_sigma_from_temperature_and_density(T: np.ndarray, rho: np.ndarray) -> np.ndarray:
-    return 1.0 / (g_Kelvin * T**alpha * rho**(-lambda_ - 1))
+def calculate_beta(T_rad: np.ndarray, T_material: np.ndarray, rho: np.ndarray) -> np.ndarray:
+    """beta = dU_R/dU_m where U_R=a*T_rad^4, U_m=f*T_m^gamma*rho^{-mu+1}.
+    Near equilibrium dT_rad ~ dT_m, so
+    beta = (4a*T_rad^3) / (gamma*f*T_m^{gamma-1}*rho^{-mu+1})
+         = 4a/(f*gamma) * T_rad^3 * T_m^{1-gamma} * rho^{mu-1}
+    """
+    return 4*a_Kelvin / (f_Kelvin * gamma) * T_rad**3 * T_material**(1 - gamma) * rho**(mu - 1)
+
+def calculate_sigma(T_rad: np.ndarray, rho: np.ndarray) -> np.ndarray:
+    """Opacity from Rosen's formula evaluated at the radiation temperature."""
+    return 1.0 / (g_Kelvin * T_rad**alpha * rho**(-lambda_ - 1))
 
 def calculate_D_from_sigma(sigma: np.ndarray) -> np.ndarray:
     return c / (3 * sigma)
@@ -33,9 +39,12 @@ def calculate_A(beta: np.ndarray, sigma: np.ndarray, dt: float) -> np.ndarray:
     return chi * beta * sigma * dt * c
 
 def calculate_abcd(sigma: np.ndarray, D: np.ndarray, A: np.ndarray, m_cells: np.ndarray, rho: np.ndarray, E_rad
-                   : np.ndarray, T_star: np.ndarray, dt: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+                   : np.ndarray, T_rad: np.ndarray, dt: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Returns the coefficients a, b, c, d for the implicit update of material energy and radiation energy density.
     a = [a1, a2, ..., aN], a_i^n = a[i-1] at time step n
+
+    T_rad is the radiation temperature from the previous step, used to compute
+    UR_star = a * T_rad^4 (the radiation equilibrium at the start of the step).
     """
     D_face_left = rho[:-2] * (D[:-2] + D[1:-1]) / 2 # Left face
     D_face_right = rho[2:] * (D[1:-1] + D[2:]) / 2 # Right face
@@ -43,12 +52,10 @@ def calculate_abcd(sigma: np.ndarray, D: np.ndarray, A: np.ndarray, m_cells: np.
     coeff = rho[1:-1] / (m_cells[1:-1]**2)
     a = -coeff * D_face_left
     c_coeff = -coeff * D_face_right
-    # b = coeff * (D_face_right - D_face_left) + 1/dt + F # My version
-    b = coeff * (D_face_right + D_face_left) + 1/dt + F # Corrected version with positive diffusion coefficients on the diagonal
-    UR_star = a_Kelvin * T_star[1:-1]**4
+    b = coeff * (D_face_right + D_face_left) + 1/dt + F
+    UR_star = a_Kelvin * T_rad[1:-1]**4
     d = F * UR_star + (1/dt) * E_rad[1:-1]
 
-    # check for nan values in the coefficients which would indicate a problem with the input parameters or the state    if np.any(np.isnan(a)):
     if np.any(np.isnan(a)) or np.any(np.isnan(b)) or np.any(np.isnan(c_coeff)) or np.any(np.isnan(d)):
         j = np.where(np.isnan(a))[0][0] if np.any(np.isnan(a)) else (np.where(np.isnan(b))[0][0] if np.any(np.isnan(b)) else (np.where(np.isnan(c_coeff))[0][0] if np.any(np.isnan(c_coeff)) else np.where(np.isnan(d))[0][0]))
         raise ValueError(
@@ -56,7 +63,6 @@ def calculate_abcd(sigma: np.ndarray, D: np.ndarray, A: np.ndarray, m_cells: np.
             f"a={a[j]}, b={b[j]}, c={c_coeff[j]}, "
             f"coef={coeff[j]}, dt={dt}, F={F[j]}, UR_star={UR_star[j]}"
         )
-    
     
     if np.any(b <= 0):
         j = np.where(b <= 0)[0][0]
@@ -71,33 +77,17 @@ def solve_tridiagonal(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray
     """Solves the tridiagonal system Ax = d where A has sub-diagonal a, diagonal b, and super-diagonal c."""
     if use_scipy:
         from scipy.linalg import solve_banded
-        # Create the banded matrix for solve_banded
-        # The matrix A has the form:
-        # [b[0], c[0], 0, ..., ..., 0]               [d[0]] # boundary condition already applied to d[1]
-        # [a[1], b[1], c[1], ..., ...,0]             [d[1]]
-        # [0, a[2], b[2], ..., ..., 0] 
-        # [0, ..., ..., ..., ..., ..., 0]      
-        # [0, ..., ..., a[N-4], b[N-4], c[N-4]]      [d[N-4]] 
-        # [0, ..., ..., 0, a[N-3], b[N-3]]]          [d[N-3]]
-
-        # The ab matrix for solve_banded should have shape (3, n-2) where n is the length of b (the number of unknowns)
-        # The first row of ab is the super-diagonal (c), the second row is the diagonal (b), and the third row is the sub-diagonal (a).
-        # [0, c[0], c[1], ..., c[N-4], 0]
-        # [b[0], b[1], b[2], ..., b[N-4], b[N-3]]
-        # [0, a[1], ..., a[N-4], a[N-3], 0]
-
-        N = len(b) + 2 # b_j is defined for j=2,...,n-1 so b[j]=b_{j+2} is defined for j=0,...,N-3, so len(b) = N-2, so N = len(b) + 2
-        ab = np.zeros((3, N - 2))  # 3 rows for sub-diagonal, diagonal, super-diagonal
+        N = len(b) + 2
+        ab = np.zeros((3, N - 2))
         ab[0, 1:] = c[:N-3]  # super-diagonal
         ab[1, :] = b[:N-2]    # diagonal
         ab[2, :-1] = a[1:N-2]  # sub-diagonal
         E_rad_interior = solve_banded((1, 1), ab, d[:N-2])
-        E_rad = np.zeros(N) # E_rad_j is defined for j=1,...,N, so E_rad[j]=E_rad_{j+1} is defined for j=0,...,N-1, so len(E_rad) = N
-                            # and E_rad[0] and E_rad[N-1] will be set by boundary conditions by the MAIN radiation_step(), so the interior points are E_rad[1:N-1]
+        E_rad = np.zeros(N)
         E_rad[1:N-1] = E_rad_interior
         return E_rad
     
-    else: # Implement Thomas algorithm for tridiagonal systems - REQUIRES CORRECTION OF INDEXING!
+    else:
         n = len(b)
         c_prime = np.zeros(n-1)
         d_prime = np.zeros(n)
@@ -105,7 +95,6 @@ def solve_tridiagonal(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray
         c_prime[0] = c[0] / b[0]
         d_prime[0] = d[0] / b[0]
 
-        # Forward sweep
         for i in range(1, n-1):
             denom = b[i] - a[i-1] * c_prime[i-1]
             c_prime[i] = c[i] / denom
@@ -113,7 +102,6 @@ def solve_tridiagonal(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray
 
         d_prime[n-1] = (d[n-1] - a[n-2] * d_prime[n-2]) / (b[n-1] - a[n-2] * c_prime[n-2])
 
-        # Back substitution
         x = np.zeros(n)
         x[-1] = d_prime[-1]
         for i in range(n-2, -1, -1):
@@ -127,70 +115,66 @@ def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydr
     Updates the material specific energy & radiation energy density based on the coupling between matter and radiation.
     
     Parameters:
-        e_star: Material specific energy in erg/g
-        rho: Material density in g/cm^3
+        state_star: Post-hydro state with e_material, rho, T_rad, E_rad
         dt: Time step in seconds
+        rad_hydro_case: Problem configuration
         
     Returns:
         new_e_material: Updated material specific energy in erg/g
-        new_T: Updated temperature in K
-        e_rad: Radiation energy density in erg/cm^3
+        new_T_rad: Updated radiation temperature in K
+        new_E_rad: Updated radiation energy density in erg/cm^3
     """
     global alpha, gamma, mu, f_Kelvin, chi, lambda_, g_Kelvin
     alpha, gamma, mu, f_Kelvin, chi, lambda_, g_Kelvin = rad_hydro_case._get_params()
-    e_star, rho, m_cells, E_rad, T_star = (
-        state_star.e,
+    e_star, rho, m_cells, E_rad, T_rad_current = (
+        state_star.e_material,
         state_star.rho,
         state_star.m_cells,
         state_star.E_rad,
-        state_star.T,
+        state_star.T_rad,
     )
 
-    # calculating the opacity & specific energy from Rosen's model
-    T_star = calculate_temperature_from_specific_energy(e_star, rho, f_Kelvin, gamma, mu)
-    beta = calculate_beta_from_temperature_and_density(T_star, rho)
-    sigma = calculate_sigma_from_temperature_and_density(T_star, rho)
+    # Material temperature from e_star (needed for beta's T_material dependence)
+    T_material_star = calculate_temperature_from_specific_energy(e_star, rho, f_Kelvin, gamma, mu)
+    # Opacity and diffusion use T_rad; beta uses both T_rad and T_material
+    beta = calculate_beta(T_rad_current, T_material_star, rho)
+    sigma = calculate_sigma(T_rad_current, rho)
     D = calculate_D_from_sigma(sigma)
     A = calculate_A(beta, sigma, dt)
 
-    # calculating the coefficients for the implicit update
-    a, b, c_coeff, d = calculate_abcd(sigma, D, A, m_cells, rho, E_rad, T_star, dt)
+    # Build tridiagonal system; UR_star uses T_rad_current (radiation state from previous step)
+    a, b, c_coeff, d = calculate_abcd(sigma, D, A, m_cells, rho, E_rad, T_rad_current, dt)
 
-    t_drive = max(state_star.t, dt) # avoid t=0 for the power law drive
+    t_drive = max(state_star.t, dt)
     T_left = rad_hydro_case.T0_Kelvin * (t_drive/(10**-9))**rad_hydro_case.tau
     E_left = a_Kelvin * T_left**4
     d[0] -= a[0] * E_left
 
-    # solving the tridiagonal system for radiation energy density
     new_E_rad = solve_tridiagonal(a, b, c_coeff, d)
-    new_E_rad[0] = E_left  # Left boundary condition: E_rad[0] = a_Kelvin * T_left^4 (consistent with the boundary condition for material energy)
-    new_E_rad[-1] = 0 # Right boundary condition: E_rad[-1] = 0 (vacuum)
+    new_E_rad[0] = E_left
+    new_E_rad[-1] = 0
 
-    # updating UR, T and material specific energy based on the new radiation energy density
-    UR_star = a_Kelvin * T_star**4   # length N (same as A and new_E_rad)
-    UR_star[0]  = E_left          # left boundary consistent
-    UR_star[-1] = 1e-10             # right boundary vacuum
+    # UR_star from radiation temperature (consistent with the d-vector source term)
+    UR_star = a_Kelvin * T_rad_current**4
+    UR_star[0]  = E_left
+    UR_star[-1] = 1e-10
     new_UR = (A / (1 + A)) * new_E_rad + (1 / (1 + A)) * UR_star
 
-    # Convert new_UR to new_Um using beta (definition: beta = dU_R/dU_m => dU_m = dU_R/beta)
-    # Linearization: U_m^{n+1} = U_m^* + (U_R^{n+1} - U_R^*) / beta
+    # Convert new_UR to new_Um using beta
     Um_star = rho * e_star
     new_Um = Um_star + (new_UR - UR_star) / beta
 
-    # Radiation temperature: T_rad from U_R = a T^4
-    new_T = (new_UR / a_Kelvin) ** (1 / 4)
+    # Radiation temperature from the updated U_R
+    new_T_rad = (new_UR / a_Kelvin) ** (1 / 4)
 
-    # Material specific energy directly from U_m: e = U_m / rho
+    # Material specific energy directly from U_m
     new_e_material = new_Um / rho
 
-    # need to think if the following part is necessary, I think it is not - 
-    # but Cursor is suggesting it.
-    # Explicitly enforce boundary conditions for T and e_material (avoids wrong BC when coupling yields incorrect values at boundaries)
+    # Enforce boundary conditions
     if rad_hydro_case.T0_Kelvin is not None:
-        new_T[0] = T_left
+        new_T_rad[0] = T_left
         new_e_material[0] = f_Kelvin * T_left**gamma * rho[0] ** (-mu)
-    # Right boundary: vacuum (E_rad=0) => cold material
     T_right = (new_E_rad[-1] / a_Kelvin) ** (1 / 4) if new_E_rad[-1] > 0 else 1e-10
-    new_T[-1] = T_right
+    new_T_rad[-1] = T_right
 
-    return new_e_material, new_T, new_E_rad
+    return new_e_material, new_T_rad, new_E_rad

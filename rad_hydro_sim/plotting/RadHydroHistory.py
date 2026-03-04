@@ -11,8 +11,10 @@ class RadHydroHistory(HydroHistory):
     Time history of radiation-hydrodynamics simulation fields.
     
     Inherits from HydroHistory and adds:
-        T: Temperature at each snapshot (K, Ncells)
-        E_rad: Radiation energy density at each snapshot (K, Ncells)
+        T: Radiation temperature at each snapshot (K, Ncells) [Kelvin]
+        E_rad: Radiation energy density at each snapshot (K, Ncells) [erg/cm^3]
+        T_material: Material temperature at each snapshot (K, Ncells) [Kelvin]
     """
-    T: np.ndarray      # (K, Ncells) temperature
-    E_rad: np.ndarray  # (K, Ncells) radiation energy density
+    T: np.ndarray = None      # (K, Ncells) radiation temperature
+    E_rad: np.ndarray = None  # (K, Ncells) radiation energy density
+    T_material: np.ndarray = None  # (K, Ncells) material temperature (from Rosen EOS)

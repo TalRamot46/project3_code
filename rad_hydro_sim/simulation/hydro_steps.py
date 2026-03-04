@@ -56,7 +56,7 @@ def get_e_star_from_hydro(
 
     # (16) energy update
     dV = V_new - state.V
-    num = state.e - 0.5 * (state.p + state.q + q_new) * (dV / state.m_cells)
+    num = state.e_material - 0.5 * (state.p + state.q + q_new) * (dV / state.m_cells)
     den = 1.0 + 0.5 * r * rho_new * (dV / state.m_cells)
     e_star = num / den
     
@@ -65,15 +65,16 @@ def get_e_star_from_hydro(
         t=state.t,
         x=x_new,
         u=u_half,
-        a=state.a,  # acceleration will be updated after radiation step
+        a=state.a,
         V=V_new,
         rho=rho_new,
-        e=e_star,
-        p=state.p,  # pressure will be updated after radiation step
+        e_material=e_star,
+        p=state.p,
         q=q_new,
         m_cells=state.m_cells,
-        T=state.T,  # temperature will be updated after radiation step
-        E_rad=state.E_rad # radiation energy will be updated after radiation step
+        T_material=state.T_material,
+        T_rad=state.T_rad,
+        E_rad=state.E_rad,
     )
 
     return state_star
@@ -104,12 +105,13 @@ def update_nodes_from_pressure(state: RadHydroState, case: RadHydroCase, e_new, 
         a=a_new, # acceleration updated with new pressure
         V=state.V,
         rho=state.rho,
-        e=e_new,
-        p=p_new, # pressure updated with new energy (after radiation step)
+        e_material=e_new,
+        p=p_new,
         q=state.q,
         m_cells=state.m_cells,
-        T=state.T, # new_state.T already calculated in radiation step.
-        E_rad=state.E_rad # new_state.E_rad already calculated in radiation step.
+        T_material=state.T_material,
+        T_rad=state.T_rad,
+        E_rad=state.E_rad,
     )
 
     return new_state

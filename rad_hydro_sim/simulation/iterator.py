@@ -27,23 +27,25 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> tuple:
     p = np.zeros_like(x_cells)
     u = np.zeros_like(x_nodes)
     e = np.zeros_like(x_cells)
-    T = np.zeros_like(x_cells)
+    T_material = np.zeros_like(x_cells)
+    T_rad = np.zeros_like(x_cells)
     E_rad= np.zeros_like(x_cells)
 
     if case.initial_condition == "temperature, density":
-        # If initial condition is given in terms of temperature, convert to specific energy
-        T = np.full_like(x_cells, case.T_initial_Kelvin)
-        e = case.f_Kelvin * T**case.gamma * case.rho0**(-case.mu)
+        T_material = np.full_like(x_cells, case.T_initial_Kelvin)
+        e = case.f_Kelvin * T_material**case.gamma * case.rho0**(-case.mu)
         rho = np.full_like(x_cells, case.rho0)
         p = (case.r + 1) * rho * e  # Ideal gas EOS
-        E_rad=a_Kelvin * T**4
+        T_rad = T_material.copy()
+        E_rad = a_Kelvin * T_rad**4
     elif case.initial_condition == "pressure, velocity, density":
         rho = np.full_like(x_cells, case.rho0)
         p = np.full_like(x_cells, case.p0)
         u = np.full_like(x_nodes, case.u0)
         e = internal_energy_from_prho(p, rho, case.r+1)
-        T = calculate_temperature_from_specific_energy(e, rho, case.f_Kelvin, case.gamma, case.mu)  # Initial temperature from Rosen's model
-        E_rad = np.zeros_like(x_cells)  # Assuming no initial radiation energy
+        T_material = calculate_temperature_from_specific_energy(e, rho, case.f_Kelvin, case.gamma, case.mu)
+        T_rad = T_material.copy()
+        E_rad = a_Kelvin * T_rad**4
         
     q = np.zeros_like(x_cells)
 
@@ -51,10 +53,13 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> tuple:
     V = cell_volumes(x_nodes, geom)
     m_cells = masses_from_initial_rho(x_nodes, rho, geom)
     
-    a = np.zeros_like(x_nodes) # Initial acceleration will be computed in a matching step.
+    a = np.zeros_like(x_nodes)
 
-
-    state = RadHydroState(t=0.0, x=x_nodes, u=u, a=a, V=V, rho=rho, e=e, p=p, q=q, m_cells=m_cells, T=T, E_rad=E_rad)
+    state = RadHydroState(
+        t=0.0, x=x_nodes, u=u, a=a, V=V, rho=rho,
+        e_material=e, p=p, q=q, m_cells=m_cells,
+        T_material=T_material, T_rad=T_rad, E_rad=E_rad,
+    )
     return state
 
 def simulate_rad_hydro(
@@ -71,7 +76,9 @@ def simulate_rad_hydro(
     
     # ---- history buffers ----
     times = []
-    x_history, m_history, RHOs, Ps, u_history, Es, T_history, E_rad_history = [], [], [], [], [], [], [], []
+    x_history, m_history = [], []
+    RHOs, Ps, u_history, Es = [], [], [], []
+    T_material_history, T_rad_history, E_rad_history = [], [], []
 
     def store_frame():
         x_cells = 0.5 * (state.x[:-1] + state.x[1:])
@@ -83,9 +90,10 @@ def simulate_rad_hydro(
         RHOs.append(state.rho.copy())
         Ps.append(state.p.copy())
         u_history.append(u_cells.copy())
-        Es.append(state.e.copy())
-        T_history.append(state.T.copy())
-        E_rad_history.append(state.E_rad.copy())
+        Es.append(state.e_material.copy())
+        T_material_history.append(state.T_material.copy() if state.T_material is not None else np.zeros_like(state.rho))
+        T_rad_history.append(state.T_rad.copy() if state.T_rad is not None else np.zeros_like(state.rho))
+        E_rad_history.append(state.E_rad.copy() if state.E_rad is not None else np.zeros_like(state.rho))
     store_frame()
     dt_prev = np.inf
     step = 0
@@ -101,11 +109,11 @@ def simulate_rad_hydro(
                         dt_cfl = min(0.05 * t_end, dt_prev * 1.1, t_end - state.t, 1e-12)
                     dt = min(dt_cfl, 0.05 * t_end, dt_prev * 1.1, t_end - state.t)
                 if rad_hydro_case.scenario == "radiation_only":
-                    dt_rel = update_dt_relchange(dt_prev, state.E_rad, E_rad_history[-1], state.T, T_history[-1])
+                    dt_rel = update_dt_relchange(dt_prev, state.E_rad, E_rad_history[-1], state.T_rad, T_rad_history[-1])
                     dt = min(dt_rel, 0.05 * t_end, dt_prev * 1.1, t_end - state.t, 1e-12)
                 elif rad_hydro_case.scenario == "full_rad_hydro":
                     dt_cfl = compute_dt_cfl(state.x, state.u, state.rho, state.p, rad_hydro_case.r+1, simulation_config.CFL)
-                    dt_rel = update_dt_relchange(dt_prev, state.E_rad, E_rad_history[-1], state.T, T_history[-1])
+                    dt_rel = update_dt_relchange(dt_prev, state.E_rad, E_rad_history[-1], state.T_rad, T_rad_history[-1])
                     dt = min(dt_cfl, dt_rel, 0.05 * t_end, dt_prev * 1.1, t_end - state.t)
                     if np.isnan(dt):
                         dt = min(0.05 * t_end, dt_prev * 1.1, t_end - state.t, 1e-12)
@@ -144,8 +152,9 @@ def simulate_rad_hydro(
         p=np.stack(Ps, axis=0),
         u=np.stack(u_history, axis=0),
         e=np.stack(Es, axis=0),
-        T=np.stack(T_history, axis=0),
-        E_rad=np.stack(E_rad_history, axis=0)
+        T=np.stack(T_rad_history, axis=0),
+        E_rad=np.stack(E_rad_history, axis=0),
+        T_material=np.stack(T_material_history, axis=0),
     )
 
     x_cells = 0.5 * (state.x[:-1] + state.x[1:])

@@ -21,7 +21,7 @@ def _make_state(ncells=100, p0=1.0, rho0=1.0, u0=0.0):
     p = np.full(ncells, p0)
     return HydroState(
         t=0.0, x=x, u=u, a=None,
-        V=None, rho=rho, e=None, p=p, q=None, m_cells=None,
+        V=None, rho=rho, e_material=None, p=p, q=None, m_cells=None,
     )
 
 

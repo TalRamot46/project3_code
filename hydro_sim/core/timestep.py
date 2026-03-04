@@ -33,7 +33,7 @@ def compute_dt_cfl(x_nodes, u_nodes, rho_cells, p_cells, gamma, CFL):
     # 1) acoustic CFL
     dt_acoustic = compute_dt_acoustic(
         HydroState(t=0.0, x=x_nodes, u=u_nodes, a=None,
-                   V=None, rho=rho_cells, e=None, p=p_cells, q=None, m_cells=None),
+                   V=None, rho=rho_cells, e_material=None, p=p_cells, q=None, m_cells=None),
         gamma, CFL)
     
     # 2) mesh-crossing limiter (prevents x_{i+1} < x_i after update)

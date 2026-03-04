@@ -93,7 +93,7 @@ DRIVEN_SHOCK_TEST_CASES = {
 }
 
 
-def init_driven_shock(x_nodes: np.ndarray, case: DrivenShockCase) -> tuple:
+def init_driven_shock(x_nodes: np.ndarray, case: DrivenShockCase) -> HydroState:
     """
     Initialize HydroState and cell masses for a driven shock problem.
     
@@ -103,7 +103,6 @@ def init_driven_shock(x_nodes: np.ndarray, case: DrivenShockCase) -> tuple:
         
     Returns:
         state: Initial HydroState
-        m: Cell masses (fixed in Lagrangian formulation)
     """
     x_nodes = np.asarray(x_nodes, dtype=float)
     N = x_nodes.size - 1
@@ -119,6 +118,7 @@ def init_driven_shock(x_nodes: np.ndarray, case: DrivenShockCase) -> tuple:
     p = np.full(N, float(p0))
     e = internal_energy_from_prho(p, rho, gamma)
     q = np.zeros_like(rho)
+    T = np.zeros_like(rho)
 
     # Node-centered velocity (uniform)
     u_nodes = np.full(N + 1, float(u0))
@@ -141,6 +141,7 @@ def init_driven_shock(x_nodes: np.ndarray, case: DrivenShockCase) -> tuple:
         p=p,
         q=q,
         m_cells=m_cells,
+        T_material=T,
     )
     return state
 

@@ -2,7 +2,7 @@ import numpy as np
 from .eos import sound_speed
 from .state import HydroState
 
-def compute_dt_acoustic(state, gamma, CFL):
+def compute_dt_acoustic(state: HydroState, gamma: float, CFL: float) -> float:
     c = sound_speed(state.rho, state.p, gamma)     # cells
     dx = state.x[1:] - state.x[:-1]                # cells
 
@@ -11,7 +11,7 @@ def compute_dt_acoustic(state, gamma, CFL):
     dt = CFL * np.min(dx / (wave_speed + 1e-30))
     return dt
 
-def compute_dt_crossing(x_nodes, u_nodes, CFL):
+def compute_dt_crossing(x_nodes: np.ndarray, u_nodes: np.ndarray, CFL: float) -> float:
     du = u_nodes[:-1] - u_nodes[1:]                     # per cell
     dx = x_nodes[1:] - x_nodes[:-1]
     collapsing = du > 0.0
@@ -29,18 +29,16 @@ def compute_dt_volchange(x_nodes, u_nodes, eta=0.1):
     return dt
 
 
-def compute_dt_cfl(x_nodes, u_nodes, rho_cells, p_cells, gamma, CFL):
+def compute_dt_cfl(state: HydroState, gamma: float, CFL: float) -> float:
     # 1) acoustic CFL
-    dt_acoustic = compute_dt_acoustic(
-        HydroState(t=0.0, x=x_nodes, u=u_nodes, a=None,
-                   V=None, rho=rho_cells, e_material=None, p=p_cells, q=None, m_cells=None),
-        gamma, CFL)
+    dt_acoustic = compute_dt_acoustic(state, gamma=gamma, CFL=CFL)
+    
     
     # 2) mesh-crossing limiter (prevents x_{i+1} < x_i after update)
     # cell is collapsing if u_left > u_right
-    dt_cross = compute_dt_crossing(x_nodes, u_nodes, CFL)
+    dt_cross = compute_dt_crossing(state.x, state.u, CFL)
 
-    dt_vol_change = compute_dt_volchange(x_nodes, u_nodes, eta=0.1)
+    dt_vol_change = compute_dt_volchange(state.x, state.u, eta=0.1)
     dt_vol_change = np.inf
     return min(dt_acoustic, dt_cross, dt_vol_change)
 

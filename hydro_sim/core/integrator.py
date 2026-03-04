@@ -97,6 +97,7 @@ def step_lagrangian(state: HydroState,
     
     # Apply velocity boundary conditions at full step
     u_new = _apply_velocity_bc_full(u_new, bc_left, bc_right)
+    T_new = np.zeros_like(e_new)
 
     return HydroState(
         t=state.t + dt,
@@ -108,7 +109,8 @@ def step_lagrangian(state: HydroState,
         e_material=e_new,
         p=p_new,
         q=q_new,
-        m_cells=m_cells
+        m_cells=m_cells,
+        T_material=T_new,
     )
 
 

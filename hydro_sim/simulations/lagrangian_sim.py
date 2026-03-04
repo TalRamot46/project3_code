@@ -20,6 +20,7 @@ import numpy as np
 from dataclasses import dataclass
 from enum import Enum
 from typing import Union, Optional, Callable
+from ..core.state import HydroState
 
 SEC_PER_NS = 1e-9
 
@@ -116,12 +117,12 @@ def _initialize_problem(
     geom: Geometry,
     gamma: float,
     Ncells: int,
-) -> tuple:
+) -> HydroState:
     """
     Initialize state and masses for the given problem type.
     
     Returns:
-        (state, m_cells, x_nodes)
+        state: HydroState
     """
     if sim_type == SimulationType.RIEMANN:
         x_nodes = np.linspace(case.x_min, case.x_max, Ncells + 1)
@@ -207,7 +208,7 @@ def simulate_lagrangian(
         while state.t < t_end:
             # Adaptive timestep
             if step > 2:
-                dt = compute_dt_cfl(state.x, state.u, state.rho, state.p, gamma, CFL)
+                dt = compute_dt_cfl(state, gamma, CFL)
                 dt = min(dt, 0.05 * t_end, dt_prev * 1.1, t_end - state.t)
                 if np.isnan(dt):
                     dt = min(0.05 * t_end, dt_prev * 1.1, t_end - state.t)

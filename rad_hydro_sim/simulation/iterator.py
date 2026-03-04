@@ -16,7 +16,7 @@ from project_3.rad_hydro_sim.simulation.radiation_step import (
 )
 from project_3.hydro_sim.problems.simulation_config import SimulationConfig
 
-def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> tuple:
+def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydroState:
     """Initialize the problem state based on the case and simulation type."""
     # Unpack parameters from case & config
     geom = planar()
@@ -104,7 +104,7 @@ def simulate_rad_hydro(
             # Adaptive timestep
             if step > 2:
                 if rad_hydro_case.scenario == "hydro_only":
-                    dt_cfl = compute_dt_cfl(state.x, state.u, state.rho, state.p, rad_hydro_case.r+1, simulation_config.CFL)
+                    dt_cfl = compute_dt_cfl(state, rad_hydro_case.r+1, simulation_config.CFL)
                     if np.isnan(dt_cfl):
                         dt_cfl = min(0.05 * t_end, dt_prev * 1.1, t_end - state.t, 1e-12)
                     dt = min(dt_cfl, 0.05 * t_end, dt_prev * 1.1, t_end - state.t)
@@ -112,7 +112,7 @@ def simulate_rad_hydro(
                     dt_rel = update_dt_relchange(dt_prev, state.E_rad, E_rad_history[-1], state.T_rad, T_rad_history[-1])
                     dt = min(dt_rel, 0.05 * t_end, dt_prev * 1.1, t_end - state.t, 1e-12)
                 elif rad_hydro_case.scenario == "full_rad_hydro":
-                    dt_cfl = compute_dt_cfl(state.x, state.u, state.rho, state.p, rad_hydro_case.r+1, simulation_config.CFL)
+                    dt_cfl = compute_dt_cfl(state, rad_hydro_case.r+1, simulation_config.CFL)
                     dt_rel = update_dt_relchange(dt_prev, state.E_rad, E_rad_history[-1], state.T_rad, T_rad_history[-1])
                     dt = min(dt_cfl, dt_rel, 0.05 * t_end, dt_prev * 1.1, t_end - state.t)
                     if np.isnan(dt):
@@ -121,7 +121,7 @@ def simulate_rad_hydro(
                 # Small initial timestep for stability
                 dt = min(1e-13, 1e-6 * t_end, t_end - state.t)
             # print(dt)
-            dt_prev = dt
+            dt_prev = dt   # pyright: ignore[reportPossiblyUnboundVariable]
 
 
             # Get boundary conditions for current state

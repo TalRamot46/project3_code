@@ -90,7 +90,7 @@ RIEMANN_TEST_CASES[3] = RIEMANN_TEST_CASES["reverse_shock"]
 RIEMANN_TEST_CASES[4] = RIEMANN_TEST_CASES["colliding"]
 
 
-def init_riemann(x_nodes: np.ndarray, case: RiemannCase) -> tuple:
+def init_riemann(x_nodes: np.ndarray, case: RiemannCase) -> HydroState:
     """Initialize HydroState and cell masses for a Riemann problem. """
     geom = case.geom if case.geom is not None else planar()
     gamma = case.gamma
@@ -107,6 +107,7 @@ def init_riemann(x_nodes: np.ndarray, case: RiemannCase) -> tuple:
     p = np.where(left_mask, pL, pR)
     e = internal_energy_from_prho(p, rho, gamma)
     q = np.zeros_like(rho)
+    T = np.zeros_like(e)
 
     # Node velocities: piecewise constant using node position
     u_nodes = np.where(x_nodes < x0, uL, uR)
@@ -116,7 +117,7 @@ def init_riemann(x_nodes: np.ndarray, case: RiemannCase) -> tuple:
 
     a_nodes = np.zeros_like(x_nodes)
 
-    state = HydroState(t=0.0, x=x_nodes, u=u_nodes, a=a_nodes, V=V, rho=rho, e_material=e, p=p, q=q, m_cells=m)
+    state = HydroState(t=0.0, x=x_nodes, u=u_nodes, a=a_nodes, V=V, rho=rho, e_material=e, p=p, q=q, m_cells=m, T_material=T)
     return state
 
 

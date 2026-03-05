@@ -27,13 +27,13 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
     p = np.zeros_like(x_cells)
     u = np.zeros_like(x_nodes)
     e = np.zeros_like(x_cells)
-    T_material = np.zeros_like(x_cells)
+    T_material = np.zeros_like(x_cells) # will be changed according to the initial condition!
     T_rad = np.zeros_like(x_cells)
     E_rad= np.zeros_like(x_cells)
 
     if case.initial_condition == "temperature, density":
         T_material = np.full_like(x_cells, case.T_initial_Kelvin)
-        e = case.f_Kelvin * T_material**case.gamma * case.rho0**(-case.mu)
+        e = case.f_Kelvin * T_material**case.beta_Rosen * case.rho0**(-case.mu)
         rho = np.full_like(x_cells, case.rho0)
         p = (case.r + 1) * rho * e  # Ideal gas EOS
         T_rad = T_material.copy()
@@ -43,7 +43,7 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
         p = np.full_like(x_cells, case.p0)
         u = np.full_like(x_nodes, case.u0)
         e = internal_energy_from_prho(p, rho, case.r+1)
-        T_material = calculate_temperature_from_specific_energy(e, rho, case.f_Kelvin, case.gamma, case.mu)
+        T_material = calculate_temperature_from_specific_energy(e, rho, case.f_Kelvin, case.beta_Rosen, case.mu)
         T_rad = T_material.copy()
         E_rad = a_Kelvin * T_rad**4
         

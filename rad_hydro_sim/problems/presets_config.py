@@ -47,7 +47,7 @@ PRESET_TEST_CASES = {
 
         # Rosen's specific energy parameters
         f_Kelvin = 3.4e13,
-        gamma = 1.6,
+        beta_Rosen = 1.6,
         mu = 0.14,
 
         # coupling factor
@@ -89,7 +89,7 @@ PRESET_TEST_CASES = {
 
         # Rosen's specific energy parameters
         f_Kelvin = 3.4e13,
-        gamma = 1.6,
+        beta_Rosen = 1.6,
         mu = 0.14,
 
         # coupling factor
@@ -130,7 +130,7 @@ PRESET_TEST_CASES = {
 
         # Rosen's specific energy parameters
         f_Kelvin = 3.4e13,
-        gamma = 1.6,
+        beta_Rosen = 1.6,
         mu = 0.14,
 
         # coupling factor
@@ -171,7 +171,7 @@ PRESET_TEST_CASES = {
 
         # Rosen's specific energy parameters
         f_Kelvin = 3.4e13 / (KELVIN_PER_HEV**1.6),
-        gamma = 1.6,
+        beta_Rosen = 1.6,
         mu = 0.14,
 
         # coupling factor
@@ -209,7 +209,7 @@ PRESET_TEST_CASES = {
 
         # Rosen's specific energy parameters
         f_Kelvin = 3.4e13 / ((KELVIN_PRE_HEV**1.6) * (19.32**0.14)),
-        gamma = 1.6,
+        beta_Rosen = 1.6,
         mu = 0.14,
 
         # coupling factor
@@ -247,11 +247,11 @@ PRESET_TEST_CASES = {
 
         # Rosen's specific energy parameters
         f_Kelvin = 3.4e13 / (KELVIN_PER_HEV**1.6),
-        gamma = 1.6,
+        beta_Rosen = 1.6,
         mu = 0.14,
 
         # coupling factor
-        chi = 1000,
+        chi = 1e3,
 
         # Boundary conditions
         T0_Kelvin = 1 * KELVIN_PER_HEV,
@@ -285,7 +285,7 @@ PRESET_TEST_CASES = {
 
         # Rosen's specific energy parameters
         f_Kelvin = 3.4e13 / (KELVIN_PER_HEV**1.6),
-        gamma = 1.6,
+        beta_Rosen = 1.6,
         mu = 0.14,
 
         # coupling factor
@@ -323,7 +323,7 @@ PRESET_TEST_CASES = {
 
         # Rosen's specific energy parameters
         f_Kelvin = 3.4e13,
-        gamma = 1.6,
+        beta_Rosen = 1.6,
         mu = 0.14,
 
         # coupling factor
@@ -361,7 +361,7 @@ PRESET_TEST_CASES = {
 
         # Rosen's specific energy parameters
         f_Kelvin = 3.4e13,
-        gamma = 1.6,
+        beta_Rosen = 1.6,
         mu = 0.14,
 
         # coupling factor

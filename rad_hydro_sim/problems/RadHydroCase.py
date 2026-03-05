@@ -28,7 +28,7 @@ class RadHydroCase(ABC):
 
     # Rosen's specific energy parameters
     f_Kelvin: float # defined such that e = f_Kelvin * T_Kelvin^gamma * mu^mu * rho^rho
-    gamma: float
+    beta_Rosen: float
     mu: float
 
     # coupling factor
@@ -70,5 +70,5 @@ class RadHydroCase(ABC):
         self,
     ) -> Tuple[float, float, float, float, float, float, float]:
         """Returns the parameters as a tuple for radiation step"""
-        return self.alpha, self.gamma, self.mu, self.f_Kelvin, self.chi, self.lambda_, self.g_Kelvin
+        return self.alpha, self.beta_Rosen, self.mu, self.f_Kelvin, self.chi, self.lambda_, self.g_Kelvin
     

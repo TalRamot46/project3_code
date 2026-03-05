@@ -35,7 +35,7 @@ def test_shock_material_from_rad_hydro_case():
     mat = _rad_hydro_case_to_shock_material(case)
     assert mat is not None
     assert mat.alpha == case.alpha
-    assert mat.beta == case.gamma
+    assert mat.beta == case.beta_Rosen
     assert mat.lambda_ == case.lambda_
     assert mat.mu == case.mu
     assert 1.0 / mat.V0 == case.rho0

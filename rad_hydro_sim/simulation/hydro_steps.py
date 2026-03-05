@@ -37,8 +37,8 @@ def get_e_star_from_hydro(
     # (11) half-step velocity
     u_half = state.u + 0.5 * dt * state.a
     
-    # Apply velocity boundary conditions at half-step
-    u_half = _apply_velocity_bc_half(u_half, bc_left, bc_right)
+    # # Apply velocity boundary conditions at half-step
+    # u_half = _apply_velocity_bc_half(u_half, bc_left, bc_right)
  
     # (12) update nodes
     x_new = state.x + dt * u_half
@@ -79,9 +79,9 @@ def get_e_star_from_hydro(
 
     return state_star
 
-def update_nodes_from_pressure(state: RadHydroState, case: RadHydroCase, e_new, dt: float, bc_left="outflow", bc_right="outflow", t_old: float = 0.0) -> RadHydroState:
+def update_nodes_from_pressure(state: RadHydroState, case: RadHydroCase, new_e_material, dt: float, bc_left="outflow", bc_right="outflow", t_old: float = 0.0) -> RadHydroState:
     # (17) pressure EOS
-    p_new = pressure_ideal_gas(state.rho, e_new, gamma=case.r+1)
+    p_new = pressure_ideal_gas(state.rho, new_e_material, gamma=case.r+1)
 
     # (18) acceleration from new (p,q)
     # Determine boundary pressures at the NEW time (t_old + dt)
@@ -105,7 +105,7 @@ def update_nodes_from_pressure(state: RadHydroState, case: RadHydroCase, e_new, 
         a=a_new, # acceleration updated with new pressure
         V=state.V,
         rho=state.rho,
-        e_material=e_new,
+        e_material=new_e_material,
         p=p_new,
         q=state.q,
         m_cells=state.m_cells,

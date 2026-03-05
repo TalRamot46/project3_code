@@ -33,7 +33,7 @@ def step_rad_hydro(state: RadHydroState, dt: float, case: RadHydroCase, config: 
     if case.scenario == "hydro_only":
         state_star = get_e_star_from_hydro(state, case.geom, case.r, config.sigma_visc, dt, bc_left, bc_right)
         new_e_material = state_star.e_material
-        new_T_material = calculate_temperature_from_specific_energy(new_e_material, state_star.rho, case.f_Kelvin, case.gamma, case.mu)
+        new_T_material = calculate_temperature_from_specific_energy(new_e_material, state_star.rho, case.f_Kelvin, case.beta_Rosen, case.mu)
         new_state = update_nodes_from_pressure(state_star, case, new_e_material, dt, bc_left, bc_right, t_old=state.t)
         new_E_rad = np.zeros_like(state_star.rho) 
         new_T_rad = state_star.T_rad if state_star.T_rad is not None else np.zeros_like(state_star.rho)
@@ -41,13 +41,11 @@ def step_rad_hydro(state: RadHydroState, dt: float, case: RadHydroCase, config: 
         new_state.T_rad = new_T_rad
         new_state.E_rad = new_E_rad
     elif case.scenario == "radiation_only":
-        new_e_material, new_T_rad, new_E_rad = radiation_step(state, dt, case)
-        new_T_material = calculate_temperature_from_specific_energy(new_e_material, state.rho, case.f_Kelvin, case.gamma, case.mu)
-        new_state = state._replace(e_material=new_e_material, T_material=new_T_material, T_rad=new_T_rad, E_rad=new_E_rad)
+        new_T_material, new_e_material, new_T_rad, new_E_rad = radiation_step(state, dt, case)
+        new_state = state._replace(T_material=new_T_material, e_material=new_e_material, T_rad=new_T_rad, E_rad=new_E_rad)
     elif case.scenario == "full_rad_hydro":
         state_star = get_e_star_from_hydro(state, case.geom, case.r, config.sigma_visc, dt, bc_left, bc_right)
-        new_e_material, new_T_rad, new_E_rad = radiation_step(state_star, dt, case)
-        new_T_material = calculate_temperature_from_specific_energy(new_e_material, state_star.rho, case.f_Kelvin, case.gamma, case.mu)
+        new_T_material, new_e_material, new_T_rad, new_E_rad = radiation_step(state_star, dt, case)
         new_state = update_nodes_from_pressure(state_star, case, new_e_material, dt, bc_left, bc_right, t_old=state.t)
         new_state.T_material = new_T_material
         new_state.T_rad = new_T_rad

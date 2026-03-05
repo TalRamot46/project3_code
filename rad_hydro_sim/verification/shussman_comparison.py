@@ -33,7 +33,7 @@ def _rad_hydro_case_to_material_sub(case) -> MaterialSub:
         HEV_IN_KELVIN,
     )
     alpha = float(case.alpha)
-    beta = float(case.gamma)
+    beta = float(case.beta_Rosen)
     lambda_ = float(case.lambda_)
     mu = float(case.mu)
     r = float(case.r)
@@ -61,7 +61,7 @@ def _rad_hydro_case_to_material_shock(case) -> Material:
             STEFAN_BOLTZMANN_KELVIN
     )
     alpha = float(case.alpha)
-    beta = float(case.gamma)
+    beta = float(case.beta_Rosen)
     rho0 = float(case.rho0) if case.rho0 is not None else 19.32
     V0 = 1.0 / rho0
     f_Kelvin = float(case.f_Kelvin) 
@@ -176,7 +176,7 @@ def build_piecewise_reference(
         # Unperturbed tail (MATLAB pads from max(m_shock) to 1.2*max(m_shock) at rho0)
         if m_max and rho0 and T_initial_Kelvin and m_max > m_k[-1]:
             T0_HeV = float(T_initial_Kelvin) / KELVIN_PER_HEV
-            e0 = float(case.f_Kelvin) * (float(T_initial_Kelvin) ** float(case.gamma)) * (float(rho0) ** (-float(case.mu)))
+            e0 = float(case.f_Kelvin) * (float(T_initial_Kelvin) ** float(case.beta_Rosen)) * (float(rho0) ** (-float(case.mu)))
             p0 = r_gas * rho0 * e0
             m_tail_start = float(m_k[-1])
             n_tail = max(2, int(100 * (m_max - m_tail_start) / max(m_max, 1e-30)))

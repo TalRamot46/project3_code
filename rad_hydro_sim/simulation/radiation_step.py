@@ -6,10 +6,14 @@ Hev_to_erg =  100 * eV_to_erg  # electron energy in CGS [erg/Hev]
 k_B = 1.380649e-16  # Boltzmann constant in CGS [erg/K]
 KELVIN_PER_HEV = Hev_to_erg / k_B  # Conversion factor from keV to Kelvin
 a_Hev = a_Kelvin * KELVIN_PER_HEV**4  # Radiation constant in keV cm^-3 keV^-4
+HARMONIC_MEAN = False
 
 import numpy as np
 from dataclasses import dataclass
 from typing import Tuple
+
+def harmonic_mean(a: np.ndarray, b: np.ndarray) -> np.ndarray: return 2 * a * b / (a + b)
+def arithmetic_mean(a: np.ndarray, b: np.ndarray) -> np.ndarray: return (a + b) / 2
 
 from project_3.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 from project_3.hydro_sim.core.state import RadHydroState
@@ -26,7 +30,7 @@ def calculate_beta(T_rad: np.ndarray, T_material: np.ndarray, rho: np.ndarray) -
     beta = (4a*T_rad^3) / (gamma*f*T_m^{gamma-1}*rho^{-mu+1})
          = 4a/(f*gamma) * T_rad^3 * T_m^{1-gamma} * rho^{mu-1}
     """
-    return 4*a_Kelvin / (f_Kelvin * gamma) * T_rad**3 * T_material**(1 - gamma) * rho**(mu - 1)
+    return 4*a_Kelvin / (f_Kelvin * beta_Rosen) * T_rad**3 * T_material**(1 - beta_Rosen) * rho**(mu - 1)
 
 def calculate_sigma(T_rad: np.ndarray, rho: np.ndarray) -> np.ndarray:
     """Opacity from Rosen's formula evaluated at the radiation temperature."""
@@ -46,8 +50,12 @@ def calculate_abcd(sigma: np.ndarray, D: np.ndarray, A: np.ndarray, m_cells: np.
     T_rad is the radiation temperature from the previous step, used to compute
     UR_star = a * T_rad^4 (the radiation equilibrium at the start of the step).
     """
-    D_face_left = rho[:-2] * (D[:-2] + D[1:-1]) / 2 # Left face
-    D_face_right = rho[2:] * (D[1:-1] + D[2:]) / 2 # Right face
+    if HARMONIC_MEAN:
+        D_face_left = rho[:-2] * harmonic_mean(D[:-2], D[1:-1])
+        D_face_right = rho[2:] * harmonic_mean(D[1:-1], D[2:])
+    else:
+        D_face_left = rho[:-2] * arithmetic_mean(D[:-2], D[1:-1]) # Left face
+        D_face_right = rho[2:] * arithmetic_mean(D[1:-1], D[2:]) # Right face
     F = chi*c*sigma[1:-1]/(1 + A[1:-1])
     coeff = rho[1:-1] / (m_cells[1:-1]**2)
     a = -coeff * D_face_left
@@ -110,7 +118,7 @@ def solve_tridiagonal(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray
         return x
         
 
-def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydroCase) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydroCase) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Updates the material specific energy & radiation energy density based on the coupling between matter and radiation.
     
@@ -120,12 +128,13 @@ def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydr
         rad_hydro_case: Problem configuration
         
     Returns:
+        new_T_material: Updated material temperature in K
         new_e_material: Updated material specific energy in erg/g
         new_T_rad: Updated radiation temperature in K
         new_E_rad: Updated radiation energy density in erg/cm^3
     """
-    global alpha, gamma, mu, f_Kelvin, chi, lambda_, g_Kelvin
-    alpha, gamma, mu, f_Kelvin, chi, lambda_, g_Kelvin = rad_hydro_case._get_params()
+    global alpha, beta_Rosen, mu, f_Kelvin, chi, lambda_, g_Kelvin
+    alpha, beta_Rosen, mu, f_Kelvin, chi, lambda_, g_Kelvin = rad_hydro_case._get_params()
     e_star, rho, m_cells, E_rad, T_rad_current = (
         state_star.e_material,
         state_star.rho,
@@ -135,12 +144,12 @@ def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydr
     )
 
     # Material temperature from e_star (needed for beta's T_material dependence)
-    T_material_star = calculate_temperature_from_specific_energy(e_star, rho, f_Kelvin, gamma, mu)
+    T_material_star = calculate_temperature_from_specific_energy(e_star, rho, f_Kelvin, beta_Rosen, mu)
     # Opacity and diffusion use T_rad; beta uses both T_rad and T_material
-    beta = calculate_beta(T_rad_current, T_material_star, rho)
+    beta_heat_capacities_ratio = calculate_beta(T_rad_current, T_material_star, rho)
     sigma = calculate_sigma(T_rad_current, rho)
     D = calculate_D_from_sigma(sigma)
-    A = calculate_A(beta, sigma, dt)
+    A = calculate_A(beta_heat_capacities_ratio, sigma, dt)
 
     # Build tridiagonal system; UR_star uses T_rad_current (radiation state from previous step)
     a, b, c_coeff, d = calculate_abcd(sigma, D, A, m_cells, rho, E_rad, T_rad_current, dt)
@@ -152,7 +161,7 @@ def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydr
 
     new_E_rad = solve_tridiagonal(a, b, c_coeff, d)
     new_E_rad[0] = E_left
-    new_E_rad[-1] = 0
+    new_E_rad[-1] = a_Kelvin * rad_hydro_case.T_initial_Kelvin**4
 
     # UR_star from radiation temperature (consistent with the d-vector source term)
     UR_star = a_Kelvin * T_rad_current**4
@@ -162,19 +171,23 @@ def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydr
 
     # Convert new_UR to new_Um using beta
     Um_star = rho * e_star
-    new_Um = Um_star + (new_UR - UR_star) / beta
+    dU_R = new_UR - UR_star
+    # print(A)
+    if state_star.t > 5e-10:
+        pass
+        print(T_left - T_rad_current[0])
+        print(new_E_rad[0] - UR_star[0])
+        print(new_UR[0] - UR_star[0])
+    dU_m = dU_R / beta_heat_capacities_ratio
+    new_Um = Um_star + dU_m
 
     # Radiation temperature from the updated U_R
     new_T_rad = (new_UR / a_Kelvin) ** (1 / 4)
+    new_T_rad[0] = T_left
+    new_T_rad[-1] = rad_hydro_case.T_initial_Kelvin
 
     # Material specific energy directly from U_m
     new_e_material = new_Um / rho
+    new_T_material = calculate_temperature_from_specific_energy(new_e_material, rho, f_Kelvin, beta_Rosen, mu)
 
-    # Enforce boundary conditions
-    if rad_hydro_case.T0_Kelvin is not None:
-        new_T_rad[0] = T_left
-        new_e_material[0] = f_Kelvin * T_left**gamma * rho[0] ** (-mu)
-    T_right = (new_E_rad[-1] / a_Kelvin) ** (1 / 4) if new_E_rad[-1] > 0 else 1e-10
-    new_T_rad[-1] = T_right
-
-    return new_e_material, new_T_rad, new_E_rad
+    return new_T_material, new_e_material, new_T_rad, new_E_rad

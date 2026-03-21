@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import numpy as np
 
 from project3_code.hydro_sim.core.geometry import Geometry, planar
@@ -20,8 +22,8 @@ def get_e_star_from_hydro(
     r: float,
     sigma_visc: float,
     dt: float,
-    bc_left="outflow",
-    bc_right="outflow",
+    bc_left: str | float = "outflow",
+    bc_right: str | float = "outflow",
 ) -> RadHydroState:
     """
     One time step implementing PDF Eqs.(11)-(19),
@@ -79,12 +81,20 @@ def get_e_star_from_hydro(
 
     return state_star
 
-def update_nodes_from_pressure(state: RadHydroState, case: RadHydroCase, new_e_material, dt: float, bc_left="outflow", bc_right="outflow", t_old: float = 0.0) -> RadHydroState:
+def update_nodes_from_pressure(
+    state: RadHydroState,
+    case: RadHydroCase,
+    new_e_material,
+    dt: float,
+    bc_left: str | float = "outflow",
+    bc_right: str | float = "outflow",
+    t_old: float = 0.0,
+) -> RadHydroState:
     # (17) pressure EOS
     p_new = pressure_ideal_gas(state.rho, new_e_material, gamma=case.r+1)
 
     # (18) acceleration from new (p,q)
-    # Determine boundary pressures at the NEW time (t_old + dt)
+    # p_left=0 at m=0 for ablation (vacuum); pressure drive uses bc_left as prescribed value
     p_left_bc, p_right_bc = _get_boundary_pressures(bc_left, bc_right, p_new, t_old + dt)
     a_new = compute_acceleration_nodes(state.x, p_new, state.q, state.m_cells, planar(), 
                                         p_left=p_left_bc, p_right=p_right_bc)

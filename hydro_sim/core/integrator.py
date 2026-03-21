@@ -120,25 +120,18 @@ def _apply_velocity_bc_half(u, bc_left, bc_right):
     
     # Left boundary
     if bc_left == "reflective":
-        # Reflective: velocity at origin is zero (symmetric/wall)
         u[0] = 0.0
-    elif bc_left == "outflow":
-        u[0] = u[1]
-    elif bc_left == "none":
+    elif bc_left in ("outflow", "vacuum") or isinstance(bc_left, (int, float)):
+        u[0] = u[1]  # zero-gradient (outflow / pressure drive)
+    elif bc_left in ("none", None):
         pass
-    elif isinstance(bc_left, dict):
-        if bc_left["type"] == "pressure":
-            # Pressure BC: don't constrain velocity at half-step
-            pass
     
     # Right boundary
     if bc_right == "reflective":
         u[-1] = 0.0
-    elif bc_right == "outflow":
+    elif bc_right in ("outflow", "vacuum") or isinstance(bc_right, (int, float)):
         u[-1] = u[-2]
-    elif bc_right == "none":
-        pass
-    elif isinstance(bc_right, dict):
+    elif bc_right in ("none", None):
         pass
     
     return u
@@ -151,21 +144,17 @@ def _apply_velocity_bc_full(u, bc_left, bc_right):
     # Left boundary
     if bc_left == "reflective":
         u[0] = 0.0
-    elif bc_left == "outflow":
+    elif bc_left in ("outflow", "vacuum") or isinstance(bc_left, (int, float)):
         u[0] = u[1]
-    elif bc_left == "none":
-        pass
-    elif isinstance(bc_left, dict):
+    elif bc_left in ("none", None):
         pass
     
     # Right boundary
     if bc_right == "reflective":
         u[-1] = 0.0
-    elif bc_right == "outflow":
+    elif bc_right in ("outflow", "vacuum") or isinstance(bc_right, (int, float)):
         u[-1] = u[-2]
-    elif bc_right == "none":
-        pass
-    elif isinstance(bc_right, dict):
+    elif bc_right in ("none", None):
         pass
     
     return u
@@ -173,25 +162,26 @@ def _apply_velocity_bc_full(u, bc_left, bc_right):
 
 def _get_boundary_pressures(bc_left, bc_right, p_cells, t):
     """
-    Extract boundary pressures for acceleration calculation.
-    
-    Returns:
-        (p_left, p_right): Boundary pressures, or None for transmissive/none
-    """
-    p_left = None
-    p_right = None
-    
-    # Left boundary
-    if isinstance(bc_left, dict) and bc_left.get("type") == "pressure":
-        p_left = bc_left["p"]
-    elif bc_left == "reflective":
-        # For reflective BC, use ghost cell with same pressure (dp/dn = 0)
-        p_left = p_cells[0]
+    Boundary pressures for acceleration: p_left, p_right.
+    None = transmissive (outflow). Simple types only:
 
-    # Right boundary
-    if isinstance(bc_right, dict) and bc_right.get("type") == "pressure":
-        p_right = bc_right["p"]
-    elif bc_right == "reflective":
-        p_right = p_cells[-1]
-    
+    bc_left / bc_right:
+        None, "outflow", "none" -> None (transmissive)
+        "vacuum", 0               -> 0.0  (ablation into vacuum at m=0)
+        "reflective"              -> p_cells[0] or p_cells[-1]
+        float                     -> that value (prescribed pressure)
+    """
+    def _resolve(bc, p_edge, side):
+        if bc is None or bc in ("outflow", "none"):
+            return None
+        if bc in ("vacuum", 0) or (isinstance(bc, (int, float)) and bc == 0):
+            return 0.0
+        if bc == "reflective":
+            return float(p_edge)
+        if isinstance(bc, (int, float)):
+            return float(bc)
+        return None
+
+    p_left = _resolve(bc_left, p_cells[0], "left")
+    p_right = _resolve(bc_right, p_cells[-1], "right")
     return p_left, p_right

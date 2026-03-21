@@ -100,7 +100,7 @@ def _get_boundary_conditions(
             p_drive = case.P0 * ((t / SEC_PER_NS) ** case.tau) if t > 0 else 0.0
         else:
             p_drive = 0.0
-        return {"type": "pressure", "p": p_drive}, "outflow"
+        return p_drive, "outflow"
     
     elif sim_type == SimulationType.SEDOV:
         # Reflective at origin (r=0), outflow at far boundary

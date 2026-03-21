@@ -19,15 +19,14 @@ def step_rad_hydro(state: RadHydroState, dt: float, case: RadHydroCase, config: 
     3. Take e_star, rho, and m_cells to perform radiation-matter coupling and get updated new_e_material and E_rad.
     4. Update pressure profile using new_e_material.
     """
-    # Important ONLY in case where the BC is given by a pressure drive
-    # unlike Shussman where the BC is given by a temperature drive.
+    # Subsonic ablation: p=0 at m=0 (ablated matter expands into vacuum).
+    # Pressure drive: p_left = P0 * t^tau.
     if case.P0_Barye is not None:
-        # Pressure-driven boundary
         p_drive = case.P0_Barye * ((state.t / S_PER_NS) ** case.tau) if state.t > 0 else 0.0
-        bc_left = {"type": "pressure", "p": p_drive}
+        bc_left = p_drive
         bc_right = "outflow"
     else:
-        bc_left = "outflow"
+        bc_left = "vacuum"   # p=0 at m=0 (radiation/temperature drive)
         bc_right = "outflow"
     
     if case.scenario == "hydro_only":

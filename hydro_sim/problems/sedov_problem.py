@@ -24,11 +24,11 @@ except (ImportError, ValueError):
     _parent_dir = str(Path(__file__).parent.parent.absolute())
     if _parent_dir not in sys.path:
         sys.path.insert(0, _parent_dir)
-    from project_3.hydro_sim.problems.Hydro_case import HydroCase
-    from project_3.hydro_sim.core.eos import internal_energy_from_prho
-    from project_3.hydro_sim.core.grid import cell_volumes, masses_from_initial_rho
-    from project_3.hydro_sim.core.state import HydroState
-    from project_3.hydro_sim.core.geometry import spherical, cylindrical, planar
+    from project3_code.hydro_sim.problems.Hydro_case import HydroCase
+    from project3_code.hydro_sim.core.eos import internal_energy_from_prho
+    from project3_code.hydro_sim.core.grid import cell_volumes, masses_from_initial_rho
+    from project3_code.hydro_sim.core.state import HydroState
+    from project3_code.hydro_sim.core.geometry import spherical, cylindrical, planar
 
 
 @dataclass(frozen=True)

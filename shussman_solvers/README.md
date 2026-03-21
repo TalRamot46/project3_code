@@ -14,4 +14,4 @@ shussman_solvers/
 └── supersonic_solver/  (F_super, manager_super, materials_super, matlab_super/, …)
 ```
 
-Run from repo root with `project_3` on `sys.path`; import e.g. `from project_3.shussman_solvers.shock_solver.run_shock_solver import compute_shock_profiles`.
+Run from repo root with `project3_code` on `sys.path`; import e.g. `from project3_code.shussman_solvers.shock_solver.run_shock_solver import compute_shock_profiles`.

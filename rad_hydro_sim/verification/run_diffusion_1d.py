@@ -17,7 +17,7 @@ from typing import Tuple, List
 
 import numpy as np
 
-# Repo root: project_3/rad_hydro_sim/verification -> repo root is 3 levels up
+# Repo root: project3_code/rad_hydro_sim/verification -> repo root is 3 levels up
 _VERIFICATION_DIR = Path(__file__).resolve().parent
 _RAD_HYDRO_DIR = _VERIFICATION_DIR.parent
 _PROJECT_3 = _RAD_HYDRO_DIR.parent
@@ -97,7 +97,7 @@ def run_diffusion_1d(
 
     # Patch parameters to match rad_hydro case (constant temperature drive)
     # Script uses: L, t_final, T_bath (or T_bath_hev), rho, Nz, z, dz, dt, etc.
-    diffusion.L = float(x_max)
+    diffusion.L = float(x_max * 3)
     diffusion.t_final = float(t_end)
     diffusion.t_final_sec = float(t_end)  # ensure CGS mode uses correct end time
     diffusion.Nz = int(Nz)
@@ -138,7 +138,7 @@ def run_diffusion_1d(
     # Radiation constant in Kelvin units (1D Diffusion uses a_kelvin lowercase)
     a_Kelvin = getattr(diffusion, "a_Kelvin", None) or getattr(diffusion, "a_kelvin", None)
     if a_Kelvin is None:
-        from project_3.rad_hydro_sim.simulation.radiation_step import a_Kelvin
+        from project3_code.rad_hydro_sim.simulation.radiation_step import a_Kelvin
     E_rad_list = [a_Kelvin * T**4 for T in T_list]
 
     return times_sec, z, T_list, E_rad_list

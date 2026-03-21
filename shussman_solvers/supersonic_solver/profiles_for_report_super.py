@@ -23,12 +23,17 @@ try:
     from .materials_super import MaterialSuper
     from .manager_super import manager_super
 except ImportError:
-    # Run as script: ensure project_3 is on path (repo root = parent of project_3)
-    _repo_root = Path(__file__).resolve().parents[3]
-    if str(_repo_root) not in sys.path:
-        sys.path.insert(0, str(_repo_root))
-    from project_3.shussman_solvers.supersonic_solver.materials_super import MaterialSuper
-    from project_3.shussman_solvers.supersonic_solver.manager_super import manager_super
+    # Run as script: add both:
+    # - repo root (so `shussman_solvers.*` works)
+    # - GitHub parent (so `project3_code.*` works via implicit namespace package)
+    p = Path(__file__).resolve()
+    _repo_root = p.parents[2]  # .../GitHub/project3_code
+    _project3_code_parent = p.parents[3]  # .../GitHub
+    for _p in (_repo_root, _project3_code_parent):
+        if str(_p) not in sys.path:
+            sys.path.insert(0, str(_p))
+    from project3_code.shussman_solvers.supersonic_solver.materials_super import MaterialSuper
+    from project3_code.shussman_solvers.supersonic_solver.manager_super import manager_super
 
 
 def compute_profiles_for_report(
@@ -70,19 +75,35 @@ def compute_profiles_for_report(
         "E_heat": E_heat,
     }
 
+def extract_m_final_expression(mat: MaterialSuper, tau: float):
+    """ extracting the final expression for m_final and e_final"""
+    (m0, mw, e0, ew, xsi, z, A, t, x) = manager_super(mat, tau)
+    print(f"m_final = {m0*mat.rho0**((-mat.mu+mat.lambda_)/2):.2e}* rho_0^{(mat.mu-mat.lambda_)/2:.2f} * T0^{mw[1]:.2f} * t^{mw[2]:.2f}")
+    print(f"E_final = {e0*mat.rho0**((mat.mu+mat.lambda_)/2):.2e}* rho_0^{-(mat.mu+mat.lambda_)/2:.2f} * T0^{ew[1]:.2f} * t^{ew[2]:.2f}")
 
 if __name__ == "__main__":
     try:
-        from .materials_super import material_au
+        from .materials_super import material_au, material_be
     except ImportError:
-        from project_3.shussman_solvers.supersonic_solver.materials_super import material_au
+        print("ImportError: materials_super not found")
+        # Ensure both import styles work when executed as a script.
+        p = Path(__file__).resolve()
+        _repo_root = p.parents[2]  # .../GitHub/project3_code
+        _project3_code_parent = p.parents[3]  # .../GitHub
+        for _p in (_repo_root, _project3_code_parent):
+            if str(_p) not in sys.path:
+                sys.path.insert(0, str(_p))
+        from shussman_solvers.supersonic_solver.materials_super import material_au, material_be
 
     # Example: Al with tau = 1/(4+alpha-2*beta) (constant-temperature-like scaling)
-    mat = material_au()
-    tau = 0.0
-    T0_phys_HeV = 1
-    times_ns = np.array([1.0])
-    data = compute_profiles_for_report(mat, T0_phys_HeV=T0_phys_HeV, tau=tau, times_ns=times_ns) # Corresponds to T0=10000K
-    import matplotlib.pyplot as plt
-    plt.plot(data["m_heat"][0,:], data["T_heat"][0,:])
-    plt.show()
+    # mat = material_au()
+    # tau = 0.0
+    # T0_phys_HeV = 1
+    # times_ns = np.array([1.0])
+    # data = compute_profiles_for_report(mat, T0_phys_HeV=T0_phys_HeV, tau=tau, times_ns=times_ns) # Corresponds to T0=10000K
+    # import matplotlib.pyplot as plt
+    # plt.plot(data["m_heat"][0,:], data["T_heat"][0,:])
+    # plt.show()
+
+    mat_be = material_be()
+    extract_m_final_expression(mat_be, tau=0.0)

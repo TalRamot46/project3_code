@@ -17,14 +17,14 @@ from datetime import datetime
 import numpy as np
 import sys
 
-# Ensure project_3 is on path (hydro_shock is at project_3/rad_hydro_sim/verification/hydro_shock)
+# Ensure project3_code is on path (hydro_shock is at project3_code/rad_hydro_sim/verification/hydro_shock)
 _project3 = Path(__file__).resolve().parent.parent.parent.parent
 if str(_project3) not in sys.path:
     sys.path.insert(0, str(_project3))
 
-from project_3.hydro_sim.problems.driven_shock_problem import DrivenShockCase
-from project_3.hydro_sim.core.geometry import planar
-from project_3.shussman_solvers.shock_solver.materials_shock import Material, au_supersonic_variant_1
+from project3_code.hydro_sim.problems.driven_shock_problem import DrivenShockCase
+from project3_code.hydro_sim.core.geometry import planar
+from project3_code.shussman_solvers.shock_solver.materials_shock import Material, au_supersonic_variant_1
 
 
 class PlotMode(str, Enum):
@@ -41,7 +41,7 @@ class PlotMode(str, Enum):
 
 def get_output_dir() -> Path:
     """Get the base output directory for hydro_sim shock verification figures."""
-    from project_3.hydro_sim.problems.simulation_config import get_results_dir
+    from project3_code.hydro_sim.problems.simulation_config import get_results_dir
     base = get_results_dir() / "hydro_sim_verification"
     base.mkdir(parents=True, exist_ok=True)
     return base

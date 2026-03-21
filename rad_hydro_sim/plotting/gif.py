@@ -7,9 +7,9 @@ from . import mpl_style  # noqa: F401 - apply project style
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
 
-from project_3.hydro_sim.simulations.lagrangian_sim import HydroHistory
-from project_3.hydro_sim.plotting.hydro_plots import _create_7panel_vertical_figure
-from project_3.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
+from project3_code.hydro_sim.simulations.lagrangian_sim import HydroHistory
+from project3_code.hydro_sim.plotting.hydro_plots import _create_7panel_vertical_figure
+from project3_code.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 
 def save_history_gif(
     history: "HydroHistory",

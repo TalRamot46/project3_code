@@ -25,7 +25,7 @@ def get_rad_hydro_data_dir() -> Path:
 
 def get_rad_hydro_results_dir() -> Path:
     """Base directory for rad_hydro_sim figures under project results/."""
-    from project_3.hydro_sim.problems.simulation_config import get_results_dir
+    from project3_code.hydro_sim.problems.simulation_config import get_results_dir
     base = get_results_dir() / "rad_hydro_sim"
     base.mkdir(parents=True, exist_ok=True)
     return base

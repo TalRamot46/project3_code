@@ -2,7 +2,7 @@
 """
 Unified runner for shock comparison simulations.
 
-Compares hydro_sim (Lagrangian simulation) with Shussman shock solver (project_3.shussman_solvers.shock_solver).
+Compares hydro_sim (Lagrangian simulation) with Shussman shock solver (project3_code.shussman_solvers.shock_solver).
 All configuration is done through ComparisonCase and ComparisonConfig dataclasses.
 
 Usage:
@@ -15,18 +15,18 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# Add project_3 to path for imports
+# Add project3_code to path for imports
 _this_file = Path(__file__).resolve()
-_project_root = _this_file.parent.parent.parent.parent  # project_3
+_project_root = _this_file.parent.parent.parent.parent  # project3_code
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 # Configuration and presets (local to hydro_sim.verification)
-from project_3.hydro_sim.verification.comparison_config import ComparisonCase, ComparisonConfig, PlotMode
-from project_3.hydro_sim.verification.presets import get_preset, list_presets, PRESETS
+from project3_code.hydro_sim.verification.comparison_config import ComparisonCase, ComparisonConfig, PlotMode
+from project3_code.hydro_sim.verification.presets import get_preset, list_presets, PRESETS
 
 # Plotting
-from project_3.hydro_sim.verification.compare_shock_plots import (
+from project3_code.hydro_sim.verification.compare_shock_plots import (
     SimulationData,
     load_shussman_data,
     load_hydro_history,
@@ -52,7 +52,7 @@ def run_hydro_simulation(case: ComparisonCase, config: ComparisonConfig) -> Simu
     Returns:
         SimulationData ready for comparison plotting
     """
-    from project_3.hydro_sim.simulations.lagrangian_sim import simulate_lagrangian, SimulationType
+    from project3_code.hydro_sim.simulations.lagrangian_sim import simulate_lagrangian, SimulationType
     
     driven_case = case.to_driven_shock_case()
     
@@ -87,7 +87,7 @@ def run_shussman_solver(case: ComparisonCase, save_path: str | None = None) -> S
     Returns:
         SimulationData ready for comparison plotting
     """
-    from project_3.shussman_solvers.shock_solver.profiles_for_report_shock import compute_shock_profiles
+    from project3_code.shussman_solvers.shock_solver.profiles_for_report_shock import compute_shock_profiles
     params = case.get_shussman_params()
     
     print("Running self-similar solver...")

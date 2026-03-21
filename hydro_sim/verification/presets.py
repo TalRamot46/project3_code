@@ -16,12 +16,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from project_3.hydro_sim.verification.comparison_config import (
+from project3_code.hydro_sim.verification.comparison_config import (
     ComparisonCase,
     ComparisonConfig,
     PlotMode,
 )
-from project_3.shussman_solvers.shock_solver.materials_shock import au_supersonic_variant_1
+from project3_code.shussman_solvers.shock_solver.materials_shock import au_supersonic_variant_1
 
 
 # ============================================================================

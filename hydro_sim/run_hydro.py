@@ -14,22 +14,22 @@ import sys
 import numpy as np
 from pathlib import Path
 
-# Add parent directory to path so project_3 module can be found
+# Add parent directory to path so project3_code module can be found
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 # Problem definitions and configuration
-from project_3.hydro_sim.problems.simulation_config import SimulationConfig
-from project_3.hydro_sim.problems.presets import get_preset, get_preset_names, list_presets, PRESETS
-from project_3.hydro_sim.problems.riemann_problem import RiemannCase
-from project_3.hydro_sim.problems.driven_shock_problem import DrivenShockCase
-from project_3.hydro_sim.problems.sedov_problem import SedovExplosionCase
-from project_3.hydro_sim.problems.Hydro_case import HydroCase
+from project3_code.hydro_sim.problems.simulation_config import SimulationConfig
+from project3_code.hydro_sim.problems.presets import get_preset, get_preset_names, list_presets, PRESETS
+from project3_code.hydro_sim.problems.riemann_problem import RiemannCase
+from project3_code.hydro_sim.problems.driven_shock_problem import DrivenShockCase
+from project3_code.hydro_sim.problems.sedov_problem import SedovExplosionCase
+from project3_code.hydro_sim.problems.Hydro_case import HydroCase
 
 # Simulations
-from project_3.hydro_sim.simulations.lagrangian_sim import simulate_lagrangian, SimulationType
+from project3_code.hydro_sim.simulations.lagrangian_sim import simulate_lagrangian, SimulationType
 
 # Unified plotting
-from project_3.hydro_sim.plotting.hydro_plots import (
+from project3_code.hydro_sim.plotting.hydro_plots import (
     plot_riemann_results,
     plot_shock_results,
     plot_sedov_results,
@@ -38,7 +38,7 @@ from project_3.hydro_sim.plotting.hydro_plots import (
 )
 
 # For Riemann exact solution
-from project_3.hydro_sim.simulations.riemann_exact import sample_solution
+from project3_code.hydro_sim.simulations.riemann_exact import sample_solution
 
 
 # ============================================================================

@@ -1,6 +1,7 @@
 import os
 import sys
 from pathlib import Path
+from tkinter import N
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,17 +10,17 @@ import matplotlib.pyplot as plt
 _REPO_PARENT = Path(__file__).resolve().parent.parent.parent
 if str(_REPO_PARENT) not in sys.path:
     sys.path.insert(0, str(_REPO_PARENT))
-from project_3.rad_hydro_sim.plotting import mpl_style  # noqa: F401 - apply project style
+from project3_code.rad_hydro_sim.plotting import mpl_style  # noqa: F401 - apply project style
 import tqdm
-T_material_0_Kelvin = 300.0
-T_bath_kelvin = 1500000  # boundary temperature (K)
+
+# eV = 1.60218e-12 erg
+# Hev = 1.60218e-10 erg
+
 eV_joule = 1.60218e-19  # J/eV
 erg_per_joule = 1.0e7   # erg/J
 eV = eV_joule * erg_per_joule  # erg 
 Hev=1.0e2 * eV  # erg
 
-# eV = 1.60218e-12 erg
-# Hev = 1.60218e-10 erg
 
 k_B_joule = 1.38065e-23  # J/K
 k_B = k_B_joule * erg_per_joule  # erg/K
@@ -30,6 +31,8 @@ KELVIN_PER_HEV = Hev / k_B  # in HeV
 a_kelvin = 7.5646e-15    # radiation constant
 a_hev = a_kelvin * (KELVIN_PER_HEV**4)  # radiation constant in HeV units
 
+T_material_0_Kelvin = 300.0
+T_bath_kelvin = KELVIN_PER_HEV  # boundary temperature (K)
 T_bath_hev = T_bath_kelvin / KELVIN_PER_HEV 
 T_bath = T_bath_kelvin
 T_material_0_hev = T_material_0_Kelvin / KELVIN_PER_HEV
@@ -44,7 +47,7 @@ chi = 1000       # global multiplier χ  (new model)
 kind_of_D_face = "arithmetic"  # "harmonic", "arithmetic", "geometric"
 # self similarity model fudge factors (Kelvin-based Rosen coefficients)
 f_Kelvin = 3.4 * 10**13 / (KELVIN_PER_HEV**1.6 * 19.32**0.14)         # specific energy coefficient (legacy name, Kelvin-based)
-g_Kelvin = 1 / 7200 / (KELVIN_PER_HEV**1.6 * 19.32**0.14)              # opacity coefficient (legacy name, Kelvin-based)
+g_Kelvin = 1 / 7200 / (KELVIN_PER_HEV**1.5 * 19.32**0.14)              # opacity coefficient (legacy name, Kelvin-based)
 
 alpha = 1.5       # opacity exponent
 gamma = 1.6       # beta exponent
@@ -788,8 +791,42 @@ def compare_with_linear_results():
 # -----------------------------
 # Main
 # -----------------------------
+
+def simple_simulation():
+    global z, dz, L, Nz, t_final, t_final_sec
+    L = 20e-5
+    Nz = 100
+    t_final = 1e-9
+    t_final_sec = t_final
+    global g_Kelvin, alpha, lambda_param, f_Kelvin, beta_Rosen, mu
+    g_Kelvin = 1.0 / (7200 * KELVIN_PER_HEV**1.5)
+    alpha = 1.5
+    lambda_param = 0.2
+    f_Kelvin = 3.4e13 / (KELVIN_PER_HEV**1.6)
+    beta_Rosen = 1.6
+    mu = 0.14
+
+    global T_bath_kelvin, T_bath, T_right_Kelvin, chi
+    T_bath_kelvin = 1 * KELVIN_PER_HEV
+    T_bath = T_bath_kelvin
+    # T_right_Kelvin = 0.0  # vacuum BC (match run_diffusion_1d / Rad-Hydro)
+
+    z = np.linspace(0, L, Nz)
+    dz = z[1] - z[0]
+    times_to_store = np.array([1e-9])
+    results = run_case(tau=0.0, times_to_store=times_to_store, reset_initial_conditions=True)
+    stored_t = results["stored_t"]
+    stored_Um = results["stored_Um"]
+    stored_T = results["stored_T"][0, :]
+    plt.figure(figsize=(10, 6))
+    # plt.plot(z, stored_Um, label="Stored Um")
+    plt.plot(z, stored_T, label="Stored T")
+    plt.legend()
+    plt.show()
+
 def main():
-    simulate()
+    simple_simulation()
+    # simulate()
 
 if __name__ == "__main__":
     main()

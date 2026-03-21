@@ -7,7 +7,7 @@ shussman_shock_solver (self-similar solution).
 from __future__ import annotations
 
 import numpy as np
-from project_3.rad_hydro_sim.plotting import mpl_style  # noqa: F401 - apply project style
+from project3_code.rad_hydro_sim.plotting import mpl_style  # noqa: F401 - apply project style
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 from matplotlib.animation import FuncAnimation, PillowWriter
@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Union
 from dataclasses import dataclass
 
-from project_3.rad_hydro_sim.verification.hydro_data import RadHydroData
-from project_3.rad_hydro_sim.plotting import RadHydroHistory
+from project3_code.rad_hydro_sim.verification.hydro_data import RadHydroData
+from project3_code.rad_hydro_sim.plotting import RadHydroHistory
 @dataclass
 class SimulationData:
     """Container for simulation data at multiple times."""
@@ -113,11 +113,8 @@ def load_shussman_data(npz_path: str | Path) -> SimulationData:
     if "times_sec" in files:
         times_sec = np.asarray(data["times_sec"], dtype=float)
     elif "times" in files:
-        print("times in files")
         times_ns = np.asarray(data["times"], dtype=float)
-        print("times_ns: ", times_ns)
         times_sec = times_ns * 1e-9
-        print("times_sec: ", times_sec)
     else:
         raise KeyError(
             f"NPZ archive has no 'times_sec' or 'times'. Keys present: {files}"
@@ -233,9 +230,6 @@ def plot_comparison_single_time(
         x_ref = ref_data.x[ref_idx]
         xlabel = r"Position $x$ [cm]"
     
-    print(ref_data.times[ref_idx])
-    print(sim_data.times[sim_idx])
-
     # Create figure
     fig, axes = plt.subplots(4, 2, figsize=(12, 11), sharex=True)
     ax_rho, ax_p = axes[0, 0], axes[0, 1]
@@ -382,15 +376,10 @@ def plot_comparison_slider(
     # Initial plot (k=0)
     k = 0
     ref_k = interpolate_to_time(ref_data, all_times[k])
-    print("all_times[k]: ", all_times[k])
-    print("ref_k: ", ref_k)
     
     x_sim = sim_data.m[k] if xaxis == "m" else sim_data.x[k]
     x_ref = ref_data.m[ref_k] if xaxis == "m" else ref_data.x[ref_k] 
 
-    print("max x value in sim_data: ", np.max(x_sim))
-    print("max x value in ref_data: ", np.max(x_ref))
-    
     # Create line objects
     lines = {}
     shock_k = interpolate_to_time(shock_data, all_times[k]) if shock_data is not None else None

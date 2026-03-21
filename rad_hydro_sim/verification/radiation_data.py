@@ -75,7 +75,7 @@ def supersonic_output_to_radiation_data(
     T_heat from the solver is 100*T0*times^tau*T_tilde; we convert to Kelvin as T_Kelvin = T_heat/100
     when T0 was passed in Hev. E_rad = a_Kelvin * T_Kelvin^4 [erg/cm^3].
     """
-    from project_3.rad_hydro_sim.simulation.radiation_step import a_Kelvin, KELVIN_PER_HEV
+    from project3_code.rad_hydro_sim.simulation.radiation_step import a_Kelvin, KELVIN_PER_HEV
 
     # T_heat from solver is in HeV; convert to Kelvin: T_K = T_HeV * KELVIN_PER_HEV
     T_heat_Kelvin = profiles_dict["T_heat"] * KELVIN_PER_HEV  # (n_times, n_xi)

@@ -1,12 +1,12 @@
-from project_3.hydro_sim.core.geometry import Geometry
-from project_3.rad_hydro_sim.simulation.hydro_steps import (
+from project3_code.hydro_sim.core.geometry import Geometry
+from project3_code.rad_hydro_sim.simulation.hydro_steps import (
     get_e_star_from_hydro,
     update_nodes_from_pressure,
 )
-from project_3.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
-from project_3.rad_hydro_sim.simulation.radiation_step import radiation_step, calculate_temperature_from_specific_energy
-from project_3.hydro_sim.problems.simulation_config import SimulationConfig
-from project_3.hydro_sim.core.state import RadHydroState
+from project3_code.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
+from project3_code.rad_hydro_sim.simulation.radiation_step import radiation_step, calculate_temperature_from_specific_energy
+from project3_code.hydro_sim.problems.simulation_config import SimulationConfig
+from project3_code.hydro_sim.core.state import RadHydroState
 import numpy as np
 
 S_PER_NS = 1e-9

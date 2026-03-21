@@ -10,7 +10,7 @@ from abc import ABC
 from dataclasses import dataclass
 from typing import Optional, Any, Tuple
 
-from project_3.hydro_sim.core.geometry import Geometry, planar
+from project3_code.hydro_sim.core.geometry import Geometry, planar
 
 
 @dataclass(frozen=True)
@@ -62,7 +62,9 @@ class RadHydroCase(ABC):
     
     # Optional fields with defaults
     title: str = ""
-    
+    # Right BC for radiation: T_right_Kelvin=0 -> vacuum (E_right=0); >0 -> cold sink (match 1D Diffusion for verification)
+    T_right_Kelvin: Optional[float] = 0.0
+
     # Geometry
     geom: Geometry = planar()  # Default to planar geometry
 

@@ -15,7 +15,7 @@ from typing import List, Optional
 
 import numpy as np
 
-# Parent of repo root so project_3 package resolves when run as script
+# Parent of repo root so project3_code package resolves when run as script
 _repo_parent = Path(__file__).resolve().parent.parent.parent.parent
 if str(_repo_parent) not in sys.path:
     sys.path.insert(0, str(_repo_parent))

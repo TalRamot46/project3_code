@@ -6,9 +6,9 @@ from . import mpl_style  # noqa: F401 - apply project style
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 
-from project_3.hydro_sim.simulations.lagrangian_sim import HydroHistory
-from project_3.hydro_sim.plotting.hydro_plots import _create_7panel_vertical_figure
-from project_3.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
+from project3_code.hydro_sim.simulations.lagrangian_sim import HydroHistory
+from project3_code.hydro_sim.plotting.hydro_plots import _create_7panel_vertical_figure
+from project3_code.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 
 def plot_history_slider(
     history: "HydroHistory",
@@ -27,7 +27,7 @@ def plot_history_slider(
     """
     k0 = 0  # Initial frame
     # Use mass coordinate for x-axis when available (consistent with update)
-    x_axis = history.m[k0] if hasattr(history, "m") else history.x[k0]
+    x_axis = history.x[k0] if hasattr(history, "x") else history.m[k0]
     
     has_T_material = hasattr(history, "T_material") and history.T_material is not None
 
@@ -81,13 +81,13 @@ def plot_history_slider(
     
     def update(val):
         k = int(slider.val)
-        lines[0].set_data(history.m[k], history.rho[k])
-        lines[1].set_data(history.m[k], history.p[k])
-        lines[2].set_data(history.m[k], history.u[k])
-        lines[3].set_data(history.m[k], history.e[k])
-        lines[4].set_data(history.m[k], history.T_material[k] if has_T_material else history.T[k])
-        lines[5].set_data(history.m[k], history.T[k])
-        lines[6].set_data(history.m[k], history.E_rad[k])
+        lines[0].set_data(history.x[k], history.rho[k])
+        lines[1].set_data(history.x[k], history.p[k])
+        lines[2].set_data(history.x[k], history.u[k])
+        lines[3].set_data(history.x[k], history.e[k])
+        lines[4].set_data(history.x[k], history.T_material[k] if has_T_material else history.T[k])
+        lines[5].set_data(history.x[k], history.T[k])
+        lines[6].set_data(history.x[k], history.E_rad[k])
         set_title(k)
         
         for ax in axes:

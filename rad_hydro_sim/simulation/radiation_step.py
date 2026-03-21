@@ -15,8 +15,8 @@ from typing import Tuple
 def harmonic_mean(a: np.ndarray, b: np.ndarray) -> np.ndarray: return 2 * a * b / (a + b)
 def arithmetic_mean(a: np.ndarray, b: np.ndarray) -> np.ndarray: return (a + b) / 2
 
-from project_3.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
-from project_3.hydro_sim.core.state import RadHydroState
+from project3_code.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
+from project3_code.hydro_sim.core.state import RadHydroState
 
 def calculate_temperature_from_specific_energy(
     e_material: np.ndarray, rho: np.ndarray, f: float, gamma: float, mu: float
@@ -24,17 +24,13 @@ def calculate_temperature_from_specific_energy(
     return ((e_material / f) * rho**mu) ** (1/gamma)
 
 
-def calculate_beta(T_rad: np.ndarray, T_material: np.ndarray, rho: np.ndarray) -> np.ndarray:
-    """beta = dU_R/dU_m where U_R=a*T_rad^4, U_m=f*T_m^gamma*rho^{-mu+1}.
-    Near equilibrium dT_rad ~ dT_m, so
-    beta = (4a*T_rad^3) / (gamma*f*T_m^{gamma-1}*rho^{-mu+1})
-         = 4a/(f*gamma) * T_rad^3 * T_m^{1-gamma} * rho^{mu-1}
-    """
-    return 4*a_Kelvin / (f_Kelvin * beta_Rosen) * T_rad**3 * T_material**(1 - beta_Rosen) * rho**(mu - 1)
+def calculate_beta_from_temperature_and_density(T_material: np.ndarray, rho: np.ndarray) -> np.ndarray:
+    """beta = dU_R/dU_m; at equilibrium: 4a/(f*gamma) * T^(4-gamma) * rho^(mu-1)."""
+    return 4*a_Kelvin / (f_Kelvin * beta_Rosen) * T_material**(4 - beta_Rosen) * rho**(mu - 1)
 
-def calculate_sigma(T_rad: np.ndarray, rho: np.ndarray) -> np.ndarray:
-    """Opacity from Rosen's formula evaluated at the radiation temperature."""
-    return 1.0 / (g_Kelvin * T_rad**alpha * rho**(-lambda_ - 1))
+def calculate_sigma_from_temperature_and_density(T_material: np.ndarray, rho: np.ndarray) -> np.ndarray:
+    """Opacity from Rosen's formula evaluated at temperature T."""
+    return 1.0 / (g_Kelvin * T_material**alpha * rho**(-lambda_ - 1))
 
 def calculate_D_from_sigma(sigma: np.ndarray) -> np.ndarray:
     return c / (3 * sigma)
@@ -43,12 +39,11 @@ def calculate_A(beta: np.ndarray, sigma: np.ndarray, dt: float) -> np.ndarray:
     return chi * beta * sigma * dt * c
 
 def calculate_abcd(sigma: np.ndarray, D: np.ndarray, A: np.ndarray, m_cells: np.ndarray, rho: np.ndarray, E_rad
-                   : np.ndarray, T_rad: np.ndarray, dt: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+                   : np.ndarray, T_material: np.ndarray, dt: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Returns the coefficients a, b, c, d for the implicit update of material energy and radiation energy density.
     a = [a1, a2, ..., aN], a_i^n = a[i-1] at time step n
 
-    T_rad is the radiation temperature from the previous step, used to compute
-    UR_star = a * T_rad^4 (the radiation equilibrium at the start of the step).
+    T_material is the material temperature, used for UR_star = a*T_material^4 (coupling drives E toward material equilibrium).
     """
     if HARMONIC_MEAN:
         D_face_left = rho[:-2] * harmonic_mean(D[:-2], D[1:-1])
@@ -61,7 +56,7 @@ def calculate_abcd(sigma: np.ndarray, D: np.ndarray, A: np.ndarray, m_cells: np.
     a = -coeff * D_face_left
     c_coeff = -coeff * D_face_right
     b = coeff * (D_face_right + D_face_left) + 1/dt + F
-    UR_star = a_Kelvin * T_rad[1:-1]**4
+    UR_star = a_Kelvin * T_material[1:-1]**4
     d = F * UR_star + (1/dt) * E_rad[1:-1]
 
     if np.any(np.isnan(a)) or np.any(np.isnan(b)) or np.any(np.isnan(c_coeff)) or np.any(np.isnan(d)):
@@ -143,16 +138,15 @@ def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydr
         state_star.T_rad,
     )
 
-    # Material temperature from e_star (needed for beta's T_material dependence)
+    # Material temperature from e_star (match working: use T_material for beta and sigma)
     T_material_star = calculate_temperature_from_specific_energy(e_star, rho, f_Kelvin, beta_Rosen, mu)
-    # Opacity and diffusion use T_rad; beta uses both T_rad and T_material
-    beta_heat_capacities_ratio = calculate_beta(T_rad_current, T_material_star, rho)
-    sigma = calculate_sigma(T_rad_current, rho)
+    beta = calculate_beta_from_temperature_and_density(T_material_star, rho)
+    sigma = calculate_sigma_from_temperature_and_density(T_material_star, rho)
     D = calculate_D_from_sigma(sigma)
-    A = calculate_A(beta_heat_capacities_ratio, sigma, dt)
+    A = calculate_A(beta, sigma, dt)
 
-    # Build tridiagonal system; UR_star uses T_rad_current (radiation state from previous step)
-    a, b, c_coeff, d = calculate_abcd(sigma, D, A, m_cells, rho, E_rad, T_rad_current, dt)
+    # Build tridiagonal system; UR_star uses T_material (coupling drives E toward material equilibrium, match 1D Diffusion)
+    a, b, c_coeff, d = calculate_abcd(sigma, D, A, m_cells, rho, E_rad, T_material_star, dt)
 
     t_drive = max(state_star.t, dt)
     T_left = rad_hydro_case.T0_Kelvin * (t_drive/(10**-9))**rad_hydro_case.tau
@@ -161,33 +155,21 @@ def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydr
 
     new_E_rad = solve_tridiagonal(a, b, c_coeff, d)
     new_E_rad[0] = E_left
-    new_E_rad[-1] = a_Kelvin * rad_hydro_case.T_initial_Kelvin**4
+    # Right BC: T_right_Kelvin=0 or None -> vacuum (E_right=0); >0 -> cold sink (match 1D Diffusion / run_diffusion_1d)
+    T_right = rad_hydro_case.T_right_Kelvin or 0.0
+    new_E_rad[-1] = 0.0 if T_right <= 0 else a_Kelvin * T_right**4
+    new_T_rad = (new_E_rad / a_Kelvin) ** (1 / 4)
 
-    # UR_star from radiation temperature (consistent with the d-vector source term)
-    UR_star = a_Kelvin * T_rad_current**4
-    UR_star[0]  = E_left
-    UR_star[-1] = 1e-10
+    # Coupled update (match working): new_UR = (A*E_new + UR_star)/(1+A), then derive T and e from Rosen EOS
+    UR_star = a_Kelvin * state_star.T_material**4
+    UR_star[0] = E_left
+    UR_star[-1] = 1e-10 if T_right <= 0 else a_Kelvin * T_right**4
     new_UR = (A / (1 + A)) * new_E_rad + (1 / (1 + A)) * UR_star
 
-    # Convert new_UR to new_Um using beta
-    Um_star = rho * e_star
-    dU_R = new_UR - UR_star
-    # print(A)
-    if state_star.t > 5e-10:
-        pass
-        print(T_left - T_rad_current[0])
-        print(new_E_rad[0] - UR_star[0])
-        print(new_UR[0] - UR_star[0])
-    dU_m = dU_R / beta_heat_capacities_ratio
-    new_Um = Um_star + dU_m
-
-    # Radiation temperature from the updated U_R
-    new_T_rad = (new_UR / a_Kelvin) ** (1 / 4)
-    new_T_rad[0] = T_left
-    new_T_rad[-1] = rad_hydro_case.T_initial_Kelvin
-
-    # Material specific energy directly from U_m
-    new_e_material = new_Um / rho
-    new_T_material = calculate_temperature_from_specific_energy(new_e_material, rho, f_Kelvin, beta_Rosen, mu)
+    # Temperature from coupled result; material e from Rosen EOS (match working)
+    new_T_material = (new_UR / a_Kelvin) ** (1 / 4)
+    new_T_material[0] = T_left
+    new_T_material[-1] = T_right if T_right > 0 else 0.0
+    new_e_material = f_Kelvin * new_T_material**beta_Rosen * rho**(-mu)
 
     return new_T_material, new_e_material, new_T_rad, new_E_rad

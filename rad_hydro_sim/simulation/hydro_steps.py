@@ -1,18 +1,18 @@
 import numpy as np
 
-from project_3.hydro_sim.core.geometry import Geometry, planar
-from project_3.hydro_sim.core.integrator import (
+from project3_code.hydro_sim.core.geometry import Geometry, planar
+from project3_code.hydro_sim.core.integrator import (
     _apply_velocity_bc_half,
     _apply_velocity_bc_full,
     _get_boundary_pressures,
     compute_acceleration_nodes,
 )
-from project_3.hydro_sim.core.state import RadHydroState
-from project_3.hydro_sim.core.grid import cell_volumes
-from project_3.hydro_sim.core.viscosity import artificial_viscosity
-from project_3.hydro_sim.core.eos import pressure_ideal_gas
-from project_3.hydro_sim.core.boundary import apply_velocity_bc, apply_pressure_bc
-from project_3.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
+from project3_code.hydro_sim.core.state import RadHydroState
+from project3_code.hydro_sim.core.grid import cell_volumes
+from project3_code.hydro_sim.core.viscosity import artificial_viscosity
+from project3_code.hydro_sim.core.eos import pressure_ideal_gas
+from project3_code.hydro_sim.core.boundary import apply_velocity_bc, apply_pressure_bc
+from project3_code.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 
 def get_e_star_from_hydro(
     state: RadHydroState,

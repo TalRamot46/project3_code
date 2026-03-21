@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from project_3.hydro_sim.core.eos import (
+from project3_code.hydro_sim.core.eos import (
     internal_energy_from_prho,
     pressure_ideal_gas,
     sound_speed,

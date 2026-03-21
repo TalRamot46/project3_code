@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from project_3.hydro_sim.simulations.lagrangian_sim import HydroHistory
+from project3_code.hydro_sim.simulations.lagrangian_sim import HydroHistory
 
 @dataclass
 class RadHydroHistory(HydroHistory):

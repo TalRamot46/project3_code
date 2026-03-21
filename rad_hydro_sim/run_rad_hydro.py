@@ -3,20 +3,18 @@ from pathlib import Path
 from typing import Dict, Tuple
 
 import numpy as np
-
-# Add parent directory to path so project_3 module can be found
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from project_3.rad_hydro_sim.problems.presets_utils import (
+from project3_code.rad_hydro_sim.problems.presets_utils import (
     get_preset_names,
     get_preset,
 )
-from project_3.rad_hydro_sim.output_paths import make_rad_hydro_output_paths
-from project_3.hydro_sim.plotting.hydro_plots import save_history_gif
-from project_3.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
-from project_3.rad_hydro_sim.plotting.slider import plot_history_slider
-from project_3.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
-from project_3.hydro_sim.problems.simulation_config import SIMULATION_CONFIGS, SimulationConfig
+from project3_code.rad_hydro_sim.output_paths import make_rad_hydro_output_paths
+from project3_code.hydro_sim.plotting.hydro_plots import save_history_gif
+from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
+from project3_code.rad_hydro_sim.plotting.slider import plot_history_slider
+from project3_code.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
+from project3_code.hydro_sim.problems.simulation_config import SIMULATION_CONFIGS, SimulationConfig
 
 def run_simulation(
     case: RadHydroCase,
@@ -93,13 +91,13 @@ def main():
     # ===== SELECT YOUR PRESET HERE =====
     # Preset = physical case name (SIMPLE_TEST_CASES key). Use constants from presets_config.
     # Run list_presets() from presets_utils for a grouped list.
-    from project_3.rad_hydro_sim.problems.presets_config import (
+    from project3_code.rad_hydro_sim.problems.presets_config import (
         PRESET_CONSTANT_PRESSURE,
         PRESET_FIG_8,
         PRESET_FIG_10,
         PRESET_CONSTANT_T_RADIATION
     )
-    preset_name = PRESET_FIG_8  
+    preset_name = PRESET_CONSTANT_T_RADIATION  
     
     # Get case and config from preset
     case, config = get_preset(preset_name)

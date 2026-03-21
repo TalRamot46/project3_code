@@ -10,12 +10,11 @@ N, store_every, png_time_frac manually when running a test.
 """
 from typing import Dict, Tuple
 
-from project_3.hydro_sim.core.geometry import planar
+from project3_code.hydro_sim.core.geometry import planar
 
 # ---------------------------------------------------------------------------
 # Preset name constants = SIMPLE_TEST_CASES keys (physical case names)
 # ---------------------------------------------------------------------------
-PRESET_FIRST_ATTEMPT = "first_attempt"
 PRESET_POWER_LAW = "constant_pressure_drive"
 PRESET_CONSTANT_PRESSURE = "power_law_pressure_drive"
 PRESET_CONSTANT_T_RADIATION = "constant_temperature_drive"
@@ -26,12 +25,12 @@ PRESET_FIG_9 = "fig_9_comparison"
 PRESET_FIG_10 = "fig_10_comparison"
 # Full rad-hydro presets (for grouping in list_presets)
 FULL_RAD_HYDRO_PRESET_NAMES = (PRESET_RAD_HYDRO_CONSTANT_T, PRESET_FIG_10)
-from project_3.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
-from project_3.hydro_sim.problems.simulation_config import (
+from project3_code.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
+from project3_code.hydro_sim.problems.simulation_config import (
     SIMULATION_CONFIGS,
     SimulationConfig,
 )
-from project_3.rad_hydro_sim.simulation.radiation_step import KELVIN_PER_HEV
+from project3_code.rad_hydro_sim.simulation.radiation_step import KELVIN_PER_HEV
 
 KELVIN_PRE_HEV = 1_160_500
 
@@ -39,47 +38,6 @@ KELVIN_PRE_HEV = 1_160_500
 _power_law_tau = -0.45
 
 PRESET_TEST_CASES = {
-    PRESET_FIRST_ATTEMPT: RadHydroCase(
-        # Rosen's opacity parameters
-        g_Kelvin = 1.0/7200,
-        alpha = 1.5,
-        lambda_ = 0.2,
-
-        # Rosen's specific energy parameters
-        f_Kelvin = 3.4e13,
-        beta_Rosen = 1.6,
-        mu = 0.14,
-
-        # coupling factor
-        chi = 1000,
-
-        # Boundary conditions
-        T0_Kelvin = 1, # Hev units
-        P0_Barye = None,
-        tau = 1.0,
-
-        # initial conditions
-        rho0 = 1.0,
-        p0 = 1e-6,
-        u0 = .00,
-        T_initial_Kelvin = None,
-
-        # adiabatic index
-        r = 0.25, # r = \gamma_adiabatic - 1
-
-        # Initial conditions0
-        
-        # grid parameters
-        x_min = 0.0,
-        x_max = 6e-5,
-        t_sec_end = 1.0e-9,
-
-        initial_condition="pressure, velocity, density",
-        scenario="hydro_only",
-
-        title="First attempt (hydro only)",
-        geom=planar(),
-    ),
     PRESET_POWER_LAW: RadHydroCase(
         # Rosen's opacity parameters
         # Rosen's opacity parameters
@@ -311,7 +269,7 @@ PRESET_TEST_CASES = {
         t_sec_end = 2e-10,
 
         initial_condition="temperature, density",
-        scenario="radiation_only",
+        scenario="full_rad_hydro",
         title="Fig 8 comparison (τ=0, Shussman verification)",
         geom=planar(),
     ),

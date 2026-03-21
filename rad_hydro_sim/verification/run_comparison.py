@@ -13,10 +13,10 @@ Compares:
 
 Usage:
   # In main(), set MODE and run:
-  python -m project_3.rad_hydro_sim.verification.run_comparison
+  python -m project3_code.rad_hydro_sim.verification.run_comparison
 
   Or from repo root:
-  python project_3/rad_hydro_sim/verification/run_comparison.py
+  python project3_code/rad_hydro_sim/verification/run_comparison.py
 """
 from __future__ import annotations
 
@@ -25,29 +25,31 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
-# Ensure project_3 is on path (when run as script): add parent of repo root so "project_3" package resolves
+# Ensure project3_code is on path (when run as script): add parent of repo root so "project3_code" package resolves
 _REPO_PARENT = Path(__file__).resolve().parent.parent.parent.parent
 if str(_REPO_PARENT) not in sys.path:
     sys.path.insert(0, str(_REPO_PARENT))
 
-from project_3.rad_hydro_sim.output_paths import get_rad_hydro_npz_path
-from project_3.rad_hydro_sim.plotting.gif import save_history_gif
-from project_3.rad_hydro_sim.verification.verification_config import (
+from project3_code.rad_hydro_sim.output_paths import get_rad_hydro_npz_path
+from project3_code.rad_hydro_sim.plotting.gif import save_history_gif
+from project3_code.rad_hydro_sim.verification.verification_config import (
     VerificationMode,
     get_preset_for_mode,
     get_output_prefix_for_mode,
     make_verification_output_paths,
 )
-from project_3.rad_hydro_sim.verification.radiation_data import (
+from project3_code.rad_hydro_sim.verification.radiation_data import (
     RadiationData,
     rad_hydro_history_to_radiation_data,
     diffusion_output_to_radiation_data,
     supersonic_output_to_radiation_data,
 )
-from project_3.rad_hydro_sim.verification.compare_radiation_plots import (
+from project3_code.rad_hydro_sim.verification.compare_radiation_plots import (
     plot_radiation_comparison_single_time,
     plot_radiation_comparison_slider,
 )
+
+from project3_code.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 
 KELVIN_PER_HEV = 1_160_500
 a_Kelvin = 7.5657e-15 / (KELVIN_PER_HEV**4)
@@ -63,12 +65,12 @@ def run_supersonic_solver_reference(
     """
     Run the supersonic (radiation self-similar) solver with parameters matching the RadHydroCase.
 
-    Builds a MaterialSuper from the case (alpha, beta=gamma, lambda_, mu, rho0, f, g, sigma),
+    Builds a MaterialSuper from the case (alpha, beta_Rosen, lambda_, mu, rho0, f, g, sigma),
     uses case.tau (0 for constant temperature drive), and maps dimensionless time to
     physical time via t_end. Returns RadiationData in the same format as diffusion reference.
     """
     try:
-        from project_3.shussman_solvers.supersonic_solver import (
+        from project3_code.shussman_solvers.supersonic_solver import (
             MaterialSuper,
             STEFAN_BOLTZMANN_KELVIN,
             compute_profiles_for_report,
@@ -80,7 +82,7 @@ def run_supersonic_solver_reference(
     # Material matching the preset (same opacity/EOS as rad_hydro)
     mat = MaterialSuper(
         alpha=float(case.alpha),
-        beta=float(case.gamma),
+        beta=float(case.beta_Rosen),
         lambda_=float(case.lambda_),
         mu=float(case.mu),
         rho0=float(case.rho0),
@@ -120,9 +122,9 @@ def run_radiation_only_comparison(
     save_gif: bool = True,
 ) -> None:
     """Run rad_hydro (radiation_only preset), 1D Diffusion, and Supersonic solver; compare T, E_rad."""
-    from project_3.rad_hydro_sim.problems.presets_utils import get_preset
-    from project_3.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
-    from project_3.rad_hydro_sim.verification.run_diffusion_1d import run_diffusion_1d
+    from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
+    from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
+    from project3_code.rad_hydro_sim.verification.run_diffusion_1d import run_diffusion_1d
 
     preset_name = get_preset_for_mode(VerificationMode.RADIATION_ONLY)
     case, config = get_preset(preset_name)
@@ -138,7 +140,7 @@ def run_radiation_only_comparison(
             simulation_config=config,
         )
         sim_data = rad_hydro_history_to_radiation_data(history)
-        print(f"  Stored {len(sim_data.times)} time steps.")
+        print(f"Stored {len(sim_data.times)} time steps.")
 
         # Save and load from rad_hydro_sim/data/ (same path for round-trip)
         # import matplotlib.pyplot as plt
@@ -158,9 +160,10 @@ def run_radiation_only_comparison(
             Nz=config.N,
             f_Kelvin=float(case.f_Kelvin),
             g_Kelvin=float(case.g_Kelvin),
+            T_right_Kelvin=float(case.T_right_Kelvin or 0.0),
         )
         ref_data = diffusion_output_to_radiation_data(times_sec, z, T_list, E_rad_list)
-        print(f"  Stored {len(ref_data.times)} time steps.")
+        print(f"Stored {len(ref_data.times)} time steps.")
     
     if not skip_rad_hydro:
         sim_npz = get_rad_hydro_npz_path(case_title, prefix="sim_data")
@@ -214,7 +217,7 @@ def run_radiation_only_comparison(
         )
         # convert T to Kelvin
         if super_data is not None:
-            print(f"  Stored {len(super_data.times)} time steps.")
+            print(f"Stored {len(super_data.times)} time steps.")
 
     # if any of the data among sim_data, ref_data and super_data is None, 
     # set it to the other data. Be aware of not setting None to None.
@@ -272,17 +275,17 @@ def run_radiation_only_comparison(
 # Hydro-only: run rad_hydro + hydro_sim + shock solver (matching P0*t^tau), compare rho, p, u, e
 # =============================================================================
 
-def _rad_hydro_case_to_shock_material(case) -> "Material":
+def _rad_hydro_case_to_shock_material(case: RadHydroCase) -> "Material":
     """Build Shussman shock Material from RadHydroCase. Uses f_Kelvin, g_Kelvin."""
-    from project_3.shussman_solvers.shock_solver.materials_shock import (
+    from project3_code.shussman_solvers.shock_solver.materials_shock import (
         Material,
         HEV_IN_KELVIN,
     )
     alpha = float(case.alpha)
-    beta = float(case.gamma)
+    beta = float(case.beta_Rosen)
     rho0 = float(case.rho0) if case.rho0 is not None else 19.32
     V0 = 1.0 / rho0
-    # f_Kelvin: e = f_Kelvin * T_Kelvin^gamma * rho^(-mu) [erg/g]
+    # f_Kelvin: e = f_Kelvin * T_Kelvin^beta_Rosen * rho^(-mu) [erg/g]
     # Shock solver expects f such that e = f * T_Hev^beta * rho^(-mu) => f = f_Kelvin / HEV^beta
     f = float(case.f_Kelvin) / (HEV_IN_KELVIN**beta)
     g = float(case.g_Kelvin) / (HEV_IN_KELVIN**alpha)
@@ -311,12 +314,12 @@ def run_shock_solver_hydro_reference(
     Drive: p_drive(t_ns) = P0_Barye * (t_ns)^tau with t_ns = t_sec * 1e9.
     """
     try:
-        from project_3.shussman_solvers.shock_solver.profiles_for_report_shock import (
+        from project3_code.shussman_solvers.shock_solver.profiles_for_report_shock import (
             compute_shock_profiles,
         )
-        from project_3.hydro_sim.verification.compare_shock_plots import SimulationData
+        from project3_code.hydro_sim.verification.compare_shock_plots import SimulationData
     except ImportError as e:
-        print(f"  Could not import shock solver: {e}, skipping.")
+        print(f"Could not import shock solver: {e}, skipping.")
         return None
 
     P0_Barye = float(case_rh.P0_Barye)
@@ -361,21 +364,21 @@ def run_hydro_only_comparison(
     save_gif: bool = True,
 ) -> None:
     """Run rad_hydro and hydro_sim and shock solver with matching P0*t^tau; compare rho, p, u, e."""
-    from project_3.rad_hydro_sim.problems.presets_utils import get_preset
-    from project_3.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
-    from project_3.hydro_sim.problems.driven_shock_problem import DrivenShockCase
-    from project_3.hydro_sim.core.geometry import planar
-    from project_3.hydro_sim.simulations.lagrangian_sim import (
+    from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
+    from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
+    from project3_code.hydro_sim.problems.driven_shock_problem import DrivenShockCase
+    from project3_code.hydro_sim.core.geometry import planar
+    from project3_code.hydro_sim.simulations.lagrangian_sim import (
         simulate_lagrangian,
         SimulationType,
     )
-    from project_3.hydro_sim.verification.compare_shock_plots import (
+    from project3_code.hydro_sim.verification.compare_shock_plots import (
         plot_comparison_single_time,
         plot_comparison_slider,
         load_rad_hydro_history,
         load_hydro_history,
     )
-    from project_3.hydro_sim.verification.compare_shock_plots import (
+    from project3_code.hydro_sim.verification.compare_shock_plots import (
         plot_comparison_single_time,
         plot_comparison_slider,
     )
@@ -408,7 +411,7 @@ def run_hydro_only_comparison(
             simulation_config=config,
         )
         sim_data = load_rad_hydro_history(history_rh, label="Rad-Hydro (hydro only)")
-        print(f"  Stored {len(sim_data.times)} time steps.")
+        print(f"Stored {len(sim_data.times)} time steps.")
 
     ref_data = None
     if not skip_hydro_sim:
@@ -429,7 +432,7 @@ def run_hydro_only_comparison(
         ref_data.label = "Hydro (run_hydro)"
         ref_data.color = "red"
         ref_data.linestyle = "--"
-        print(f"  Stored {len(ref_data.times)} time steps.")
+        print(f"Stored {len(ref_data.times)} time steps.")
 
     shock_data = None
     if not skip_shock_solver and (sim_data is not None or ref_data is not None):
@@ -437,7 +440,7 @@ def run_hydro_only_comparison(
         print("Running shock solver (P0*t^τ)...")
         shock_data = run_shock_solver_hydro_reference(case_rh, times_source)
         if shock_data is not None:
-            print(f"  Stored {len(shock_data.times)} time steps.")
+            print(f"Stored {len(shock_data.times)} time steps.")
 
     if sim_data is None or ref_data is None:
         print("Need both rad_hydro and hydro_sim data for comparison.")
@@ -485,7 +488,7 @@ def run_hydro_only_comparison(
 
 def _pad_rad_hydro_data_to_min_frames(data, min_frames: int = 2, t_end_ns: float | None = None):
     """Duplicate frames so data has at least min_frames entries (for slider)."""
-    from project_3.rad_hydro_sim.verification.hydro_data import RadHydroData
+    from project3_code.rad_hydro_sim.verification.hydro_data import RadHydroData
 
     n = len(data.times)
     if n >= min_frames or n == 0:
@@ -526,15 +529,15 @@ def run_full_rad_hydro_comparison(
     reference: subsonic solver (profiles until shock front) + shock solver (driven by
     pressure at front from subsonic). Shock front is diagnosed from rad_hydro solution.
     """
-    from project_3.rad_hydro_sim.problems.presets_utils import get_preset
-    from project_3.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
-    from project_3.rad_hydro_sim.verification.hydro_data import (
+    from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
+    from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
+    from project3_code.rad_hydro_sim.verification.hydro_data import (
         RadHydroData,
     )
-    from project_3.rad_hydro_sim.verification.shussman_comparison import (
+    from project3_code.rad_hydro_sim.verification.shussman_comparison import (
         run_shussman_piecewise_reference,
     )
-    from project_3.hydro_sim.verification.compare_shock_plots import (
+    from project3_code.hydro_sim.verification.compare_shock_plots import (
         plot_comparison_single_time,
         plot_comparison_slider,
         load_rad_hydro_history,
@@ -555,7 +558,7 @@ def run_full_rad_hydro_comparison(
             simulation_config=config,
         )
         sim_data = load_rad_hydro_history(history_rh)
-        print(f"  Stored {len(sim_data.times)} time steps.")
+        print(f"Stored {len(sim_data.times)} time steps.")
 
         # save the sim_data to rad_hydro_sim/data/
         sim_npz = get_rad_hydro_npz_path(case_title, prefix="sim_data")
@@ -629,7 +632,9 @@ def run_full_rad_hydro_comparison(
             show=True,
             title="Full rad_hydro vs Shussman (subsonic + shock)",
         )
-    print(f"sim_data.times: {sim_data.times}")
+
+    # for debugging:
+    # print(f"sim_data.times: {sim_data.times}")
     if save_png:
         time_mid = config.png_time_frac * float(case.t_sec_end)
         plot_comparison_single_time(
@@ -670,6 +675,7 @@ def run_comparison(
     skip_shussman: bool = False,
     show_plot: bool = True,
     save_png: bool = True,
+    save_gif: bool = True,
 ) -> None:
     """Run the verification comparison for the given mode."""
     preset_name = get_preset_for_mode(mode)
@@ -686,6 +692,7 @@ def run_comparison(
             skip_supersonic=skip_supersonic,
             show_plot=show_plot,
             save_png=save_png,
+            save_gif=save_gif,
         )
     elif mode == VerificationMode.HYDRO_ONLY:
         run_hydro_only_comparison(
@@ -694,6 +701,7 @@ def run_comparison(
             skip_shock_solver=skip_shock_solver,
             show_plot=show_plot,
             save_png=save_png,
+            save_gif=save_gif,
         )
     elif mode == VerificationMode.FULL_RAD_HYDRO:
         run_full_rad_hydro_comparison(
@@ -701,6 +709,7 @@ def run_comparison(
             skip_shussman=skip_shussman,
             show_plot=show_plot,
             save_png=save_png,
+            save_gif=save_gif,
         )
     else:
         raise ValueError(f"Unknown mode: {mode}")
@@ -722,6 +731,7 @@ def main() -> None:
         skip_shussman=False,
         show_plot=True,
         save_png=True,
+        save_gif=True
     )
 
 if __name__ == "__main__":

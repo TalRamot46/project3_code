@@ -44,7 +44,7 @@ def solve_normalize(
         sol = integrate_ode(
             lambda t, y: F(t, y, alpha, beta, tau),
             t_span=(xi_start, 0.0),
-            y0=np.array([0.01, -1000.0], dtype=float),
+            y0=np.array([0.04, -1000.0], dtype=float),
             rtol=1e-6,
             atol=1e-8,
             max_step=1e-4,

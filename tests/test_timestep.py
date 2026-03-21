@@ -3,14 +3,14 @@
 import numpy as np
 import pytest
 
-from project_3.hydro_sim.core.timestep import (
+from project3_code.hydro_sim.core.timestep import (
     compute_dt_acoustic,
     compute_dt_cfl,
     compute_dt_crossing,
     compute_dt_volchange,
     update_dt_relchange,
 )
-from project_3.hydro_sim.core.state import HydroState
+from project3_code.hydro_sim.core.state import HydroState
 
 
 def _make_state(ncells=100, p0=1.0, rho0=1.0, u0=0.0):
@@ -20,7 +20,7 @@ def _make_state(ncells=100, p0=1.0, rho0=1.0, u0=0.0):
     rho = np.full(ncells, rho0)
     p = np.full(ncells, p0)
     return HydroState(
-        t=0.0, x=x, u=u, a=None,
+        t=0.0, x=x, u=u, a=None, T_material=None,
         V=None, rho=rho, e_material=None, p=p, q=None, m_cells=None,
     )
 
@@ -85,12 +85,8 @@ def test_dt_volchange_positive():
 
 def test_dt_cfl_positive_finite():
     """Combined CFL timestep should be positive and finite."""
-    N = 100
-    x = np.linspace(0.0, 1.0, N + 1)
-    u = np.zeros(N + 1)
-    rho = np.ones(N)
-    p = np.ones(N)
-    dt = compute_dt_cfl(x, u, rho, p, gamma=1.4, CFL=0.3)
+    state = _make_state(100, 1.0, 1.0, 0.0)
+    dt = compute_dt_cfl(state, gamma=1.4, CFL=0.3)
     assert dt > 0
     assert np.isfinite(dt)
 

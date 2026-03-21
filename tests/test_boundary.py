@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from project_3.hydro_sim.core.boundary import apply_velocity_bc, apply_pressure_bc
+from project3_code.hydro_sim.core.boundary import apply_velocity_bc, apply_pressure_bc
 
 
 # ---------------------------------------------------------------------------

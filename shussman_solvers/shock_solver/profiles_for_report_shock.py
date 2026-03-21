@@ -13,7 +13,7 @@ try:
     from .materials_shock import Material
     from .manager_shock import manager_shock
 except ImportError:
-    # Run as script: ensure project_3 (repo root) is on path
+    # Run as script: ensure project3_code (repo root) is on path
     _repo_root = Path(__file__).resolve().parents[2]
     if str(_repo_root) not in sys.path:
         sys.path.insert(0, str(_repo_root))

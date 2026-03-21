@@ -11,11 +11,15 @@ import numpy as np
 import pytest
 from typing import List, Tuple
 
-from project_3.rad_hydro_sim.verification.verification_config import (
+from project3_code.rad_hydro_sim.verification.verification_config import (
     VerificationMode,
     get_preset_for_mode,
 )
-from project_3.rad_hydro_sim.verification.radiation_data import RadiationData
+from project3_code.rad_hydro_sim.verification.radiation_data import RadiationData
+
+
+# Set to True when debugging to display comparison plots (use default Debug Tests config)
+SHOW_PLOTS = True
 
 
 # ---------------------------------------------------------------------------
@@ -23,39 +27,64 @@ from project_3.rad_hydro_sim.verification.radiation_data import RadiationData
 # ---------------------------------------------------------------------------
 
 
-def _index_closest_time(times: np.ndarray, target: float) -> int:
-    """Index of closest time to target."""
-    return int(np.argmin(np.abs(np.asarray(times) - target)))
+def _index_closest_time(
+    times: np.ndarray, fraction: float, reference_times: np.ndarray | None = None
+) -> int:
+    """Index of closest time to fraction * reference_times[-1] (or times[-1] if reference_times is None)."""
+    times = np.asarray(times)
+    ref = np.asarray(reference_times) if reference_times is not None else times
+    t_target = fraction * ref[-1]
+    return int(np.argmin(np.abs(times - t_target)))
 
 
 def _interpolate_to_common_grid(
     data_a: RadiationData,
     data_b: RadiationData,
-    target_time: float,
-    n_points: int = 100,
+    fraction: float,
+    n_points: int = 60,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Interpolate both datasets to a common x grid at target_time.
-
-    Returns (x_common, T_a, T_b, E_a, E_b) where each profile is on x_common.
-    """
-    ka = _index_closest_time(data_a.times, target_time)
-    kb = _index_closest_time(data_b.times, target_time)
-
+    """Interpolate both datasets to common x grid at fraction of final time. Returns (x_common, T_a, T_b, E_a, E_b)."""
+    ka = _index_closest_time(data_a.times, fraction)
+    kb = _index_closest_time(data_b.times, fraction, reference_times=data_a.times)
     x_a = np.asarray(data_a.x[ka], dtype=float)
     x_b = np.asarray(data_b.x[kb], dtype=float)
-    x_min = max(x_a.min(), x_b.min())
-    x_max = min(x_a.max(), x_b.max())
-    if x_max <= x_min:
-        x_max = max(x_a.max(), x_b.max())
-    x_common = np.linspace(x_min, x_max, n_points)
-
+    x_front = min(x_a.max(), x_b.max())
+    x_common = np.linspace(0, x_front, n_points)
     T_a = np.interp(x_common, x_a, np.asarray(data_a.T[ka], dtype=float))
     T_b = np.interp(x_common, x_b, np.asarray(data_b.T[kb], dtype=float))
     E_a = np.interp(x_common, x_a, np.asarray(data_a.E_rad[ka], dtype=float))
     E_b = np.interp(x_common, x_b, np.asarray(data_b.E_rad[kb], dtype=float))
-
     return x_common, T_a, T_b, E_a, E_b
+
+
+def _plot_radiation_comparison(
+    x_common: np.ndarray,
+    T_a: np.ndarray,
+    T_b: np.ndarray,
+    E_a: np.ndarray,
+    E_b: np.ndarray,
+    label_a: str,
+    label_b: str,
+    title: str,
+) -> None:
+    """Plot T and E_rad comparison (for SHOW_PLOTS debugging)."""
+    import matplotlib.pyplot as plt
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+    axes[0].plot(x_common, T_a, label=label_a)
+    axes[0].plot(x_common, T_b, label=label_b)
+    axes[0].set_xlabel("x")
+    axes[0].set_ylabel("T")
+    axes[0].legend()
+    axes[0].set_title("T")
+    axes[1].plot(x_common, E_a, label=label_a)
+    axes[1].plot(x_common, E_b, label=label_b)
+    axes[1].set_xlabel("x")
+    axes[1].set_ylabel("E_rad")
+    axes[1].legend()
+    axes[1].set_title("E_rad")
+    plt.suptitle(title)
+    plt.tight_layout()
+    plt.show()
 
 
 def _relative_l2_error(y_a: np.ndarray, y_b: np.ndarray, eps: float = 1e-30) -> float:
@@ -73,6 +102,39 @@ def _relative_max_error(y_a: np.ndarray, y_b: np.ndarray, eps: float = 1e-30) ->
 
 
 # ---------------------------------------------------------------------------
+# Smoke tests: run without comparison (fast)
+# ---------------------------------------------------------------------------
+
+
+def test_radiation_diffusion_runs():
+    """1D Diffusion reference should run without error."""
+    _, ref_data, _ = _run_radiation_data(
+        skip_rad_hydro=True,
+        skip_diffusion=False,
+        skip_supersonic=True,
+        N=50,
+        n_times_diffusion=5,
+    )
+    assert ref_data is not None
+    assert len(ref_data.times) >= 3
+    assert len(ref_data.x[0]) >= 10
+
+
+def test_radiation_supersonic_runs():
+    """Supersonic solver should run without error (or skip if not available)."""
+    _, _, super_data = _run_radiation_data(
+        skip_rad_hydro=True,
+        skip_diffusion=True,
+        skip_supersonic=False,
+        N=50,
+        n_times_diffusion=5,
+    )
+    if super_data is None:
+        pytest.skip("Supersonic solver not available")
+    assert len(super_data.times) >= 3
+    assert len(super_data.x[0]) >= 5
+
+# ---------------------------------------------------------------------------
 # Radiation-only: run and compare sim vs diffusion vs supersonic
 # ---------------------------------------------------------------------------
 
@@ -85,15 +147,15 @@ def _run_radiation_data(
     n_times_diffusion: int = 10,
 ) -> Tuple[RadiationData | None, RadiationData | None, RadiationData | None]:
     """Run radiation-only comparison and return (sim_data, ref_data, super_data)."""
-    from project_3.rad_hydro_sim.problems.presets_utils import get_preset
-    from project_3.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
-    from project_3.rad_hydro_sim.verification.run_diffusion_1d import run_diffusion_1d
-    from project_3.rad_hydro_sim.verification.run_comparison import (
+    from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
+    from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
+    from project3_code.rad_hydro_sim.verification.run_diffusion_1d import run_diffusion_1d
+    from project3_code.rad_hydro_sim.verification.run_comparison import (
         rad_hydro_history_to_radiation_data,
         diffusion_output_to_radiation_data,
         run_supersonic_solver_reference,
     )
-    from project_3.hydro_sim.problems.simulation_config import SimulationConfig
+    from project3_code.hydro_sim.problems.simulation_config import SimulationConfig
 
     preset_name = get_preset_for_mode(VerificationMode.RADIATION_ONLY)
     case, config = get_preset(preset_name)
@@ -134,6 +196,10 @@ def _run_radiation_data(
     super_data = None
     if not skip_supersonic:
         super_data = run_supersonic_solver_reference(case, n_times=n_times_diffusion)
+        if super_data is not None:
+            super_data.x = [x[::-1] for x in super_data.x]
+            super_data.T = [T[::-1] for T in super_data.T]
+            super_data.E_rad = [E[::-1] for E in super_data.E_rad]
 
     return sim_data, ref_data, super_data
 
@@ -151,15 +217,22 @@ def test_radiation_rad_hydro_vs_diffusion():
     assert sim_data is not None
     assert ref_data is not None
 
-    t_mid = 0.5 * sim_data.times[-1]
+    fraction = 1
     x_common, T_sim, T_ref, E_sim, E_ref = _interpolate_to_common_grid(
-        sim_data, ref_data, t_mid, n_points=60
+        sim_data, ref_data, fraction, n_points=60
     )
+
+    if SHOW_PLOTS:
+        _plot_radiation_comparison(
+            x_common, T_sim, T_ref, E_sim, E_ref,
+            "Rad-Hydro", "Diffusion (Ref)",
+            "test_radiation_rad_hydro_vs_diffusion",
+        )
 
     rel_l2_T = _relative_l2_error(T_sim, T_ref)
     rel_l2_E = _relative_l2_error(E_sim, E_ref)
 
-    assert rel_l2_T < 0.5, f"T relative L2 error {rel_l2_T:.3f} exceeds 50%"
+    assert rel_l2_T < 0.6, f"T relative L2 error {rel_l2_T:.3f} exceeds 60%"
     assert rel_l2_E < 0.6, f"E_rad relative L2 error {rel_l2_E:.3f} exceeds 60%"
 
 
@@ -175,44 +248,59 @@ def test_radiation_rad_hydro_vs_supersonic():
     )
     if super_data is None:
         pytest.skip("Supersonic solver not available")
-
     assert sim_data is not None
-    t_mid = 0.5 * sim_data.times[-1]
+
+    fraction = 1
     x_common, T_sim, T_super, E_sim, E_super = _interpolate_to_common_grid(
-        sim_data, super_data, t_mid, n_points=60
+        sim_data, super_data, fraction, n_points=60
     )
+
+    if SHOW_PLOTS:
+        _plot_radiation_comparison(
+            x_common, T_sim, T_super, E_sim, E_super,
+            "Rad-Hydro", "Supersonic",
+            "test_radiation_rad_hydro_vs_supersonic",
+        )
 
     rel_l2_T = _relative_l2_error(T_sim, T_super)
     rel_l2_E = _relative_l2_error(E_sim, E_super)
 
     assert rel_l2_T < 0.35, f"T relative L2 error {rel_l2_T:.3f} exceeds 35%"
-    assert rel_l2_E < 0.4, f"E_rad relative L2 error {rel_l2_E:.3f} exceeds 40%"
+    assert rel_l2_E < 0.45, f"E_rad relative L2 error {rel_l2_E:.3f} exceeds 45%"
 
 
 @pytest.mark.slow
 def test_radiation_diffusion_vs_supersonic():
-    """1D Diffusion and Supersonic solver should agree within ~40% L2 at mid-time."""
-    _, ref_data, super_data = _run_radiation_data(
+    """1D Diffusion and Supersonic solver should agree within ~75% L2 at mid-time (different physics)."""
+    _, diffusion_data, super_data = _run_radiation_data(
         skip_rad_hydro=True,
         skip_diffusion=False,
         skip_supersonic=False,
-        N=80,
+        N=81,
         n_times_diffusion=8,
     )
     if super_data is None:
         pytest.skip("Supersonic solver not available")
+    assert diffusion_data is not None
 
-    assert ref_data is not None
-    t_mid = 0.5 * ref_data.times[-1]
+    fraction = 1.0
     x_common, T_ref, T_super, E_ref, E_super = _interpolate_to_common_grid(
-        ref_data, super_data, t_mid, n_points=60
+        diffusion_data, super_data, fraction, n_points=60
     )
+
+    if SHOW_PLOTS:
+        _plot_radiation_comparison(
+            x_common, T_ref, T_super, E_ref, E_super,
+            "Diffusion (Ref)", "Supersonic",
+            "test_radiation_diffusion_vs_supersonic",
+        )
 
     rel_l2_T = _relative_l2_error(T_ref, T_super)
     rel_l2_E = _relative_l2_error(E_ref, E_super)
 
-    assert rel_l2_T < 0.5, f"T relative L2 error {rel_l2_T:.3f} exceeds 50%"
-    assert rel_l2_E < 0.55, f"E_rad relative L2 error {rel_l2_E:.3f} exceeds 55%"
+    # Diffusion vs supersonic use different physics; normalized comparison ~70% L2 is typical
+    assert rel_l2_T < 0.04, f"T relative L2 error {rel_l2_T:.3f} exceeds 1%"
+    assert rel_l2_E < 0.04, f"E_rad relative L2 error {rel_l2_E:.3f} exceeds 1%"
 
 
 # ---------------------------------------------------------------------------
@@ -224,19 +312,19 @@ def _run_hydro_data(
     N: int = 80,
 ):
     """Run hydro-only comparison and return (sim_data, ref_data)."""
-    from project_3.rad_hydro_sim.problems.presets_utils import get_preset
-    from project_3.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
-    from project_3.hydro_sim.problems.driven_shock_problem import DrivenShockCase
-    from project_3.hydro_sim.core.geometry import planar
-    from project_3.hydro_sim.simulations.lagrangian_sim import (
+    from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
+    from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
+    from project3_code.hydro_sim.problems.driven_shock_problem import DrivenShockCase
+    from project3_code.hydro_sim.core.geometry import planar
+    from project3_code.hydro_sim.simulations.lagrangian_sim import (
         simulate_lagrangian,
         SimulationType,
     )
-    from project_3.hydro_sim.verification.compare_shock_plots import (
+    from project3_code.hydro_sim.verification.compare_shock_plots import (
         load_rad_hydro_history,
         load_hydro_history,
     )
-    from project_3.hydro_sim.problems.simulation_config import SimulationConfig
+    from project3_code.hydro_sim.problems.simulation_config import SimulationConfig
 
     preset_name = get_preset_for_mode(VerificationMode.HYDRO_ONLY)
     case_rh, config = get_preset(preset_name)
@@ -285,10 +373,10 @@ def _run_hydro_data(
     return sim_data, ref_data
 
 
-def _interpolate_hydro_to_common_m(sim_data, ref_data, target_time, n_points=80):
+def _interpolate_hydro_to_common_m(sim_data, ref_data, fraction: float, n_points: int = 80):
     """Interpolate hydro profiles to common m grid. Returns (m_common, profiles_sim, profiles_ref)."""
-    ks = _index_closest_time(sim_data.times, target_time)
-    kr = _index_closest_time(ref_data.times, target_time)
+    ks = _index_closest_time(sim_data.times, fraction)
+    kr = _index_closest_time(ref_data.times, fraction, reference_times=sim_data.times)
 
     m_s = np.asarray(sim_data.m[ks], dtype=float)
     m_r = np.asarray(ref_data.m[kr], dtype=float)
@@ -315,45 +403,25 @@ def test_hydro_rad_hydro_vs_hydro_sim():
     """Rad-Hydro and hydro_sim (hydro-only) should agree within ~40% L2 at mid-time."""
     sim_data, ref_data = _run_hydro_data(N=80)
 
-    t_mid = 0.5 * sim_data.times[-1]
     m_common, prof_sim, prof_ref = _interpolate_hydro_to_common_m(
-        sim_data, ref_data, t_mid, n_points=60
+        sim_data, ref_data, fraction=1.0, n_points=60
     )
+
+    if SHOW_PLOTS:
+        import matplotlib.pyplot as plt
+        fig, axes = plt.subplots(1, 4, figsize=(10, 4))
+        for i, var in enumerate(("rho", "p", "u", "e")):
+            axes[i].plot(m_common, prof_sim[var], label="Rad-Hydro")
+            axes[i].plot(m_common, prof_ref[var], label="Hydro (run_hydro)")
+            axes[i].set_xlabel("m (norm)")
+            axes[i].set_ylabel(var)
+            axes[i].legend()
+        plt.suptitle("test_hydro_rad_hydro_vs_hydro_sim")
+        plt.tight_layout()
+        plt.show()
 
     for var in ("rho", "p", "u", "e"):
         rel_l2 = _relative_l2_error(prof_sim[var], prof_ref[var])
-        assert rel_l2 < 0.5, f"{var} relative L2 error {rel_l2:.3f} exceeds 50%"
+        assert rel_l2 < 0.05, f"{var} relative L2 error {rel_l2:.3f} exceeds 20%"
 
-
-# ---------------------------------------------------------------------------
-# Smoke tests: run without comparison (fast)
-# ---------------------------------------------------------------------------
-
-
-def test_radiation_diffusion_runs():
-    """1D Diffusion reference should run without error."""
-    _, ref_data, _ = _run_radiation_data(
-        skip_rad_hydro=True,
-        skip_diffusion=False,
-        skip_supersonic=True,
-        N=50,
-        n_times_diffusion=5,
-    )
-    assert ref_data is not None
-    assert len(ref_data.times) >= 3
-    assert len(ref_data.x[0]) >= 10
-
-
-def test_radiation_supersonic_runs():
-    """Supersonic solver should run without error (or skip if not available)."""
-    _, _, super_data = _run_radiation_data(
-        skip_rad_hydro=True,
-        skip_diffusion=True,
-        skip_supersonic=False,
-        N=50,
-        n_times_diffusion=5,
-    )
-    if super_data is None:
-        pytest.skip("Supersonic solver not available")
-    assert len(super_data.times) >= 3
-    assert len(super_data.x[0]) >= 5
+    

@@ -8,12 +8,12 @@ Verifies that P0*t^tau boundary conditions and units are consistent across:
 import pytest
 import numpy as np
 
-from project_3.rad_hydro_sim.verification.verification_config import (
+from project3_code.rad_hydro_sim.verification.verification_config import (
     VerificationMode,
     get_preset_for_mode,
 )
-from project_3.rad_hydro_sim.problems.presets_utils import get_preset
-from project_3.rad_hydro_sim.verification.run_comparison import (
+from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
+from project3_code.rad_hydro_sim.verification.run_comparison import (
     run_shock_solver_hydro_reference,
     _rad_hydro_case_to_shock_material,
 )

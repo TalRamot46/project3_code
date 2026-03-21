@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-from project_3.hydro_sim.core.geometry import planar, spherical, cylindrical
-from project_3.hydro_sim.core.grid import (
+from project3_code.hydro_sim.core.geometry import planar, spherical, cylindrical
+from project3_code.hydro_sim.core.grid import (
     Grid1D,
     cell_volumes,
     make_uniform_nodes,

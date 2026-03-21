@@ -1,20 +1,20 @@
 import numpy as np
 from tqdm import tqdm
 
-from project_3.hydro_sim.core.eos import internal_energy_from_prho
-from project_3.hydro_sim.core.geometry import planar
-from project_3.hydro_sim.core.grid import cell_volumes, masses_from_initial_rho
-from project_3.hydro_sim.core.integrator import compute_acceleration_nodes
-from project_3.hydro_sim.core.state import RadHydroState
-from project_3.hydro_sim.core.timestep import compute_dt_cfl, update_dt_relchange
-from project_3.rad_hydro_sim.simulation.integrator import step_rad_hydro
-from project_3.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
-from project_3.rad_hydro_sim.plotting.RadHydroHistory import RadHydroHistory
-from project_3.rad_hydro_sim.simulation.radiation_step import (
+from project3_code.hydro_sim.core.eos import internal_energy_from_prho
+from project3_code.hydro_sim.core.geometry import planar
+from project3_code.hydro_sim.core.grid import cell_volumes, masses_from_initial_rho
+from project3_code.hydro_sim.core.integrator import compute_acceleration_nodes
+from project3_code.hydro_sim.core.state import RadHydroState
+from project3_code.hydro_sim.core.timestep import compute_dt_cfl, update_dt_relchange
+from project3_code.rad_hydro_sim.simulation.integrator import step_rad_hydro
+from project3_code.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
+from project3_code.rad_hydro_sim.plotting.RadHydroHistory import RadHydroHistory
+from project3_code.rad_hydro_sim.simulation.radiation_step import (
     calculate_temperature_from_specific_energy,
     a_Kelvin
 )
-from project_3.hydro_sim.problems.simulation_config import SimulationConfig
+from project3_code.hydro_sim.problems.simulation_config import SimulationConfig
 
 def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydroState:
     """Initialize the problem state based on the case and simulation type."""
@@ -115,14 +115,16 @@ def simulate_rad_hydro(
                     dt_cfl = compute_dt_cfl(state, rad_hydro_case.r+1, simulation_config.CFL)
                     dt_rel = update_dt_relchange(dt_prev, state.E_rad, E_rad_history[-1], state.T_rad, T_rad_history[-1])
                     dt = min(dt_cfl, dt_rel, 0.05 * t_end, dt_prev * 1.1, t_end - state.t)
+                    if step % 1000 == 0:
+                        pass
+
                     if np.isnan(dt):
                         dt = min(0.05 * t_end, dt_prev * 1.1, t_end - state.t, 1e-12)
             else:
                 # Small initial timestep for stability
                 dt = min(1e-13, 1e-6 * t_end, t_end - state.t)
-            # print(dt)
+            print(dt)
             dt_prev = dt   # pyright: ignore[reportPossiblyUnboundVariable]
-
 
             # Get boundary conditions for current state
             # bc_left, bc_right = _get_boundary_conditions(rad_hydro_case, simulation_config, state)
@@ -132,7 +134,7 @@ def simulate_rad_hydro(
                 state, dt, rad_hydro_case, simulation_config
             )
             # Progress bar: use actual time advanced (step_rad_hydro may advance by more than dt in some code paths)
-            pbar.update(new_state.t - state.t)
+            # pbar.update(new_state.t - state.t)
             state = new_state
 
             # storing the new state

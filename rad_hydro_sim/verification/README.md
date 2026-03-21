@@ -8,7 +8,7 @@ This directory compares `rad_hydro_sim` to reference solutions to verify correct
    - **Rad-Hydro**: `run_rad_hydro.py` with preset `radiation_only_constant_temperature_drive`.  
    - **References**:  
      - 1D Diffusion self-similar solution (`1D Diffusion self similar in gold/figures/1D Diffusion self similar.py`) with matching parameters (constant temperature drive, same domain and time).  
-     - **Supersonic solver** (radiation self-similar, `project_3/shussman_solvers/supersonic_solver/`): same physics (opacity/EOS from the preset); used to verify the radiation-only case.  
+     - **Supersonic solver** (radiation self-similar, `project3_code/shussman_solvers/supersonic_solver/`): same physics (opacity/EOS from the preset); used to verify the radiation-only case.  
    - **Quantities compared**: Temperature \(T\) and radiation energy density \(E_{\mathrm{rad}}\) vs position \(x\).
 
 2. **Hydro-only**  
@@ -23,13 +23,13 @@ Later, the hydro case can also be compared to Shussman’s semi-analytic solver 
 From the **repository root** (e.g. `WeaponGroup`):
 
 ```bash
-python project_3/rad_hydro_sim/verification/run_comparison.py
+python project3_code/rad_hydro_sim/verification/run_comparison.py
 ```
 
 Or as a module:
 
 ```bash
-python -m project_3.rad_hydro_sim.verification.run_comparison
+python -m project3_code.rad_hydro_sim.verification.run_comparison
 ```
 
 In `run_comparison.py`, set the mode in `main()`:
@@ -37,7 +37,7 @@ In `run_comparison.py`, set the mode in `main()`:
 - `MODE = VerificationMode.RADIATION_ONLY` — run rad_hydro + 1D Diffusion + Supersonic solver and compare T, E_rad.  
 - `MODE = VerificationMode.HYDRO_ONLY` — run rad_hydro + hydro_sim and compare rho, P, u, e.
 
-Output figures are written under `project_3/rad_hydro_sim/verification/figures/` (PNG and optionally GIF).
+Output figures are written under `project3_code/rad_hydro_sim/verification/figures/` (PNG and optionally GIF).
 
 ## Dependencies
 
@@ -45,9 +45,9 @@ Output figures are written under `project_3/rad_hydro_sim/verification/figures/`
   - The 1D Diffusion script must be at  
     `1D Diffusion self similar in gold/figures/1D Diffusion self similar.py`  
     relative to the repo root. It is run with parameters matched to the rad_hydro preset.  
-  - The **Supersonic solver** (`project_3/shussman_solvers/supersonic_solver/`) is run with a material built from the same preset (alpha, beta=gamma, rho0, f, g, etc.). Use `skip_supersonic=True` in `run_radiation_only_comparison()` to omit it (e.g. if the solver is slow or unavailable).
+  - The **Supersonic solver** (`project3_code/shussman_solvers/supersonic_solver/`) is run with a material built from the same preset (alpha, beta=gamma, rho0, f, g, etc.). Use `skip_supersonic=True` in `run_radiation_only_comparison()` to omit it (e.g. if the solver is slow or unavailable).
 
-- **Hydro-only**: Uses `project_3.rad_hydro_sim.verification.hydro_shock` (compare_shock_plots, presets) and `project_3.hydro_sim.simulations.lagrangian_sim`.
+- **Hydro-only**: Uses `project3_code.rad_hydro_sim.verification.hydro_shock` (compare_shock_plots, presets) and `project3_code.hydro_sim.simulations.lagrangian_sim`.
 
 ## Files
 

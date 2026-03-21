@@ -5,7 +5,7 @@ Supports Riemann, Driven Shock, and Sedov explosion problems.
 """
 from __future__ import annotations
 
-from project_3.rad_hydro_sim.plotting import mpl_style  # noqa: F401 - apply project style
+from project3_code.rad_hydro_sim.plotting import mpl_style  # noqa: F401 - apply project style
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 from matplotlib.animation import FuncAnimation, PillowWriter
@@ -13,8 +13,8 @@ import numpy as np
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from project_3.hydro_sim.core.state import HydroState
-    from project_3.hydro_sim.simulations.lagrangian_sim import HydroHistory
+    from project3_code.hydro_sim.core.state import HydroState
+    from project3_code.hydro_sim.simulations.lagrangian_sim import HydroHistory
 
 
 # ============================================================================

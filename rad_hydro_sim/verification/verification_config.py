@@ -20,8 +20,7 @@ from typing import Optional, Tuple
 from enum import Enum
 from datetime import datetime
 
-from project_3.rad_hydro_sim.problems.presets_config import (
-    PRESET_FIRST_ATTEMPT,
+from project3_code.rad_hydro_sim.problems.presets_config import (
     PRESET_CONSTANT_T_RADIATION,
     PRESET_CONSTANT_PRESSURE,
     PRESET_POWER_LAW,
@@ -45,7 +44,7 @@ class VerificationMode(str, Enum):
 
 RADIATION_ONLY_PRESET = PRESET_CONSTANT_T_RADIATION   # constant_temperature_drive
 HYDRO_ONLY_PRESET = PRESET_POWER_LAW                  # constant_pressure_drive
-FULL_RAD_HYDRO_PRESET = PRESET_FIG_7                 # fig_7_comparison
+FULL_RAD_HYDRO_PRESET = PRESET_FIG_8                 # fig_7_comparison
 
 # Map each verification mode to its preset name (SIMPLE_TEST_CASES key)
 MODE_TO_PRESET: dict[VerificationMode, str] = {
@@ -71,7 +70,7 @@ def get_output_prefix_for_mode(mode: VerificationMode) -> str:
 
 def get_verification_output_dir() -> Path:
     """Base output directory for rad_hydro_sim verification figures."""
-    from project_3.hydro_sim.problems.simulation_config import get_results_dir
+    from project3_code.hydro_sim.problems.simulation_config import get_results_dir
     base = get_results_dir() / "rad_hydro_sim_verification"
     base.mkdir(parents=True, exist_ok=True)
     return base

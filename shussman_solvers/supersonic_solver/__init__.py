@@ -35,7 +35,7 @@ from .F_super import F
 from .utils_super import integrate_ode, mid, trapz
 from .solve_normalize_super import solve_normalize
 from .manager_super import manager_super
-from .profiles_for_report_super import compute_profiles_for_report
+from .profiles_for_report_super import compute_profiles_for_report, extract_m_final_expression
 
 __all__ = [
     "KELVIN_PRE_HEV",
@@ -53,4 +53,5 @@ __all__ = [
     "solve_normalize",
     "manager_super",
     "compute_profiles_for_report",
+    "extract_m_final_expression",
 ]

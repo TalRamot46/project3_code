@@ -14,7 +14,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import numpy as np
-from project_3.rad_hydro_sim.plotting import mpl_style  # noqa: F401 - apply project style
+from project3_code.rad_hydro_sim.plotting import mpl_style  # noqa: F401 - apply project style
 import matplotlib.pyplot as plt
 
 
@@ -113,7 +113,7 @@ def plot_profiles(npz_path: str | Path, *, quantity: str, xaxis: str,
     y_list = y_list[:nt]
     x_list = x_list[:nt]
 
-    # Style applied via project_3.rad_hydro_sim.plotting.mpl_style
+    # Style applied via project3_code.rad_hydro_sim.plotting.mpl_style
     fig, ax = plt.subplots(figsize=(7.2, 4.6))
 
     # Use a perceptually uniform colormap across time

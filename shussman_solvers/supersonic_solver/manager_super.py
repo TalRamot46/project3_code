@@ -57,7 +57,7 @@ def manager_super(
     A = 3.0 * mat.f * mat.beta / 16.0 / mat.sigma / mat.g
 
     # ---- Solve ODE and normalize ----
-    t, x = solve_normalize(mat.alpha, mat.beta, tau, iternum=100, xsi0=1, shooting_tol=1e-5)
+    t, x = solve_normalize(mat.alpha, mat.beta, tau, iternum=1000, xsi0=1, shooting_tol=1e-5)
 
     # z = -integral of T^beta over xi (MATLAB: z = -trapz(t, x(:,1).^mat.beta))
     # trapz(y, x): first arg integrand, second abscissa

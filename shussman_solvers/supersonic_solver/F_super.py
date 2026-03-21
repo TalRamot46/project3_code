@@ -27,5 +27,6 @@ def F(t: float, x: np.ndarray, alpha: float, beta: float, tau: float) -> np.ndar
     base = (T ** exp)
     term1 = base * (w3 * t * Tp + tau * T)
     term2 = (alpha + 3) * (Tp**2) / T
-    xp1 = float(term1 - term2)
+    val = term1 - term2
+    xp1 = float(np.real(val))  # real part if complex (T<0 with non-integer exp)
     return np.array([xp0, xp1], dtype=float)

@@ -36,9 +36,9 @@ Thumbs.db
 results/
 !results/.gitkeep
 !results/README.md
-project_3/results/
-!project_3/results/.gitkeep
-!project_3/results/README.md
+project3_code/results/
+!project3_code/results/.gitkeep
+!project3_code/results/README.md
 
 # Large binary outputs (prevent accidental commits of generated data)
 *.npz

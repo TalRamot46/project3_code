@@ -6,17 +6,17 @@ test-case dictionaries can be instantiated without error.
 
 import pytest
 
-from project_3.hydro_sim.problems.simulation_config import (
+from project3_code.hydro_sim.problems.simulation_config import (
     SIMULATION_CONFIGS,
     SimulationConfig,
     get_config,
 )
-from project_3.hydro_sim.problems.presets import (
+from project3_code.hydro_sim.problems.presets import (
     PRESETS as HYDRO_PRESETS,
     get_preset as hydro_get_preset,
     get_preset_names as hydro_get_preset_names,
 )
-from project_3.hydro_sim.problems.Hydro_case import HydroCase
+from project3_code.hydro_sim.problems.Hydro_case import HydroCase
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +85,7 @@ def test_hydro_get_preset_unknown_raises():
 
 def test_rad_hydro_presets_importable():
     """rad_hydro_sim presets should import without error."""
-    from project_3.rad_hydro_sim.problems.presets_config import (
+    from project3_code.rad_hydro_sim.problems.presets_config import (
         PRESETS as RAD_PRESETS,
         PRESET_TEST_CASES,
     )
@@ -95,7 +95,7 @@ def test_rad_hydro_presets_importable():
 
 def test_rad_hydro_presets_valid():
     """Each rad-hydro preset should be a (case, config) pair with expected attrs."""
-    from project_3.rad_hydro_sim.problems.presets_config import PRESETS as RAD_PRESETS
+    from project3_code.rad_hydro_sim.problems.presets_config import PRESETS as RAD_PRESETS
 
     for name, (case, config) in RAD_PRESETS.items():
         assert isinstance(config, SimulationConfig), f"Bad config in rad preset {name}"

@@ -14,7 +14,7 @@ try:
     from .materials_sub import MaterialSub
     from .manager_sub import manager_sub
 except ImportError:
-    # Run as script: ensure project_3 (repo root) is on path
+    # Run as script: ensure project3_code (repo root) is on path
     _repo_root = Path(__file__).resolve().parents[2]
     if str(_repo_root) not in sys.path:
         sys.path.insert(0, str(_repo_root))
@@ -62,11 +62,13 @@ def compute_profiles_for_report(
     for i in range(n_times):
         ti = times_ns[i]
         m_heat[i, :] = m0 * (T0_phys_HeV ** mw[1]) * (ti ** mw[2]) * (t_xi / xsi)
-        x_heat[i, :] = np.cumsum(m_heat[i, :] / rho_heat[i, :])
-        P_heat[i, :] = P0_out * (T0_phys_HeV ** Pw[1]) * (ti ** Pw[2]) * (x3 / Ptilda)
-        T_heat[i, :] = T0_phys_HeV * (ti ** tau) * (x3 * (x1 ** (1 - mat.mu))) ** (1.0 / mat.beta)
-        u_heat[i, :] = u0 * (T0_phys_HeV ** uw[1]) * (ti ** uw[2]) * (x5 / utilda)
-        rho_heat[i, :] = 1.0 / (V0 * (T0_phys_HeV ** Vw[1]) * (ti ** Vw[2]) * x1)
+        # I want no warning about division by zero when rho_heat[i, :] is zero
+        with np.errstate(divide='ignore', invalid='ignore'):
+            x_heat[i, :] = np.cumsum(m_heat[i, :] / rho_heat[i, :])
+            P_heat[i, :] = P0_out * (T0_phys_HeV ** Pw[1]) * (ti ** Pw[2]) * (x3 / Ptilda)
+            T_heat[i, :] = T0_phys_HeV * (ti ** tau) * (x3 * (x1 ** (1 - mat.mu))) ** (1.0 / mat.beta)
+            u_heat[i, :] = u0 * (T0_phys_HeV ** uw[1]) * (ti ** uw[2]) * (x5 / utilda)
+            rho_heat[i, :] = 1.0 / (V0 * (T0_phys_HeV ** Vw[1]) * (ti ** Vw[2]) * x1)
 
     return {
         "times": times_ns,
@@ -80,15 +82,24 @@ def compute_profiles_for_report(
         "Pw": Pw,
     }
 
+def extract_m_final_expression(mat: MaterialSub, tau: float):
+    """ extracting the final expression for m_final and e_final"""
+    (m0, mw, e0, ew, P0_out, Pw, V0, Vw, u0, uw, xsi, z, Ptilda, utilda, B, t, x) = manager_sub(mat, tau)
+    print(f"m_final = {m0:.2e} * T0^{mw[1]:.2f} * t^{mw[2]:.2f}")
+    print(f"E_final = {e0*1e-11:.2e} * T0^{ew[1]:.2f} * t^{ew[2]:.2f}")
+
 if __name__ == "__main__":
     try:
-        from .materials_sub import material_au
+        from project3_coshussman_solvers.subsonic_solver.materials_sub import material_au, material_be, material_cu
     except ImportError:
+        print("ImportError: materials_sub not found")
         from shussman_solvers.subsonic_solver.materials_sub import material_au
 
-    mat = material_au()
-    tau = 0.0
-    data = compute_profiles_for_report(mat, tau=tau, times_ns=np.array([1.0]), T0_phys_HeV=1) # Corresponds to T0=10000HeV
-    import matplotlib.pyplot as plt
-    plt.plot(data["m_heat"][0,:], data["T_heat"][0,:])
-    plt.show()
+    # mat = material_au()
+    # tau = 0.0
+    # data = compute_profiles_for_report(mat, tau=tau, times_ns=np.array([1.0]), T0_phys_HeV=1) # Corresponds to T0=10000HeV
+    # import matplotlib.pyplot as plt
+    # plt.plot(data["m_heat"][0,:], data["T_heat"][0,:])
+    # plt.show()
+    mat_be = material_au()
+    extract_m_final_expression(mat_be, tau=0.0)

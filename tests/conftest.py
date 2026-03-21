@@ -1,4 +1,4 @@
-"""Pytest configuration for project_3 tests."""
+"""Pytest configuration for project3_code tests."""
 
 import pytest
 

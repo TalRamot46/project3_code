@@ -155,21 +155,19 @@ def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydr
 
     new_E_rad = solve_tridiagonal(a, b, c_coeff, d)
     new_E_rad[0] = E_left
-    # Right BC: T_right_Kelvin=0 or None -> vacuum (E_right=0); >0 -> cold sink (match 1D Diffusion / run_diffusion_1d)
     T_right = rad_hydro_case.T_right_Kelvin or 0.0
     new_E_rad[-1] = 0.0 if T_right <= 0 else a_Kelvin * T_right**4
     new_T_rad = (new_E_rad / a_Kelvin) ** (1 / 4)
 
-    # Coupled update (match working): new_UR = (A*E_new + UR_star)/(1+A), then derive T and e from Rosen EOS
-    UR_star = a_Kelvin * state_star.T_material**4
-    UR_star[0] = E_left
-    UR_star[-1] = 1e-10 if T_right <= 0 else a_Kelvin * T_right**4
+    # Coupled update (match 1D Diffusion: UR_new = (A*E_new + UR_old)/(1+A)).
+    # UR_star is the *current* material state — no boundary overrides.
+    # The coupling factor A naturally controls how fast material equilibrates
+    # with the radiation field; overriding UR_star at boundaries would force
+    # instant heating and create unphysical pressure spikes in full rad-hydro.
+    UR_star = a_Kelvin * T_material_star**4
     new_UR = (A / (1 + A)) * new_E_rad + (1 / (1 + A)) * UR_star
 
-    # Temperature from coupled result; material e from Rosen EOS (match working)
     new_T_material = (new_UR / a_Kelvin) ** (1 / 4)
-    new_T_material[0] = T_left
-    new_T_material[-1] = T_right if T_right > 0 else 0.0
     new_e_material = f_Kelvin * new_T_material**beta_Rosen * rho**(-mu)
 
     return new_T_material, new_e_material, new_T_rad, new_E_rad

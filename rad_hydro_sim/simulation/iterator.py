@@ -123,7 +123,7 @@ def simulate_rad_hydro(
             else:
                 # Small initial timestep for stability
                 dt = min(1e-13, 1e-6 * t_end, t_end - state.t)
-            print(dt)
+            # print(dt)
             dt_prev = dt   # pyright: ignore[reportPossiblyUnboundVariable]
 
             # Get boundary conditions for current state
@@ -134,7 +134,7 @@ def simulate_rad_hydro(
                 state, dt, rad_hydro_case, simulation_config
             )
             # Progress bar: use actual time advanced (step_rad_hydro may advance by more than dt in some code paths)
-            # pbar.update(new_state.t - state.t)
+            pbar.update(new_state.t - state.t)
             state = new_state
 
             # storing the new state

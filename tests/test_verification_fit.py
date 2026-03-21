@@ -232,8 +232,8 @@ def test_radiation_rad_hydro_vs_diffusion():
     rel_l2_T = _relative_l2_error(T_sim, T_ref)
     rel_l2_E = _relative_l2_error(E_sim, E_ref)
 
-    assert rel_l2_T < 0.6, f"T relative L2 error {rel_l2_T:.3f} exceeds 60%"
-    assert rel_l2_E < 0.6, f"E_rad relative L2 error {rel_l2_E:.3f} exceeds 60%"
+    assert rel_l2_T < 0.1, f"T relative L2 error {rel_l2_T:.3f} exceeds 20%"
+    assert rel_l2_E < 0.1, f"E_rad relative L2 error {rel_l2_E:.3f} exceeds 20%"
 
 
 @pytest.mark.slow
@@ -265,8 +265,8 @@ def test_radiation_rad_hydro_vs_supersonic():
     rel_l2_T = _relative_l2_error(T_sim, T_super)
     rel_l2_E = _relative_l2_error(E_sim, E_super)
 
-    assert rel_l2_T < 0.35, f"T relative L2 error {rel_l2_T:.3f} exceeds 35%"
-    assert rel_l2_E < 0.45, f"E_rad relative L2 error {rel_l2_E:.3f} exceeds 45%"
+    assert rel_l2_T < 0.1, f"T relative L2 error {rel_l2_T:.3f} exceeds 35%"
+    assert rel_l2_E < 0.1, f"E_rad relative L2 error {rel_l2_E:.3f} exceeds 45%"
 
 
 @pytest.mark.slow

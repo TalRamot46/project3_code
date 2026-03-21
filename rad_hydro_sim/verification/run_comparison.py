@@ -648,13 +648,14 @@ def run_full_rad_hydro_comparison(
         )
         print(f"Saved PNG: {png_path}")
     if save_gif:
-        # Also save an animated GIF of the Rad-Hydro history for this full rad_hydro case
+        # Also save an animated GIF of the Rad-Hydro history with Shussman overlay for verification
         save_history_gif(
             history_rh,
             case,
             gif_path=str(gif_path),
             fps=10,
             stride=max(1, len(history_rh.t) // 50),
+            ref_data=ref_data,
         )
         print(f"Saved GIF: {gif_path}")
     print("Full rad_hydro comparison done.")

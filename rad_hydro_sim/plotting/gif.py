@@ -2,6 +2,10 @@
 # GIF Animation (Generic for time-history data)
 # ============================================================================
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Optional
+
 import numpy as np
 from . import mpl_style  # noqa: F401 - apply project style
 import matplotlib.pyplot as plt
@@ -10,6 +14,11 @@ from matplotlib.animation import FuncAnimation, PillowWriter
 from project3_code.hydro_sim.simulations.lagrangian_sim import HydroHistory
 from project3_code.hydro_sim.plotting.hydro_plots import _create_7panel_vertical_figure
 from project3_code.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
+from project3_code.rad_hydro_sim.simulation.radiation_step import KELVIN_PER_HEV
+
+if TYPE_CHECKING:
+    from project3_code.rad_hydro_sim.verification.hydro_data import RadHydroData
+
 
 def save_history_gif(
     history: "HydroHistory",
@@ -17,30 +26,52 @@ def save_history_gif(
     gif_path: str = "simulation.gif",
     fps: int = 20,
     stride: int = 1,
+    ref_data: Optional["RadHydroData"] = None,
 ):
     """
     Save an animated GIF of the time-history data.
-    
+
+    Optionally overlays the piecewise Shussman solver result at each time step
+    for verification (simulation vs reference comparison).
+
     Parameters:
         history: HydroHistory object with time-series data
         case: Problem case (for title info)
         gif_path: Output file path
         fps: Frames per second
         stride: Frame stride (skip frames for smaller file)
+        ref_data: Optional RadHydroData (e.g. Shussman piecewise reference) to overlay
     """
     has_T_material = hasattr(history, "T_material") and history.T_material is not None
+    has_ref = ref_data is not None and len(ref_data.times) > 0
 
     fig, axes = _create_7panel_vertical_figure()
     k0 = 0
     m0 = history.m[k0] if hasattr(history, "m") else history.x[k0]
     lines = []
-    lines.append(axes[0].plot(m0, history.rho[k0], lw=2)[0])
-    lines.append(axes[1].plot(m0, history.p[k0], lw=2)[0])
-    lines.append(axes[2].plot(m0, history.u[k0], lw=2)[0])
-    lines.append(axes[3].plot(m0, history.e[k0], lw=2)[0])
-    lines.append(axes[4].plot(m0, history.T_material[k0] if has_T_material else history.T[k0], lw=2)[0])
-    lines.append(axes[5].plot(m0, history.T[k0], lw=2)[0])
-    lines.append(axes[6].plot(m0, history.E_rad[k0], lw=2)[0])
+    lines.append(axes[0].plot(m0, history.rho[k0], lw=2, label="Simulation", color="blue")[0])
+    lines.append(axes[1].plot(m0, history.p[k0], lw=2, label="Simulation", color="blue")[0])
+    lines.append(axes[2].plot(m0, history.u[k0], lw=2, label="Simulation", color="blue")[0])
+    lines.append(axes[3].plot(m0, history.e[k0], lw=2, label="Simulation", color="blue")[0])
+    lines.append(axes[4].plot(m0, history.T_material[k0] if has_T_material else history.T[k0], lw=2, label="Simulation", color="blue")[0])
+    lines.append(axes[5].plot(m0, history.T[k0], lw=2, label="Simulation", color="blue")[0])
+    lines.append(axes[6].plot(m0, history.E_rad[k0], lw=2, label="Simulation", color="blue")[0])
+
+    ref_lines = []
+    if has_ref:
+        ref_color = getattr(ref_data, "color", "green")
+        ref_ls = getattr(ref_data, "linestyle", "-.")
+        ref_label = getattr(ref_data, "label", "Shussman (piecewise)")
+        ref_lines.append(axes[0].plot([], [], lw=1.5, color=ref_color, linestyle=ref_ls, label=ref_label)[0])
+        ref_lines.append(axes[1].plot([], [], lw=1.5, color=ref_color, linestyle=ref_ls, label=ref_label)[0])
+        ref_lines.append(axes[2].plot([], [], lw=1.5, color=ref_color, linestyle=ref_ls, label=ref_label)[0])
+        ref_lines.append(axes[3].plot([], [], lw=1.5, color=ref_color, linestyle=ref_ls, label=ref_label)[0])
+        ref_lines.append(axes[4].plot([], [], lw=1.5, color=ref_color, linestyle=ref_ls, label=ref_label)[0])
+        ref_lines.append(axes[5].plot([], [], lw=1.5, color=ref_color, linestyle=ref_ls, label=ref_label)[0])
+        ref_lines.append(axes[6].plot([], [], lw=1.5, color=ref_color, linestyle=ref_ls, label=ref_label)[0])
+        for ax in axes:
+            ax.legend(loc="upper right", fontsize=8)
+
     axes[0].set_ylabel(r"$\rho$ [g/cm³]")
     axes[1].set_ylabel(r"$p$ [Barye]")
     axes[2].set_ylabel(r"$u$ [cm/s]")
@@ -60,6 +91,7 @@ def save_history_gif(
     def update(frame_idx):
         k = int(frame_ids[frame_idx])
         mk = history.m[k] if hasattr(history, "m") else history.x[k]
+        t = history.t[k]
         lines[0].set_data(mk, history.rho[k])
         lines[1].set_data(mk, history.p[k])
         lines[2].set_data(mk, history.u[k])
@@ -67,7 +99,21 @@ def save_history_gif(
         lines[4].set_data(mk, history.T_material[k] if has_T_material else history.T[k])
         lines[5].set_data(mk, history.T[k])
         lines[6].set_data(mk, history.E_rad[k])
-        t = history.t[k]
+
+        if has_ref:
+            ref_idx = int(np.argmin(np.abs(ref_data.times - t)))
+            mr = ref_data.m[ref_idx]
+            ref_lines[0].set_data(mr, ref_data.rho[ref_idx])
+            ref_lines[1].set_data(mr, ref_data.p[ref_idx])
+            ref_lines[2].set_data(mr, ref_data.u[ref_idx])
+            ref_lines[3].set_data(mr, ref_data.e[ref_idx])
+            # Shussman T is in HeV; convert to Kelvin for display
+            T_ref_K = (ref_data.T[ref_idx] * KELVIN_PER_HEV) if (ref_data.T and ref_idx < len(ref_data.T)) else np.array([])
+            ref_lines[4].set_data(mr, T_ref_K)
+            ref_lines[5].set_data(mr, T_ref_K)
+            E_ref = ref_data.E_rad[ref_idx] if (ref_data.E_rad and ref_idx < len(ref_data.E_rad)) else np.array([])
+            ref_lines[6].set_data(mr, E_ref)
+
         case_title = case.title if hasattr(case, "title") and case.title else "Simulation"
         if case.T0_Kelvin is not None and case.tau is not None:
             title.set_text(

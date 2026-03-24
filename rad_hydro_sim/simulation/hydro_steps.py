@@ -41,7 +41,7 @@ def get_e_star_from_hydro(
     
     # # Apply velocity boundary conditions at half-step
     # u_half = _apply_velocity_bc_half(u_half, bc_left, bc_right)
- 
+
     # (12) update nodes
     x_new = state.x + dt * u_half
 
@@ -105,7 +105,7 @@ def update_nodes_from_pressure(
     u_new = state.u + 0.5 * dt * a_new  # Complete the leapfrog: u_half + 0.5*dt*a_new
     
     # Apply velocity boundary conditions at full step
-    u_new = _apply_velocity_bc_full(u_new, bc_left, bc_right)
+    # u_new = _apply_velocity_bc_full(u_new, bc_left, bc_right)
 
     # Time is advanced in the caller (step_rad_hydro) so we do not add dt here.
     new_state = RadHydroState(

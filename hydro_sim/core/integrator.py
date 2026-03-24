@@ -30,8 +30,6 @@ def compute_acceleration_nodes(x_nodes, p_cells, q_cells, m_cells, geom,
     # right boundary node
     if p_right is not None:
         a[-1] = -2.0 * geom.beta * (x_nodes[-1] ** geom.alpha) * ((p_right + q_right) - pq[-1]) / (m_cells[-1])
-    else:
-        a[-1] = 0.0
 
     return a
 
@@ -96,7 +94,7 @@ def step_lagrangian(state: HydroState,
     u_new = u_half + 0.5 * dt * a_new
     
     # Apply velocity boundary conditions at full step
-    u_new = _apply_velocity_bc_full(u_new, bc_left, bc_right)
+    # u_new = _apply_velocity_bc_full(u_new, bc_left, bc_right)
     T_new = np.zeros_like(e_new)
 
     return HydroState(

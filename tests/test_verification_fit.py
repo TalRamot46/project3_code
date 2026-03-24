@@ -19,7 +19,7 @@ from project3_code.rad_hydro_sim.verification.radiation_data import RadiationDat
 
 
 # Set to True when debugging to display comparison plots (use default Debug Tests config)
-SHOW_PLOTS = True
+SHOW_PLOTS = False
 
 
 # ---------------------------------------------------------------------------

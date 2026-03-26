@@ -57,7 +57,7 @@ def step_lagrangian(state: HydroState,
     u_half = state.u + 0.5 * dt * state.a
     
     # Apply velocity boundary conditions at half-step
-    u_half = _apply_velocity_bc_half(u_half, bc_left, bc_right)
+    # u_half = _apply_velocity_bc_half(u_half, bc_left, bc_right)
 
     # (12) update nodes
     x_new = state.x + dt * u_half

@@ -401,7 +401,7 @@ def _interpolate_hydro_to_common_m(sim_data, ref_data, fraction: float, n_points
 @pytest.mark.slow
 def test_hydro_rad_hydro_vs_hydro_sim():
     """Rad-Hydro and hydro_sim (hydro-only) should agree within ~40% L2 at mid-time."""
-    sim_data, ref_data = _run_hydro_data(N=80)
+    sim_data, ref_data, shock_data = _run_hydro_data(N=80)
 
     m_common, prof_sim, prof_ref = _interpolate_hydro_to_common_m(
         sim_data, ref_data, fraction=1.0, n_points=60

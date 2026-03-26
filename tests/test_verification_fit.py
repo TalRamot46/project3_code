@@ -19,7 +19,7 @@ from project3_code.rad_hydro_sim.verification.radiation_data import RadiationDat
 
 
 # Set to True when debugging to display comparison plots (use default Debug Tests config)
-SHOW_PLOTS = False
+SHOW_PLOTS = True
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +206,7 @@ def _run_radiation_data(
 
 @pytest.mark.slow
 def test_radiation_rad_hydro_vs_diffusion():
-    """Rad-Hydro and 1D Diffusion (radiation-only) should agree within ~30% L2 at mid-time."""
+    """Rad-Hydro and 1D Diffusion (radiation-only) should agree within ~20% L2 at mid-time."""
     sim_data, ref_data, _ = _run_radiation_data(
         skip_rad_hydro=False,
         skip_diffusion=False,

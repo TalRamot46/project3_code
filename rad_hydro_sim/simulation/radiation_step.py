@@ -105,23 +105,25 @@ def calculate_abcd(
         b = coeff * (D_face_right + D_face_left) + 1 / dt + F
     elif coeff_scheme == "face_weighted":
         if HARMONIC_MEAN:
+            D_face = harmonic_mean(D[:-1], D[1:])
             rho_face = harmonic_mean(rho[:-1], rho[1:])
+            m_face = harmonic_mean(m_cells[:-1], m_cells[1:])
         else:
+            D_face = arithmetic_mean(D[:-1], D[1:])
             rho_face = arithmetic_mean(rho[:-1], rho[1:])
+            m_face = arithmetic_mean(m_cells[:-1], m_cells[1:])
 
-        # i indexes interior face-centered radiation unknowns E_{i+1/2}
-        rho_face_i = rho_face[1:]        # rho_{i+1/2}
-        dm_face_i = m_cells[1:-1]        # Δm_{i+1/2}
-        rho_i = rho[1:-1]                # rho_i
-        rho_ip1 = rho[2:]                # rho_{i+1}
-        D_i = D[1:-1]                    # D_i
-        D_ip1 = D[2:]                    # D_{i+1}
-        dm_i = m_cells[1:-1]             # Δm_i
-        dm_ip1 = m_cells[2:]             # Δm_{i+1}
+        rho_face_left = rho_face[:-1] # stands for rho_i
+        rho_face_right = rho_face[1:] # stands for rho_{i+1}
+        D_face_left = D_face[:-1] # stands for D_i
+        D_face_right = D_face[1:] # stands for D_{i+1}
+        m_face_left = m_face[:-1] # stands for m_i
+        m_face_right = m_face[1:] # stands for m_{i+1}
 
-        left_flux_coeff = (rho_i * D_i) / dm_i
-        right_flux_coeff = (rho_ip1 * D_ip1) / dm_ip1
-        coeff = rho_face_i / dm_face_i
+        left_flux_coeff = (rho_face_left * D_face_left) / m_face_left
+        right_flux_coeff = (rho_face_right * D_face_right) / m_face_right
+        coeff = rho[1:-1] / m_cells[1:-1] # this is not a mistake! It comes from
+                                   # the first lagrangian derivative of the flux.
 
         F = chi * c * sigma[1:-1] / (1 + A[1:-1])
         a = -coeff * left_flux_coeff

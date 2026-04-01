@@ -28,6 +28,7 @@ from project3_code.rad_hydro_sim.problems.presets_config import (
     PRESET_FIG_8,
     PRESET_FIG_9,
     PRESET_FIG_10,
+    PRESET_MATLAB,
 )
 
 
@@ -44,7 +45,7 @@ class VerificationMode(str, Enum):
 
 RADIATION_ONLY_PRESET = PRESET_CONSTANT_T_RADIATION   # constant_temperature_drive
 HYDRO_ONLY_PRESET = PRESET_POWER_LAW                  # constant_pressure_drive
-FULL_RAD_HYDRO_PRESET = PRESET_FIG_8                 # fig_7_comparison
+FULL_RAD_HYDRO_PRESET = PRESET_MATLAB                 # fig_7_comparison
 
 # Map each verification mode to its preset name (SIMPLE_TEST_CASES key)
 MODE_TO_PRESET: dict[VerificationMode, str] = {

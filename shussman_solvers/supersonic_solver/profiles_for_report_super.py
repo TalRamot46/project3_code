@@ -96,14 +96,14 @@ if __name__ == "__main__":
         from shussman_solvers.supersonic_solver.materials_super import material_au, material_be
 
     # Example: Al with tau = 1/(4+alpha-2*beta) (constant-temperature-like scaling)
-    # mat = material_au()
-    # tau = 0.0
-    # T0_phys_HeV = 1
-    # times_ns = np.array([1.0])
-    # data = compute_profiles_for_report(mat, T0_phys_HeV=T0_phys_HeV, tau=tau, times_ns=times_ns) # Corresponds to T0=10000K
-    # import matplotlib.pyplot as plt
-    # plt.plot(data["m_heat"][0,:], data["T_heat"][0,:])
-    # plt.show()
+    mat = material_au()
+    tau = 0.0
+    T0_phys_HeV = 1
+    times_ns = np.array([1.0])
+    data = compute_profiles_for_report(mat, T0_phys_HeV=T0_phys_HeV, tau=tau, times_ns=times_ns) # Corresponds to T0=10000K
+    import matplotlib.pyplot as plt
+    plt.plot(data["m_heat"][0,:], data["T_heat"][0,:])
+    plt.show()
 
-    mat_be = material_be()
-    extract_m_final_expression(mat_be, tau=0.0)
+    # mat_be = material_be()
+    # extract_m_final_expression(mat_be, tau=0.0)

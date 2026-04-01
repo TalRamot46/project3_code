@@ -11,7 +11,12 @@ import numpy as np
 
 S_PER_NS = 1e-9
 
-def step_rad_hydro(state: RadHydroState, dt: float, case: RadHydroCase, config: SimulationConfig) -> RadHydroState:
+def step_rad_hydro(
+    state: RadHydroState, 
+    dt: float, 
+    case: RadHydroCase, 
+    config: SimulationConfig,
+) -> RadHydroState:
     """
     Pseudo-code for Lagrangian step with radiation-hydro coupling:
     1. Perform half-step velocity update using current acceleration.

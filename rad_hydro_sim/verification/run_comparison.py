@@ -23,6 +23,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from typing import Optional
+from dataclasses import replace
 
 import numpy as np
 # Ensure project3_code is on path (when run as script): add parent of repo root so "project3_code" package resolves
@@ -553,7 +554,7 @@ def run_full_rad_hydro_comparison(
     sim_data = None
     if not skip_rad_hydro:
         print(f"Running rad_hydro ({preset_name})...")
-        x_cells, state, meta, history_rh = simulate_rad_hydro(
+        _, _, _, history_rh = simulate_rad_hydro(
             rad_hydro_case=case,
             simulation_config=config,
         )
@@ -623,8 +624,28 @@ def run_full_rad_hydro_comparison(
         ref_data = sim_data
         print(f"Copied ref_data to sim_data")
 
-    print("\nPlotting full rad_hydro vs Shussman (rho, P, u, e vs x)...")
+    print("\nPlotting full rad_hydro comparison (rho, P, u, e vs x)...")
     if show_plot:
+        import matplotlib.pyplot as plt
+        p = np.asarray(sim_data.p[-1])
+        rho = np.asarray(sim_data.rho[-1])
+        e = np.asarray(sim_data.e[-1])
+        m = np.asarray(sim_data.m[-1])
+        plt.figure()
+        plt.plot(m, p - 0.25 * rho * e, label="p - r * rho * e")
+        plt.legend()
+        print("m[0] = ", m[0])
+        print("m[1]-m[0] = ", m[1]-m[0])
+        print("m[-1]-m[0]/(len(m)-1) = ", m[-1]-m[0]/(len(m)-1))
+
+        # plot p, rho, e vs m on a single plot
+        plt.figure()
+        plt.plot(m, p, label="p")
+        plt.plot(m, rho, label="rho")
+        plt.plot(m, e, label="e")
+        plt.legend()
+
+        # plt.show()
         plot_comparison_slider(
             sim_data,
             ref_data,
@@ -661,6 +682,86 @@ def run_full_rad_hydro_comparison(
     print("Full rad_hydro comparison done.")
 
 
+def run_full_rad_hydro_force_black_comparison(
+    show_plot: bool = True,
+    save_png: bool = True,
+    save_gif: bool = True,
+) -> None:
+    """
+    Run two full rad_hydro cases from PRESET_MATLAB and compare:
+    1) preset as-is (force_black from preset)
+    2) same preset with force_black=False
+    """
+    from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
+    from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
+    from project3_code.hydro_sim.verification.compare_shock_plots import (
+        plot_comparison_single_time,
+        plot_comparison_slider,
+        load_rad_hydro_history,
+    )
+
+    preset_name = get_preset_for_mode(VerificationMode.FULL_RAD_HYDRO)
+    case, config = get_preset(preset_name)
+    case_title = f"{case.title or preset_name}_force_black_compare"
+    output_prefix = get_output_prefix_for_mode(VerificationMode.FULL_RAD_HYDRO)
+    png_path, gif_path = make_verification_output_paths(f"{output_prefix}_{case_title}")
+
+    print(f"Running rad_hydro ({preset_name}, force_black={case.force_black})...")
+    _, _, _, history_true = simulate_rad_hydro(
+        rad_hydro_case=case,
+        simulation_config=config,
+    )
+    sim_data_true = load_rad_hydro_history(history_true, label="Rad-Hydro (force_black=True)")
+    sim_data_true.color = "blue"
+    sim_data_true.linestyle = "-"
+    print(f"Stored {len(sim_data_true.times)} time steps.")
+
+    case_force_black_false = replace(case, force_black=False)
+    print(f"Running rad_hydro ({preset_name}, force_black=False)...")
+    _, _, _, history_false = simulate_rad_hydro(
+        rad_hydro_case=case_force_black_false,
+        simulation_config=config,
+    )
+    sim_data_false = load_rad_hydro_history(history_false, label="Rad-Hydro (force_black=False)")
+    sim_data_false.color = "red"
+    sim_data_false.linestyle = "--"
+    print(f"Stored {len(sim_data_false.times)} time steps.")
+
+    title = "Full rad_hydro: PRESET_MATLAB force_black=True vs force_black=False"
+    print("\nPlotting full rad_hydro force_black comparison (rho, P, u, e vs x)...")
+    if show_plot:
+        plot_comparison_slider(
+            sim_data_true,
+            sim_data_false,
+            xaxis="m",
+            show=True,
+            title=title,
+        )
+    if save_png:
+        time_mid = config.png_time_frac * float(case.t_sec_end)
+        plot_comparison_single_time(
+            sim_data_true,
+            sim_data_false,
+            time=time_mid,
+            xaxis="m",
+            savepath=str(png_path),
+            show=False,
+            title=title,
+        )
+        print(f"Saved PNG: {png_path}")
+    if save_gif:
+        save_history_gif(
+            history_true,
+            case,
+            gif_path=str(gif_path),
+            fps=10,
+            stride=max(1, len(history_true.t) // 50),
+            ref_data=sim_data_false,
+        )
+        print(f"Saved GIF: {gif_path}")
+    print("Full rad_hydro force_black comparison done.")
+
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -674,6 +775,7 @@ def run_comparison(
     skip_hydro_sim: bool = False,
     skip_shock_solver: bool = False,
     skip_shussman: bool = False,
+    compare_force_black_cases: bool = False,
     show_plot: bool = True,
     save_png: bool = True,
     save_gif: bool = True,
@@ -705,22 +807,29 @@ def run_comparison(
             save_gif=save_gif,
         )
     elif mode == VerificationMode.FULL_RAD_HYDRO:
-        run_full_rad_hydro_comparison(
-            skip_rad_hydro=skip_rad_hydro,
-            skip_shussman=skip_shussman,
-            show_plot=show_plot,
-            save_png=save_png,
-            save_gif=save_gif,
-        )
+        if compare_force_black_cases:
+            run_full_rad_hydro_force_black_comparison(
+                show_plot=show_plot,
+                save_png=save_png,
+                save_gif=save_gif,
+            )
+        else:
+            run_full_rad_hydro_comparison(
+                skip_rad_hydro=skip_rad_hydro,
+                skip_shussman=skip_shussman,
+                show_plot=show_plot,
+                save_png=save_png,
+                save_gif=save_gif,
+            )
     else:
         raise ValueError(f"Unknown mode: {mode}")
 
 
 def main() -> None:
     """Entry point: select mode and run comparison."""
-    # MODE = VerificationMode.FULL_RAD_HYDRO
+    MODE = VerificationMode.FULL_RAD_HYDRO
     # MODE = VerificationMode.RADIATION_ONLY
-    MODE = VerificationMode.HYDRO_ONLY
+    # MODE = VerificationMode.HYDRO_ONLY
     
     run_comparison(
         MODE,
@@ -730,6 +839,7 @@ def main() -> None:
         skip_hydro_sim=False,
         skip_shock_solver=False,
         skip_shussman=False,
+        compare_force_black_cases=True,
         show_plot=True,
         save_png=True,
         save_gif=True

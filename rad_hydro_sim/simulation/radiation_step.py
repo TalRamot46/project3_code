@@ -57,7 +57,11 @@ def calculate_abcd(sigma: np.ndarray, D: np.ndarray, A: np.ndarray, m_cells: np.
     c_coeff = -coeff * D_face_right
     b = coeff * (D_face_right + D_face_left) + 1/dt + F
     UR_star = a_Kelvin * T_material[1:-1]**4
-    d = F * UR_star + (1/dt) * E_rad[1:-1]
+    if E_rad is not None:
+        d = F * UR_star + (1/dt) * E_rad[1:-1]
+    else: # attempt to force black physics under LTE (T_m = T_rad)
+        E_rad = a_Kelvin * T_material**4
+        d = F * UR_star + (1/dt) * E_rad[1:-1]
 
     if np.any(np.isnan(a)) or np.any(np.isnan(b)) or np.any(np.isnan(c_coeff)) or np.any(np.isnan(d)):
         j = np.where(np.isnan(a))[0][0] if np.any(np.isnan(a)) else (np.where(np.isnan(b))[0][0] if np.any(np.isnan(b)) else (np.where(np.isnan(c_coeff))[0][0] if np.any(np.isnan(c_coeff)) else np.where(np.isnan(d))[0][0]))
@@ -76,7 +80,13 @@ def calculate_abcd(sigma: np.ndarray, D: np.ndarray, A: np.ndarray, m_cells: np.
         )
     return a, b, c_coeff, d
 
-def solve_tridiagonal(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray, use_scipy: bool = True) -> np.ndarray:
+def solve_tridiagonal(
+    a: np.ndarray, 
+    b: np.ndarray, 
+    c: np.ndarray, 
+    d: np.ndarray, 
+    use_scipy: bool = True
+) -> np.ndarray:
     """Solves the tridiagonal system Ax = d where A has sub-diagonal a, diagonal b, and super-diagonal c."""
     if use_scipy:
         from scipy.linalg import solve_banded
@@ -113,7 +123,11 @@ def solve_tridiagonal(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray
         return x
         
 
-def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydroCase) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def radiation_step(
+    state_star: RadHydroState, 
+    dt: float, 
+    rad_hydro_case: RadHydroCase
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Updates the material specific energy & radiation energy density based on the coupling between matter and radiation.
     
@@ -145,28 +159,27 @@ def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydr
     D = calculate_D_from_sigma(sigma)
     A = calculate_A(beta, sigma, dt)
 
-    # Build tridiagonal system; UR_star uses T_material (coupling drives E toward material equilibrium, match 1D Diffusion)
-    a, b, c_coeff, d = calculate_abcd(sigma, D, A, m_cells, rho, E_rad, T_material_star, dt)
+    # Calculate tridiagonal system coefficients
+    if hasattr(rad_hydro_case, "force_black") and rad_hydro_case.force_black:
+        a, b, c_coeff, d = calculate_abcd(sigma, D, A, m_cells, rho, None, T_material_star, dt)
+    else:
+        a, b, c_coeff, d = calculate_abcd(sigma, D, A, m_cells, rho, E_rad, T_material_star, dt)
 
+    # Apply boundary conditions
     t_drive = max(state_star.t, dt)
     T_left = rad_hydro_case.T0_Kelvin * (t_drive/(10**-9))**rad_hydro_case.tau
     E_left = a_Kelvin * T_left**4
     d[0] -= a[0] * E_left
 
+    # Solve for radiation energy density and temperature
     new_E_rad = solve_tridiagonal(a, b, c_coeff, d)
     new_E_rad[0] = E_left
-    T_right = rad_hydro_case.T_right_Kelvin or 0.0
-    new_E_rad[-1] = 0.0 if T_right <= 0 else a_Kelvin * T_right**4
+    new_E_rad[-1] = a_Kelvin * rad_hydro_case.T_initial_Kelvin**4
     new_T_rad = (new_E_rad / a_Kelvin) ** (1 / 4)
 
-    # Coupled update (match 1D Diffusion: UR_new = (A*E_new + UR_old)/(1+A)).
-    # UR_star is the *current* material state — no boundary overrides.
-    # The coupling factor A naturally controls how fast material equilibrates
-    # with the radiation field; overriding UR_star at boundaries would force
-    # instant heating and create unphysical pressure spikes in full rad-hydro.
+    # Solve for material energy density and temperature
     UR_star = a_Kelvin * T_material_star**4
     new_UR = (A / (1 + A)) * new_E_rad + (1 / (1 + A)) * UR_star
-
     new_T_material = (new_UR / a_Kelvin) ** (1 / 4)
     new_e_material = f_Kelvin * new_T_material**beta_Rosen * rho**(-mu)
 

@@ -67,6 +67,7 @@ class RadHydroCase(ABC):
 
     # Geometry
     geom: Geometry = planar()  # Default to planar geometry
+    force_black: bool | None = False
 
     def _get_params(
         self,

@@ -89,17 +89,14 @@ def extract_m_final_expression(mat: MaterialSub, tau: float):
     print(f"E_final = {e0*1e-11:.2e} * T0^{ew[1]:.2f} * t^{ew[2]:.2f}")
 
 if __name__ == "__main__":
-    try:
-        from project3_coshussman_solvers.subsonic_solver.materials_sub import material_au, material_be, material_cu
-    except ImportError:
-        print("ImportError: materials_sub not found")
-        from shussman_solvers.subsonic_solver.materials_sub import material_au
+    from shussman_solvers.subsonic_solver.materials_sub import material_au
 
-    # mat = material_au()
-    # tau = 0.0
-    # data = compute_profiles_for_report(mat, tau=tau, times_ns=np.array([1.0]), T0_phys_HeV=1) # Corresponds to T0=10000HeV
-    # import matplotlib.pyplot as plt
-    # plt.plot(data["m_heat"][0,:], data["T_heat"][0,:])
-    # plt.show()
-    mat_be = material_au()
-    extract_m_final_expression(mat_be, tau=0.0)
+    mat = material_au()
+    tau = 0.0
+    data = compute_profiles_for_report(mat, tau=tau, times_ns=np.array([1.0]), T0_phys_HeV=1) # Corresponds to T0=10000HeV
+    import matplotlib.pyplot as plt
+    plt.plot(data["m_heat"][0,:], data["T_heat"][0,:])
+    plt.show()
+
+    # mat_be = material_au()
+    # extract_m_final_expression(mat_be, tau=0.0)

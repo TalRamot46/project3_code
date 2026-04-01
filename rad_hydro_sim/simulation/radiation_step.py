@@ -75,25 +75,64 @@ def calculate_black_abcd(
 
     return a, b, c_coeff, d
 
-def calculate_abcd(sigma: np.ndarray, D: np.ndarray, A: np.ndarray, m_cells: np.ndarray, rho: np.ndarray, E_rad
-                   : np.ndarray | None, T_material: np.ndarray, dt: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def calculate_abcd(
+    sigma: np.ndarray,
+    D: np.ndarray,
+    A: np.ndarray,
+    m_cells: np.ndarray,
+    rho: np.ndarray,
+    E_rad: np.ndarray | None,
+    T_material: np.ndarray,
+    dt: float,
+    coeff_scheme: str = "legacy",
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Returns the coefficients a, b, c, d for the implicit update of material energy and radiation energy density.
     a = [a1, a2, ..., aN], a_i^n = a[i-1] at time step n
 
     T_material is the material temperature, used for UR_star = a*T_material^4 (coupling drives E toward material equilibrium).
     """
-    if HARMONIC_MEAN:
-        D_face = harmonic_mean(D[:-1], D[1:])
+    if coeff_scheme == "legacy":
+        if HARMONIC_MEAN:
+            D_face = harmonic_mean(D[:-1], D[1:])
+        else:
+            D_face = arithmetic_mean(D[:-1], D[1:])
+        D_face_left = D_face[:-1] # stands for D_i
+        D_face_right = D_face[1:] # stands for D_{i+1}
+        F = chi * c * sigma[1:-1] / (1 + A[1:-1])
+        coeff = rho[1:-1] / (m_cells[1:-1] ** 2)
+        a = -coeff * D_face_left
+        c_coeff = -coeff * D_face_right
+        b = coeff * (D_face_right + D_face_left) + 1 / dt + F
+    elif coeff_scheme == "face_weighted":
+        if HARMONIC_MEAN:
+            rho_face = harmonic_mean(rho[:-1], rho[1:])
+        else:
+            rho_face = arithmetic_mean(rho[:-1], rho[1:])
+
+        # i indexes interior face-centered radiation unknowns E_{i+1/2}
+        rho_face_i = rho_face[1:]        # rho_{i+1/2}
+        dm_face_i = m_cells[1:-1]        # Δm_{i+1/2}
+        rho_i = rho[1:-1]                # rho_i
+        rho_ip1 = rho[2:]                # rho_{i+1}
+        D_i = D[1:-1]                    # D_i
+        D_ip1 = D[2:]                    # D_{i+1}
+        dm_i = m_cells[1:-1]             # Δm_i
+        dm_ip1 = m_cells[2:]             # Δm_{i+1}
+
+        left_flux_coeff = (rho_i * D_i) / dm_i
+        right_flux_coeff = (rho_ip1 * D_ip1) / dm_ip1
+        coeff = rho_face_i / dm_face_i
+
+        F = chi * c * sigma[1:-1] / (1 + A[1:-1])
+        a = -coeff * left_flux_coeff
+        c_coeff = -coeff * right_flux_coeff
+        b = coeff * (left_flux_coeff - right_flux_coeff) + 1 / dt + F
     else:
-        D_face = arithmetic_mean(D[:-1], D[1:])
-    D_face_left = D_face[:-1]
-    D_face_right = D_face[1:]
-    
-    F = chi*c*sigma[1:-1]/(1 + A[1:-1])
-    coeff = rho[1:-1] / (m_cells[1:-1]**2)
-    a = -coeff * D_face_left
-    c_coeff = -coeff * D_face_right
-    b = coeff * (D_face_right + D_face_left) + 1/dt + F
+        raise ValueError(
+            f"Invalid radiation coefficient scheme '{coeff_scheme}'. "
+            "Expected 'legacy' or 'face_weighted'."
+        )
+
     UR_star = a_Kelvin * T_material[1:-1]**4
     if E_rad is not None:
         d = F * UR_star + (1/dt) * E_rad[1:-1]
@@ -286,10 +325,16 @@ def radiation_step(
     )
 
     mode = getattr(rad_hydro_case, "force_black", None)
+    coeff_scheme = getattr(rad_hydro_case, "radiation_coeff_scheme", "legacy")
     valid_modes = (None, "gray corrected", "full black")
     if mode not in valid_modes:
         raise ValueError(
             f"Invalid force_black mode '{mode}'. Expected one of {valid_modes}."
+        )
+    valid_coeff_schemes = ("legacy", "face_weighted")
+    if coeff_scheme not in valid_coeff_schemes:
+        raise ValueError(
+            f"Invalid radiation_coeff_scheme '{coeff_scheme}'. Expected one of {valid_coeff_schemes}."
         )
 
     if mode == "full black":
@@ -305,9 +350,13 @@ def radiation_step(
 
     # Calculate tridiagonal system coefficients
     if mode == "gray corrected":
-        a, b, c_coeff, d = calculate_abcd(sigma, D, A, m_cells, rho, None, T_material_star, dt)
+        a, b, c_coeff, d = calculate_abcd(
+            sigma, D, A, m_cells, rho, None, T_material_star, dt, coeff_scheme=coeff_scheme
+        )
     else:
-        a, b, c_coeff, d = calculate_abcd(sigma, D, A, m_cells, rho, E_rad, T_material_star, dt)
+        a, b, c_coeff, d = calculate_abcd(
+            sigma, D, A, m_cells, rho, E_rad, T_material_star, dt, coeff_scheme=coeff_scheme
+        )
 
     # Apply boundary conditions
     t_drive = max(state_star.t, dt)

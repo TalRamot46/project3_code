@@ -757,6 +757,93 @@ def run_full_rad_hydro_force_black_comparison(
     print("Full rad_hydro force_black comparison done.")
 
 
+def run_full_rad_hydro_radiation_coeff_scheme_comparison(
+    show_plot: bool = True,
+    save_png: bool = True,
+    save_gif: bool = True,
+) -> None:
+    """
+    Run full rad_hydro with force_black=None and compare radiation coefficient schemes:
+    - radiation_coeff_scheme="legacy"
+    - radiation_coeff_scheme="face_weighted"
+    """
+    from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
+    from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
+    from project3_code.hydro_sim.verification.compare_shock_plots import (
+        plot_comparison_single_time,
+        plot_comparison_slider,
+        load_rad_hydro_history,
+    )
+
+    preset_name = get_preset_for_mode(VerificationMode.FULL_RAD_HYDRO)
+    case, config = get_preset(preset_name)
+    case_title = f"{case.title or preset_name}_coeff_scheme_compare"
+    output_prefix = get_output_prefix_for_mode(VerificationMode.FULL_RAD_HYDRO)
+    png_path, gif_path = make_verification_output_paths(f"{output_prefix}_{case_title}")
+
+    case_legacy = replace(case, force_black=None, radiation_coeff_scheme="legacy")
+    print(f'Running rad_hydro ({preset_name}, force_black=None, radiation_coeff_scheme="legacy")...')
+    _, _, _, history_legacy = simulate_rad_hydro(
+        rad_hydro_case=case_legacy,
+        simulation_config=config,
+    )
+    sim_data_legacy = load_rad_hydro_history(
+        history_legacy,
+        label='Rad-Hydro (force_black=None, coeff="legacy")',
+    )
+    sim_data_legacy.color = "red"
+    sim_data_legacy.linestyle = "--"
+    print(f"Stored {len(sim_data_legacy.times)} time steps.")
+
+    case_face = replace(case, force_black=None, radiation_coeff_scheme="face_weighted")
+    print(f'Running rad_hydro ({preset_name}, force_black=None, radiation_coeff_scheme="face_weighted")...')
+    _, _, _, history_face = simulate_rad_hydro(
+        rad_hydro_case=case_face,
+        simulation_config=config,
+    )
+    sim_data_face = load_rad_hydro_history(
+        history_face,
+        label='Rad-Hydro (force_black=None, coeff="face_weighted")',
+    )
+    sim_data_face.color = "blue"
+    sim_data_face.linestyle = "-"
+    print(f"Stored {len(sim_data_face.times)} time steps.")
+
+    title = 'Full rad_hydro: force_black=None, coeff "legacy" vs "face_weighted"'
+    print("\nPlotting full rad_hydro radiation coefficient comparison (rho, P, u, e vs x)...")
+    if show_plot:
+        plot_comparison_slider(
+            sim_data_legacy,
+            sim_data_face,
+            xaxis="m",
+            show=True,
+            title=title,
+        )
+    if save_png:
+        time_mid = config.png_time_frac * float(case.t_sec_end)
+        plot_comparison_single_time(
+            sim_data_legacy,
+            sim_data_face,
+            time=time_mid,
+            xaxis="m",
+            savepath=str(png_path),
+            show=False,
+            title=title,
+        )
+        print(f"Saved PNG: {png_path}")
+    if save_gif:
+        save_history_gif(
+            history_legacy,
+            case_legacy,
+            gif_path=str(gif_path),
+            fps=10,
+            stride=max(1, len(history_legacy.t) // 50),
+            ref_data=sim_data_face,
+        )
+        print(f"Saved GIF: {gif_path}")
+    print("Full rad_hydro radiation coefficient comparison done.")
+
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -771,6 +858,7 @@ def run_comparison(
     skip_shock_solver: bool = False,
     skip_shussman: bool = False,
     compare_force_black_cases: bool = False,
+    compare_radiation_coeff_schemes: bool = False,
     show_plot: bool = True,
     save_png: bool = True,
     save_gif: bool = True,
@@ -808,6 +896,12 @@ def run_comparison(
                 save_png=save_png,
                 save_gif=save_gif,
             )
+        elif compare_radiation_coeff_schemes:
+            run_full_rad_hydro_radiation_coeff_scheme_comparison(
+                show_plot=show_plot,
+                save_png=save_png,
+                save_gif=save_gif,
+            )
         else:
             run_full_rad_hydro_comparison(
                 skip_rad_hydro=skip_rad_hydro,
@@ -832,6 +926,7 @@ def main() -> None:
         skip_shock_solver=False,
         skip_shussman=False,
         compare_force_black_cases=False,
+        compare_radiation_coeff_schemes=True,
         show_plot=True,
         save_png=True,
         save_gif=True

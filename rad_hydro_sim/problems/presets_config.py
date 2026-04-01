@@ -387,7 +387,7 @@ PRESET_TEST_CASES = {
         scenario="full_rad_hydro",
         title="Prset Matlab (T0=1 HeV, τ=0, t=1 ns, Shussman verification)",
         geom=planar(),
-        force_black = "gray corrected"
+        force_black = None
     ),
 }
 

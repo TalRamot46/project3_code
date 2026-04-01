@@ -8,7 +8,7 @@ Numerical parameters (how to run the solver) belong in SimulationConfig.
 """
 from abc import ABC
 from dataclasses import dataclass
-from typing import Optional, Any, Tuple
+from typing import Optional, Any, Tuple, Literal
 
 from project3_code.hydro_sim.core.geometry import Geometry, planar
 
@@ -62,12 +62,17 @@ class RadHydroCase(ABC):
     
     # Optional fields with defaults
     title: str = ""
-    # Right BC for radiation: T_right_Kelvin=0 -> vacuum (E_right=0); >0 -> cold sink (match 1D Diffusion for verification)
+    # Right BC for radiation energy solve:
+    # - "Dirichlet": hard wall with fixed right temperature (uses T_initial_Kelvin)
+    # - "Neuman": trivial Neumann / "Vaccum" (zero gradient at right edge)
+    # - "free": unconstrained right edge in the solve; boundary is extrapolated after solve
+    right_BC: Literal["Dirichlet", "Neuman", "free"] = "free"
+    # Kept for diffusion/reference compatibility and optional right Dirichlet value.
     T_right_Kelvin: Optional[float] = 0.0
 
     # Geometry
     geom: Geometry = planar()  # Default to planar geometry
-    force_black: bool | None = False
+    force_black: Literal["gray corrected", "full black"] | None = None
 
     def _get_params(
         self,

@@ -57,8 +57,8 @@ def solve_normalize(
                 (float(a[i]), 0.0),
                 y0,
                 method="RK45",
-                rtol=1e-3,
-                atol=1e-6,
+                rtol=1e-9,
+                atol=1e-9,
                 max_step=None,
                 first_step=None,
             )

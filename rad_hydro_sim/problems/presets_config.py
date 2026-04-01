@@ -329,7 +329,7 @@ PRESET_TEST_CASES = {
         # Boundary conditions
         T0_Kelvin = 1* KELVIN_PER_HEV,
         P0_Barye = None,
-        tau = 0.123,
+        tau = 0.17,
 
         # initial conditions
         rho0 = 19.32,
@@ -347,7 +347,7 @@ PRESET_TEST_CASES = {
 
         initial_condition="temperature, density",
         scenario="full_rad_hydro",
-        title="Fig 10 comparison (τ=0.17, Shussman verification)",
+        title="Fig 10 comparison (τ=0.17 (tau_s = 0) Shussman verification)",
         geom=planar(),
     ),
     PRESET_MATLAB: RadHydroCase(

@@ -76,11 +76,10 @@ class RadHydroCase(ABC):
     # Tridiagonal coefficient formulation for gray radiation solve:
     # - "legacy": existing center-weighted discretization
     # - "face_weighted": doc-aligned form using rho_face and center D_i terms
-    radiation_coeff_scheme: Literal["legacy", "face_weighted"] = "legacy"
+    radiation_coeff_scheme: Literal["legacy", "face_weighted"] = "face_weighted"
 
     def _get_params(
         self,
     ) -> Tuple[float, float, float, float, float, float, float]:
         """Returns the parameters as a tuple for radiation step"""
         return self.alpha, self.beta_Rosen, self.mu, self.f_Kelvin, self.chi, self.lambda_, self.g_Kelvin
-    

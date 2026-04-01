@@ -6,7 +6,7 @@ from .utils import trapz
 
 
 def manager_shock(mat: Material, tau: float,
-                  *, iternum: int = 20, xi_f0: float = 4.0):
+                  *, iternum: int = 300, xi_f0: float = 4.0):
     """
     Python equivalent of MATLAB shock/manager.m:
 

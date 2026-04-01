@@ -926,7 +926,7 @@ def main() -> None:
         skip_shock_solver=False,
         skip_shussman=False,
         compare_force_black_cases=False,
-        compare_radiation_coeff_schemes=True,
+        compare_radiation_coeff_schemes=False,
         show_plot=True,
         save_png=True,
         save_gif=True

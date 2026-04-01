@@ -62,13 +62,12 @@ def compute_profiles_for_report(
     for i in range(n_times):
         ti = times_ns[i]
         m_heat[i, :] = m0 * (T0_phys_HeV ** mw[1]) * (ti ** mw[2]) * (t_xi / xsi)
-        # I want no warning about division by zero when rho_heat[i, :] is zero
-        with np.errstate(divide='ignore', invalid='ignore'):
+        rho_heat[i, :] = 1.0 / (V0 * (T0_phys_HeV ** Vw[1]) * (ti ** Vw[2]) * x1)
+        P_heat[i, :] = P0_out * (T0_phys_HeV ** Pw[1]) * (ti ** Pw[2]) * (x3 / Ptilda)
+        T_heat[i, :] = T0_phys_HeV * (ti ** tau) * (x3 * (x1 ** (1 - mat.mu))) ** (1.0 / mat.beta)
+        u_heat[i, :] = u0 * (T0_phys_HeV ** uw[1]) * (ti ** uw[2]) * (x5 / utilda)
+        with np.errstate(divide="ignore", invalid="ignore"):
             x_heat[i, :] = np.cumsum(m_heat[i, :] / rho_heat[i, :])
-            P_heat[i, :] = P0_out * (T0_phys_HeV ** Pw[1]) * (ti ** Pw[2]) * (x3 / Ptilda)
-            T_heat[i, :] = T0_phys_HeV * (ti ** tau) * (x3 * (x1 ** (1 - mat.mu))) ** (1.0 / mat.beta)
-            u_heat[i, :] = u0 * (T0_phys_HeV ** uw[1]) * (ti ** uw[2]) * (x5 / utilda)
-            rho_heat[i, :] = 1.0 / (V0 * (T0_phys_HeV ** Vw[1]) * (ti ** Vw[2]) * x1)
 
     return {
         "times": times_ns,

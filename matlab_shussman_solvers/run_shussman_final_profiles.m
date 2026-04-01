@@ -29,13 +29,17 @@ end
 assignin('base', 'runShussmanOutputPath', output_path);
 
 % run(fullfile(...)) puts each script's folder on the path for Au.m / manager.m
+fprintf("running sub...\n")
 run(fullfile(subdir, 'profiles_for_report_sub.m'));
 
 root = fileparts(mfilename('fullpath'));
 shockdir = fullfile(root, 'shock');
+fprintf("running shock...\n")
 run(fullfile(shockdir, 'profiles_for_report_shock.m'));
+fprintf("running final...\n")
 run(fullfile(shockdir, 'my_final_profiles.m'));
 
+fprintf("presenting output...\n")
 output_path = evalin('base', 'runShussmanOutputPath');
 evalin('base', 'clear runShussmanOutputPath');
 

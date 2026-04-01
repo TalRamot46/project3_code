@@ -7,8 +7,10 @@ Physical parameters (what physics to simulate) belong here.
 Numerical parameters (how to run the solver) belong in SimulationConfig.
 """
 from abc import ABC
-from dataclasses import dataclass
-from typing import Optional, Any, Tuple, Literal
+from dataclasses import dataclass, field
+from typing import Any, Literal, Optional, Tuple
+
+import numpy as np
 
 from project3_code.hydro_sim.core.geometry import Geometry, planar
 
@@ -77,6 +79,9 @@ class RadHydroCase(ABC):
     # - "legacy": existing center-weighted discretization
     # - "face_weighted": doc-aligned form using rho_face and center D_i terms
     radiation_coeff_scheme: Literal["legacy", "face_weighted"] = "face_weighted"
+    times_for_png: np.ndarray = field(
+        default_factory=lambda: np.array([], dtype=float)
+    )
 
     def _get_params(
         self,

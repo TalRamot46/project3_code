@@ -33,7 +33,7 @@ def compute_shock_profiles(
     mat: Material,
     P0_phys_Barye: float,
     tau: Optional[float],
-    Pw: Optional[np.ndarray],
+    Pw3: Optional[float],
     times_ns : np.ndarray,
     patching_method: bool,
     save_npz: Optional[str],
@@ -42,9 +42,8 @@ def compute_shock_profiles(
     Compute shock profiles for a given material, drive pressure, and time.
     """
 
-    if patching_method and Pw is not None:
-        Pw = np.asarray(Pw, float)
-        m0, mw, e0, ew, u0, uw, xsi, z, utilda, ufront, t, x = manager_shock(mat, Pw[2])  # pyright: ignore[reportArgumentType]
+    if patching_method and Pw3 is not None:
+        m0, mw, e0, ew, u0, uw, xsi, z, utilda, ufront, t, x = manager_shock(mat, Pw3)  # pyright: ignore[reportArgumentType]
     elif not patching_method and tau is not None:
         tau = float(tau)
         m0, mw, e0, ew, u0, uw, xsi, z, utilda, ufront, t, x = manager_shock(mat, tau)  # pyright: ignore[reportArgumentType]
@@ -86,8 +85,8 @@ def compute_shock_profiles(
         x_prof = np.cumsum(m_prof / rho_prof)
 
         # separating into cases if patching method is used or not
-        if patching_method and Pw is not None:
-            P_prof = P0_phys_Barye * (ti ** Pw[2]) * P_tilde if ti > 0 else np.zeros_like(t)
+        if patching_method and Pw3 is not None:
+            P_prof = P0_phys_Barye * (ti ** Pw3) * P_tilde if ti > 0 else np.zeros_like(t)
             T_prof = ( # temperature in Kelvin!!!
                 (P_prof / float(mat.r) / float(mat.f)) 
                 * (rho_prof ** (float(mat.mu) - 1.0))
@@ -137,12 +136,12 @@ if __name__ == "__main__":
     except ImportError:
         from shussman_solvers.shock_solver.materials_shock import au_supersonic_variant_1
     Au = au_supersonic_variant_1()
-    P0_Barye = 2.71e12 # Barye
-    tau = -0.45
-    times = np.array([1.0], float)  
-    data = compute_shock_profiles(Au, P0_Barye, tau, Pw = None, times_ns=times, patching_method=False, save_npz=None)
-    data = compute_shock_profiles(Au, P0_Barye, tau=None, Pw = [0,0, -0.45], times_ns=times, patching_method=True, save_npz=None)
+    P0_Barye = 2.717e12 # Barye
+    tau = -0.44791667
+    times = np.array([0.1], float)  
+    data = compute_shock_profiles(Au, P0_Barye, tau, Pw3 = None, times_ns=times, patching_method=False, save_npz=None)
+    # data = compute_shock_profiles(Au, P0_Barye, tau=None, Pw = np.array([0,0, tau]), times_ns=times, patching_method=True, save_npz=None)
     import matplotlib.pyplot as plt
-    plt.plot(data["m_shock"][0], data["T_shock"][0])
+    plt.plot(data["m_shock"][0], data["P_shock"][0])
     # temperature in Kelvin!!!
     plt.show()

@@ -55,6 +55,31 @@ from project3_code.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 KELVIN_PER_HEV = 1_160_500
 a_Kelvin = 7.5657e-15 / (KELVIN_PER_HEV**4)
 
+
+def _snapshot_times_for_png(case: RadHydroCase, config) -> np.ndarray:
+    """
+    Snapshot times [s] for static verification PNGs.
+
+    Uses ``case.times_for_png`` when non-empty; otherwise
+    ``config.png_time_frac * case.t_sec_end`` as a single time.
+    """
+    t = case.times_for_png
+    if t.size == 0:
+        return np.asarray([float(config.png_time_frac) * float(case.t_sec_end)], dtype=float)
+    return np.asarray(t, dtype=float)
+
+
+def _verification_suptitle(case: RadHydroCase, subtitle: str) -> str:
+    """Preset title first, then verification context (slider / PNG / GIF)."""
+    preset = (getattr(case, "title", None) or "").strip()
+    sub = subtitle.strip()
+    if not preset:
+        return sub
+    if not sub:
+        return preset
+    return f"{preset}\n{sub}"
+
+
 # =============================================================================
 # Radiation-only: run rad_hydro + 1D Diffusion + Supersonic solver, then compare T and E_rad
 # =============================================================================
@@ -239,7 +264,8 @@ def run_radiation_only_comparison(
         return
     else:
         print("All data is set.")
-    title = "Radiation-only: Rad-Hydro vs 1D Diffusion" + (" + Supersonic solver" if super_data is not None else "")
+    sub_rad = "Radiation-only: Rad-Hydro vs 1D Diffusion" + (" + Supersonic solver" if super_data is not None else "")
+    title = _verification_suptitle(case, sub_rad)
 
     print("\nPlotting radiation comparison (T, E_rad vs x)...")
     if show_plot:
@@ -249,10 +275,9 @@ def run_radiation_only_comparison(
             title=title,
         )
     if save_png:
-        time_mid = config.png_time_frac * float(case.t_sec_end)
         plot_radiation_comparison_single_time(
             sim_data, ref_data,
-            time=time_mid,
+            time=float(_snapshot_times_for_png(case, config)[0]),
             savepath=str(png_path),
             show=False,
             title=title,
@@ -267,6 +292,7 @@ def run_radiation_only_comparison(
             gif_path=str(gif_path),
             fps=10,
             stride=max(1, len(history.t) // 50),
+            subtitle=sub_rad,
         )
         print(f"Saved GIF: {gif_path}")
     print("Radiation-only comparison done.")
@@ -374,14 +400,10 @@ def run_hydro_only_comparison(
         SimulationType,
     )
     from project3_code.hydro_sim.verification.compare_shock_plots import (
-        plot_comparison_single_time,
+        plot_comparison_in_selected_times,
         plot_comparison_slider,
         load_rad_hydro_history,
         load_hydro_history,
-    )
-    from project3_code.hydro_sim.verification.compare_shock_plots import (
-        plot_comparison_single_time,
-        plot_comparison_slider,
     )
 
     preset_name = get_preset_for_mode(VerificationMode.HYDRO_ONLY)
@@ -448,24 +470,24 @@ def run_hydro_only_comparison(
         return
 
     title_base = "Hydro-only: Rad-Hydro vs run_hydro" + (" + Shock solver" if shock_data is not None else "")
+    title_fig = _verification_suptitle(case_rh, title_base)
     print("\nPlotting hydro comparison (rho, P, u, e vs x)...")
     if show_plot:
         plot_comparison_slider(
             sim_data, ref_data,
             xaxis="m",
             show=True,
-            title=title_base,
+            title=title_fig,
             shock_data=shock_data,
         )
     if save_png:
-        time_mid = config.png_time_frac * case_rh.t_sec_end
-        plot_comparison_single_time(
+        plot_comparison_in_selected_times(
             sim_data, ref_data,
-            time=time_mid,
+            times=_snapshot_times_for_png(case_rh, config),
             xaxis="m",
             savepath=str(png_path),
             show=False,
-            title=title_base,
+            title=title_fig,
             shock_data=shock_data,
         )
         print(f"Saved PNG: {png_path}")
@@ -477,6 +499,7 @@ def run_hydro_only_comparison(
             gif_path=str(gif_path),
             fps=10,
             stride=max(1, len(history_rh.t) // 50),
+            subtitle=title_base,
         )
         print(f"Saved GIF: {gif_path}")
     print("Hydro-only comparison done.")
@@ -539,7 +562,7 @@ def run_full_rad_hydro_comparison(
         run_shussman_piecewise_reference,
     )
     from project3_code.hydro_sim.verification.compare_shock_plots import (
-        plot_comparison_single_time,
+        plot_comparison_in_selected_times,
         plot_comparison_slider,
         load_rad_hydro_history,
         load_hydro_history,
@@ -624,6 +647,8 @@ def run_full_rad_hydro_comparison(
         ref_data = sim_data
         print(f"Copied ref_data to sim_data")
 
+    sub_full = "Full rad_hydro vs Shussman (subsonic + shock)"
+    title_fig = _verification_suptitle(case, sub_full)
     print("\nPlotting full rad_hydro comparison (rho, P, u, e vs x)...")
     if show_plot:
         plot_comparison_slider(
@@ -631,19 +656,18 @@ def run_full_rad_hydro_comparison(
             ref_data,
             xaxis="m",
             show=True,
-            title="Full rad_hydro vs Shussman (subsonic + shock)",
+            title=title_fig,
         )
 
     if save_png:
-        time_mid = config.png_time_frac * float(case.t_sec_end)
-        plot_comparison_single_time(
+        plot_comparison_in_selected_times(
             sim_data,
             ref_data,
-            time=time_mid,
+            times=_snapshot_times_for_png(case, config),
             xaxis="m",
             savepath=str(png_path),
             show=False,
-            title="Full rad_hydro vs Shussman (subsonic + shock)",
+            title=title_fig,
         )
         print(f"Saved PNG: {png_path}")
     if save_gif:
@@ -655,6 +679,7 @@ def run_full_rad_hydro_comparison(
             fps=10,
             stride=max(1, len(history_rh.t) // 50),
             ref_data=ref_data,
+            subtitle=sub_full,
         )
         print(f"Saved GIF: {gif_path}")
     print("Full rad_hydro comparison done.")
@@ -674,7 +699,7 @@ def run_full_rad_hydro_force_black_comparison(
     from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
     from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
     from project3_code.hydro_sim.verification.compare_shock_plots import (
-        plot_comparison_single_time,
+        plot_comparison_in_selected_times,
         plot_comparison_slider,
         load_rad_hydro_history,
     )
@@ -721,6 +746,7 @@ def run_full_rad_hydro_force_black_comparison(
     print(f"Stored {len(sim_data_full_black.times)} time steps.")
 
     title = 'Full rad_hydro: force_black=None vs "gray corrected" vs "full black"'
+    title_fig = _verification_suptitle(case, title)
     print("\nPlotting full rad_hydro force_black comparison (rho, P, u, e vs x)...")
     if show_plot:
         plot_comparison_slider(
@@ -729,19 +755,18 @@ def run_full_rad_hydro_force_black_comparison(
             shock_data=sim_data_full_black,
             xaxis="m",
             show=True,
-            title=title,
+            title=title_fig,
         )
     if save_png:
-        time_mid = config.png_time_frac * float(case.t_sec_end)
-        plot_comparison_single_time(
+        plot_comparison_in_selected_times(
             sim_data_none,
             sim_data_gray,
             shock_data=sim_data_full_black,
-            time=time_mid,
+            times=_snapshot_times_for_png(case, config),
             xaxis="m",
             savepath=str(png_path),
             show=False,
-            title=title,
+            title=title_fig,
         )
         print(f"Saved PNG: {png_path}")
     if save_gif:
@@ -752,6 +777,7 @@ def run_full_rad_hydro_force_black_comparison(
             fps=10,
             stride=max(1, len(history_none.t) // 50),
             ref_data=sim_data_gray,
+            subtitle=title,
         )
         print(f"Saved GIF: {gif_path}")
     print("Full rad_hydro force_black comparison done.")
@@ -770,7 +796,7 @@ def run_full_rad_hydro_radiation_coeff_scheme_comparison(
     from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
     from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
     from project3_code.hydro_sim.verification.compare_shock_plots import (
-        plot_comparison_single_time,
+        plot_comparison_in_selected_times,
         plot_comparison_slider,
         load_rad_hydro_history,
     )
@@ -810,6 +836,7 @@ def run_full_rad_hydro_radiation_coeff_scheme_comparison(
     print(f"Stored {len(sim_data_face.times)} time steps.")
 
     title = 'Full rad_hydro: force_black=None, coeff "legacy" vs "face_weighted"'
+    title_fig = _verification_suptitle(case, title)
     print("\nPlotting full rad_hydro radiation coefficient comparison (rho, P, u, e vs x)...")
     if show_plot:
         plot_comparison_slider(
@@ -817,18 +844,17 @@ def run_full_rad_hydro_radiation_coeff_scheme_comparison(
             sim_data_face,
             xaxis="m",
             show=True,
-            title=title,
+            title=title_fig,
         )
     if save_png:
-        time_mid = config.png_time_frac * float(case.t_sec_end)
-        plot_comparison_single_time(
+        plot_comparison_in_selected_times(
             sim_data_legacy,
             sim_data_face,
-            time=time_mid,
+            times=_snapshot_times_for_png(case, config),
             xaxis="m",
             savepath=str(png_path),
             show=False,
-            title=title,
+            title=title_fig,
         )
         print(f"Saved PNG: {png_path}")
     if save_gif:
@@ -839,6 +865,7 @@ def run_full_rad_hydro_radiation_coeff_scheme_comparison(
             fps=10,
             stride=max(1, len(history_legacy.t) // 50),
             ref_data=sim_data_face,
+            subtitle=title,
         )
         print(f"Saved GIF: {gif_path}")
     print("Full rad_hydro radiation coefficient comparison done.")

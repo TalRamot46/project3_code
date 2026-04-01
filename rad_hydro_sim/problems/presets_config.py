@@ -10,6 +10,7 @@ N, store_every, png_time_frac manually when running a test.
 """
 from typing import Dict, Tuple
 
+import numpy as np
 from project3_code.hydro_sim.core.geometry import planar
 
 # ---------------------------------------------------------------------------
@@ -251,9 +252,9 @@ PRESET_TEST_CASES = {
         chi = 1000,
 
         # Boundary conditions
-        T0_Kelvin = 1 * KELVIN_PER_HEV,
+        T0_Kelvin = 1* KELVIN_PER_HEV,
         P0_Barye = None,
-        tau = 0.0,
+        tau = 0,
 
         # initial conditions
         rho0 = 19.32,
@@ -266,22 +267,23 @@ PRESET_TEST_CASES = {
 
         # grid parameters
         x_min = 0,
-        x_max = 1.5e-3 / 19.32, # m_max = 1.5 mg/cm^2
-        t_sec_end = 5e-11,
+        x_max = 3e-3 / 19.32,
+        t_sec_end = 1.5e-10,
 
         initial_condition="temperature, density",
         scenario="full_rad_hydro",
         title="Fig 8 comparison (τ=0, Shussman verification)",
         geom=planar(),
+        times_for_png=np.array([0.05e-9, 0.1e-9, 0.15e-9], dtype=float),
     ),
     PRESET_FIG_9: RadHydroCase(
         # Rosen's opacity parameters
-        g_Kelvin = 1.0 / 7200,
+        g_Kelvin = 1.0 / (7200 * KELVIN_PER_HEV**1.5),
         alpha = 1.5,
         lambda_ = 0.2,
 
         # Rosen's specific energy parameters
-        f_Kelvin = 3.4e13,
+        f_Kelvin = 3.4e13 / (KELVIN_PER_HEV**1.6),
         beta_Rosen = 1.6,
         mu = 0.14,
 
@@ -289,7 +291,7 @@ PRESET_TEST_CASES = {
         chi = 1000,
 
         # Boundary conditions
-        T0_Kelvin = 1,
+        T0_Kelvin = 1* KELVIN_PER_HEV,
         P0_Barye = None,
         tau = 0.123,
 
@@ -304,13 +306,14 @@ PRESET_TEST_CASES = {
 
         # grid parameters
         x_min = 0,
-        x_max = 1.5e-3 / 19.32, # m_max = 1.5 mg/cm^2
-        t_sec_end = 2e-10,
+        x_max = 1.6e-3 / 19.32,
+        t_sec_end = 1.5e-10,
 
         initial_condition="temperature, density",
         scenario="full_rad_hydro",
         title="Fig 9 comparison (τ=0.123, Shussman verification)",
         geom=planar(),
+        times_for_png=np.array([0.05e-9, 0.1e-9, 0.15e-9], dtype=float),
     ),
     PRESET_FIG_10: RadHydroCase(
         # Rosen's opacity parameters
@@ -349,6 +352,7 @@ PRESET_TEST_CASES = {
         scenario="full_rad_hydro",
         title="Fig 10 comparison (τ=0.17 (tau_s = 0) Shussman verification)",
         geom=planar(),
+        times_for_png=np.array([0.05e-9, 0.1e-9, 0.15e-9], dtype=float),
     ),
     PRESET_MATLAB: RadHydroCase(
     # Rosen's opacity parameters
@@ -387,7 +391,8 @@ PRESET_TEST_CASES = {
         scenario="full_rad_hydro",
         title="Prset Matlab (T0=1 HeV, τ=0, t=1 ns, Shussman verification)",
         geom=planar(),
-        force_black = None
+        force_black = None,
+        times_for_png=np.array([0.05e-9, 0.1e-9, 0.15e-9], dtype=float),
     ),
 }
 

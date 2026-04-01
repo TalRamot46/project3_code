@@ -6,7 +6,7 @@ from .utils import trapz
 
 
 def manager_shock(mat: Material, tau: float,
-                  *, iternum: int = 300, xi_f0: float = 4.0):
+                  *, iternum: int = 20, xi_f0: float = 4.0):
     """
     Python equivalent of MATLAB shock/manager.m:
 
@@ -71,7 +71,7 @@ def manager_shock(mat: Material, tau: float,
 
     m0 = 10**(-9*(mw[2]-mw[0]*tau)) * xsi * (mat.V0 ** mw[1]) # unit conversion because t is in ns and P is in Barye
     e0 = 10**(-9*(ew[2]-ew[0]*tau)) * z * (mat.V0 ** ew[1])
-    u0 = 10**(-9*(uw[2]-uw[0]*tau)) * utilda * (mat.V0 ** uw[1])
+    u0 = 10**(-9*(uw[2]-uw[0]*tau)) * utilda * (mat.V0 ** uw[1]) / 1e5
 
     # Return in the same order as MATLAB manager
     return m0, mw, e0, ew, u0, uw, xsi, z, utilda, ufront, t, x

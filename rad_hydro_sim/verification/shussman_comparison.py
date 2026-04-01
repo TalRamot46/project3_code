@@ -234,15 +234,13 @@ def run_shussman_piecewise_reference(
         tau=tau,
         times_ns=times_ns,
     )
-    P_front = subsonic_data["P_heat"][-1,-1] # units = MBar
-    _, _, wP3 = subsonic_data["Pw"]
+    P0_phys_Barye = subsonic_data["P0_phys_Barye"] # units = MBar
+    Pw3 = subsonic_data["Pw3"]
 
     # 2) Shock solver with appropriate drive
     print("Starting shock solving...")
     mat = _rad_hydro_case_to_material_shock(case)
-    # Pw[0], Pw[1], Pw[2]: P0 exponent, T0 exponent, time exponent (tau)
-    Pw = np.array([_, _, wP3], dtype=float)
-    shock_data = compute_shock_profiles(mat, P_front, tau=None, Pw=Pw, times_ns=times_ns, 
+    shock_data = compute_shock_profiles(mat, P0_phys_Barye, tau=None, Pw3=Pw3, times_ns=times_ns, 
                                             patching_method=True, save_npz=None)
 
     # 3) Piecewise reference (subsonic + shock [+ unperturbed to m_max])
@@ -263,3 +261,11 @@ def run_shussman_piecewise_reference(
 
     return ref
 
+if __name__ == "__main__":
+    from project3_code.rad_hydro_sim.problems.presets_config import PRESET_FIG_8, PRESET_TEST_CASES
+    case_name = PRESET_FIG_8
+    case = PRESET_TEST_CASES[case_name]
+    times_ns = np.array([0.1], dtype=float)
+    T0_HeV = 1
+    ref = run_shussman_piecewise_reference(case, times_ns, T0_HeV)
+    print(ref)

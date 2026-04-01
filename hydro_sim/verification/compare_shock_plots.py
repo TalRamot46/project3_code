@@ -9,10 +9,11 @@ from __future__ import annotations
 import numpy as np
 from project3_code.rad_hydro_sim.plotting import mpl_style  # noqa: F401 - apply project style
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 from matplotlib.widgets import Slider
 from matplotlib.animation import FuncAnimation, PillowWriter
 from pathlib import Path
-from typing import Optional, Dict, Any, Union
+from typing import Any, Dict, Optional, Union
 from dataclasses import dataclass
 
 from project3_code.rad_hydro_sim.verification.hydro_data import RadHydroData
@@ -183,159 +184,236 @@ def interpolate_to_time(data: HydroDataLike, target_time: float) -> int:
     """Find the index of the closest time in data."""
     idx = np.argmin(np.abs(data.times - target_time))
     return idx
-    
+
+
+# Stored hydro fields: p [Barye], u [cm/s], e [erg/g] → display MBar, km/s, hJ/g
+PLOT_P_SCALE = 1e12
+PLOT_U_SCALE = 1e5
+PLOT_E_SCALE = 1e9
+
+
+def _legend_time_s(t_s: float) -> str:
+    if abs(t_s) >= 1e-7:
+        return f"{t_s * 1e9:.4g} ns"
+    return f"{t_s:.3e} s"
+
 
 # ============================================================================
-# 4-Panel Comparison Plot (Single Time)
+# 4-Panel comparison: all selected times on one figure (discrete legend)
 # ============================================================================
 
-def plot_comparison_single_time(
+def plot_comparison_in_selected_times(
     sim_data: HydroDataLike,
     ref_data: HydroDataLike,
-    time: float,
-    xaxis: str = "m",  # "m" for mass coordinate, "x" for position
-    savepath: str | None = None,
+    times: np.ndarray,
+    xaxis: str = "m",
+    savepath: str | Path | None = None,
     show: bool = True,
     title: str | None = None,
     shock_data: HydroDataLike | None = None,
-):
+    cmap_name: str = "plasma",
+) -> list[tuple[Any, Any]]:
     """
-    Plot 4-panel comparison (rho, P, u, e) at a single time.
-    
+    One figure: overlay every requested snapshot (nearest stored time in each dataset).
+
+    Discrete colors per requested time; legend lists each curve with its time.
+    Linestyle: simulation solid, reference dashed, optional third dotted.
+
     Parameters:
-        sim_data: Simulation data (hydro_sim)
-        ref_data: Reference data (shussman_shock_solver)
-        time: Time to plot
-        xaxis: "m" for mass coordinate, "x" for position
-        savepath: Optional path to save figure
-        show: Whether to display the figure
-        title: Optional figure title
+        sim_data: Simulation data (hydro_sim / rad_hydro)
+        ref_data: Reference data (e.g. Shussman or run_hydro)
+        times: 1D ``np.ndarray`` of times in seconds
+        xaxis: ``"m"`` for mass coordinate, ``"x"`` for position
+        savepath: If set, write a single PNG
+        show: If True, display; otherwise close after saving
+        title: Figure title (optional)
         shock_data: Optional third dataset (e.g. shock solver P0*t^tau)
+        cmap_name: Colormap used to pick distinct colors per snapshot index
+
+    Returns:
+        ``[(figure, axes)]`` (length 1) for compatibility with callers expecting a list.
     """
-    # Find closest time indices
-    sim_idx = interpolate_to_time(sim_data, time)
-    ref_idx = interpolate_to_time(ref_data, time)
-    shock_idx = interpolate_to_time(shock_data, time) if shock_data is not None else None
-    
-    actual_sim_time = sim_data.times[sim_idx]
-    actual_ref_time = ref_data.times[ref_idx]
-    
-    # Get data
+    if not isinstance(times, np.ndarray):
+        raise TypeError("times must be a numpy.ndarray")
+    if times.ndim != 1:
+        raise ValueError("times must be one-dimensional")
+    times = np.asarray(times, dtype=float)
+    if times.size == 0:
+        raise ValueError("times must be non-empty")
+
+    cmap = plt.get_cmap(cmap_name)
+    n_t = int(times.size)
+    colors = cmap(np.linspace(0.2, 0.92, max(n_t, 1)))
+
     if xaxis == "m":
-        x_sim = sim_data.m[sim_idx]
-        x_ref = ref_data.m[ref_idx]
         xlabel = r"Mass coordinate $m$ [g/cm²]"
     else:
-        x_sim = sim_data.x[sim_idx]
-        x_ref = ref_data.x[ref_idx]
         xlabel = r"Position $x$ [cm]"
-    
-    # Create figure
-    fig, axes = plt.subplots(4, 2, figsize=(12, 11), sharex=True)
+
+    fig, axes = plt.subplots(4, 2, figsize=(12.5, 11), sharex=True)
     ax_rho, ax_p = axes[0, 0], axes[0, 1]
     ax_u, ax_e = axes[1, 0], axes[1, 1]
     ax_Tm, ax_T = axes[2, 0], axes[2, 1]
     ax_E_rad = axes[3, 0]
     axes[3, 1].set_visible(False)
-    
-    x_shock = shock_data.m[shock_idx] if shock_data and xaxis == "m" else (shock_data.x[shock_idx] if shock_data else None)
-    if shock_data is not None and x_shock is not None:
-        actual_shock_time = shock_data.times[shock_idx]
 
-    # Plot density
-    ax_rho.plot(x_sim, sim_data.rho[sim_idx], 
-                color=sim_data.color, linestyle=sim_data.linestyle, 
-                lw=2, label=f"{sim_data.label} (t={actual_sim_time:.2e})")
-    ax_rho.plot(x_ref, ref_data.rho[ref_idx], 
-                color=ref_data.color, linestyle=ref_data.linestyle, 
-                lw=2, label=f"{ref_data.label} (t={actual_ref_time:.2e})")
-    if shock_data is not None:
-        ax_rho.plot(x_shock, shock_data.rho[shock_idx], 
-                    color=shock_data.color, linestyle=shock_data.linestyle, 
-                    lw=2, label=f"{shock_data.label} (t={actual_shock_time:.2e})")
+    _has_Tm = hasattr(sim_data, "T_material") and sim_data.T_material
+    _has_T = hasattr(sim_data, "T") and sim_data.T and hasattr(ref_data, "T") and ref_data.T
+    _has_E_rad = (
+        hasattr(sim_data, "E_rad")
+        and sim_data.E_rad
+        and hasattr(ref_data, "E_rad")
+        and ref_data.E_rad
+    )
+
+    lw_sim, lw_ref = 2.0, 2.0
+    lw_shock = 1.65
+    legend_handles: list[Line2D] = []
+
+    for j, t_req in enumerate(times):
+        t_req = float(t_req)
+        color = colors[j % len(colors)]
+        sim_idx = interpolate_to_time(sim_data, t_req)
+        ref_idx = interpolate_to_time(ref_data, t_req)
+        shock_idx = interpolate_to_time(shock_data, t_req) if shock_data is not None else None
+        t_lbl = _legend_time_s(t_req)
+
+        if xaxis == "m":
+            x_sim = sim_data.m[sim_idx]
+            x_ref = ref_data.m[ref_idx]
+            x_shock = (
+                shock_data.m[shock_idx]
+                if shock_data is not None and shock_idx is not None
+                else None
+            )
+        else:
+            x_sim = sim_data.x[sim_idx]
+            x_ref = ref_data.x[ref_idx]
+            x_shock = (
+                shock_data.x[shock_idx]
+                if shock_data is not None and shock_idx is not None
+                else None
+            )
+
+        ps = sim_data.p[sim_idx] / PLOT_P_SCALE
+        pr = ref_data.p[ref_idx] / PLOT_P_SCALE
+        us = sim_data.u[sim_idx] / PLOT_U_SCALE
+        ur = ref_data.u[ref_idx] / PLOT_U_SCALE
+        es = sim_data.e[sim_idx] / PLOT_E_SCALE
+        er = ref_data.e[ref_idx] / PLOT_E_SCALE
+
+        ax_rho.plot(x_sim, sim_data.rho[sim_idx], color=color, linestyle="-", lw=lw_sim, alpha=0.92)
+        ax_rho.plot(x_ref, ref_data.rho[ref_idx], color=color, linestyle="--", lw=lw_ref, alpha=0.92)
+        if shock_data is not None and shock_idx is not None and x_shock is not None:
+            ax_rho.plot(
+                x_shock,
+                shock_data.rho[shock_idx],
+                color=color,
+                linestyle=":",
+                lw=lw_shock,
+                alpha=0.92,
+            )
+
+        ax_p.plot(x_sim, ps, color=color, linestyle="-", lw=lw_sim, alpha=0.92)
+        ax_p.plot(x_ref, pr, color=color, linestyle="--", lw=lw_ref, alpha=0.92)
+        if shock_data is not None and shock_idx is not None and x_shock is not None:
+            ax_p.plot(x_shock, shock_data.p[shock_idx] / PLOT_P_SCALE, color=color, linestyle=":", lw=lw_shock, alpha=0.92)
+
+        ax_u.plot(x_sim, us, color=color, linestyle="-", lw=lw_sim, alpha=0.92)
+        ax_u.plot(x_ref, ur, color=color, linestyle="--", lw=lw_ref, alpha=0.92)
+        if shock_data is not None and shock_idx is not None and x_shock is not None:
+            ax_u.plot(x_shock, shock_data.u[shock_idx] / PLOT_U_SCALE, color=color, linestyle=":", lw=lw_shock, alpha=0.92)
+
+        ax_e.plot(x_sim, es, color=color, linestyle="-", lw=lw_sim, alpha=0.92)
+        ax_e.plot(x_ref, er, color=color, linestyle="--", lw=lw_ref, alpha=0.92)
+        if shock_data is not None and shock_idx is not None and x_shock is not None:
+            ax_e.plot(x_shock, shock_data.e[shock_idx] / PLOT_E_SCALE, color=color, linestyle=":", lw=lw_shock, alpha=0.92)
+
+        if _has_Tm:
+            ax_Tm.plot(
+                x_sim,
+                sim_data.T_material[sim_idx],
+                color=color,
+                linestyle="-",
+                lw=lw_sim,
+                alpha=0.92,
+            )
+
+        if _has_T:
+            ax_T.plot(x_sim, sim_data.T[sim_idx], color=color, linestyle="-", lw=lw_sim, alpha=0.92)
+            ax_T.plot(x_ref, ref_data.T[ref_idx], color=color, linestyle="--", lw=lw_ref, alpha=0.92)
+
+        if _has_E_rad:
+            ax_E_rad.plot(
+                x_sim, sim_data.E_rad[sim_idx], color=color, linestyle="-", lw=lw_sim, alpha=0.92
+            )
+            ax_E_rad.plot(
+                x_ref,
+                ref_data.E_rad[ref_idx],
+                color=color,
+                linestyle="--",
+                lw=lw_ref,
+                alpha=0.92,
+            )
+
+        legend_handles.append(
+            Line2D([0], [0], color=color, lw=lw_sim, linestyle="-", label=f"{sim_data.label} ({t_lbl})")
+        )
+        legend_handles.append(
+            Line2D([0], [0], color=color, lw=lw_ref, linestyle="--", label=f"{ref_data.label} ({t_lbl})")
+        )
+        if shock_data is not None:
+            legend_handles.append(
+                Line2D(
+                    [0],
+                    [0],
+                    color=color,
+                    lw=lw_shock,
+                    linestyle=":",
+                    label=f"{shock_data.label} ({t_lbl})",
+                )
+            )
+
     ax_rho.set_ylabel(r"$\rho$ [g/cm³]")
-    ax_rho.legend(loc="best", fontsize=9)
-    ax_rho.grid(True, alpha=0.3)
-    
-    # Plot pressure
-    ax_p.plot(x_sim, sim_data.p[sim_idx], 
-              color=sim_data.color, linestyle=sim_data.linestyle, lw=2)
-    ax_p.plot(x_ref, ref_data.p[ref_idx], 
-              color=ref_data.color, linestyle=ref_data.linestyle, lw=2)
-    if shock_data is not None:
-        ax_p.plot(x_shock, shock_data.p[shock_idx], 
-                  color=shock_data.color, linestyle=shock_data.linestyle, lw=2)
     ax_p.set_ylabel(r"$P$ [MBar]")
-    ax_p.grid(True, alpha=0.3)
-    
-    # Plot velocity
-    ax_u.plot(x_sim, sim_data.u[sim_idx], 
-              color=sim_data.color, linestyle=sim_data.linestyle, lw=2)
-    ax_u.plot(x_ref, ref_data.u[ref_idx], 
-              color=ref_data.color, linestyle=ref_data.linestyle, lw=2)
-    if shock_data is not None:
-        ax_u.plot(x_shock, shock_data.u[shock_idx], 
-                  color=shock_data.color, linestyle=shock_data.linestyle, lw=2)
     ax_u.set_ylabel(r"$u$ [km/s]")
-    ax_u.set_xlabel(xlabel)
-    ax_u.grid(True, alpha=0.3)
-    
-    # Plot energy
-    ax_e.plot(x_sim, sim_data.e[sim_idx], 
-              color=sim_data.color, linestyle=sim_data.linestyle, lw=2)
-    ax_e.plot(x_ref, ref_data.e[ref_idx], 
-              color=ref_data.color, linestyle=ref_data.linestyle, lw=2)
-    if shock_data is not None:
-        ax_e.plot(x_shock, shock_data.e[shock_idx], 
-                  color=shock_data.color, linestyle=shock_data.linestyle, lw=2)
     ax_e.set_ylabel(r"$e$ [hJ/g]")
-    ax_e.set_xlabel(xlabel)
-    ax_e.grid(True, alpha=0.3)
-
-    # plot material temperature (simulation only; reference typically doesn't have it)
-    _has_Tm = hasattr(sim_data, 'T_material') and sim_data.T_material
-    if _has_Tm:
-        ax_Tm.plot(x_sim, sim_data.T_material[sim_idx],
-                   color=sim_data.color, linestyle=sim_data.linestyle, lw=2)
     ax_Tm.set_ylabel(r"$T_{\mathrm{mat}}$ [HeV]")
-    ax_Tm.set_xlabel(xlabel)
-    ax_Tm.grid(True, alpha=0.3)
-
-    # plot radiation temperature (if present)
-    if hasattr(sim_data, 'T') and sim_data.T and hasattr(ref_data, 'T') and ref_data.T:
-        ax_T.plot(x_sim, sim_data.T[sim_idx], 
-                  color=sim_data.color, linestyle=sim_data.linestyle, lw=2)
-        ax_T.plot(x_ref, ref_data.T[ref_idx], 
-                  color=ref_data.color, linestyle=ref_data.linestyle, lw=2)
     ax_T.set_ylabel(r"$T_{\mathrm{rad}}$ [HeV]")
-    ax_T.set_xlabel(xlabel)
-    ax_T.grid(True, alpha=0.3)
-
-    # plot radiation energy (if present)
-    if hasattr(sim_data, 'E_rad') and sim_data.E_rad and hasattr(ref_data, 'E_rad') and ref_data.E_rad:
-        ax_E_rad.plot(x_sim, sim_data.E_rad[sim_idx], 
-                  color=sim_data.color, linestyle=sim_data.linestyle, lw=2)
-        ax_E_rad.plot(x_ref, ref_data.E_rad[ref_idx], 
-                  color=ref_data.color, linestyle=ref_data.linestyle, lw=2)
     ax_E_rad.set_ylabel(r"$E_{\mathrm{rad}}$ [erg/cm³]")
-    ax_E_rad.set_xlabel(xlabel)
-    ax_E_rad.grid(True, alpha=0.3)
-    # Title
+
+    plot_axes = (ax_rho, ax_p, ax_u, ax_e, ax_Tm, ax_T, ax_E_rad)
+    for ax in plot_axes:
+        ax.set_xlabel(xlabel)
+        ax.tick_params(axis="x", labelbottom=True)
+        ax.grid(True, alpha=0.3)
+
+    nh = len(legend_handles)
+    fig.legend(
+        handles=legend_handles,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.02),
+        ncol=min(6, nh),
+        fontsize=6,
+        framealpha=0.95,
+    )
+
     if title is None:
-        title = f"Shock Profile Comparison at t ≈ {time:.2e} s"
+        title = "Profile comparison (nearest snapshot per curve; solid=sim, dashed=ref)"
     fig.suptitle(title, fontsize=12, fontweight="medium")
-    fig.tight_layout()
-    
+    fig.tight_layout(rect=[0, 0.14, 1, 0.96])
+
     if savepath:
-        Path(savepath).parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(savepath, dpi=200, bbox_inches='tight', facecolor='white', edgecolor='none')
-    
+        sp = Path(savepath)
+        sp.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(str(sp), dpi=200, bbox_inches="tight", facecolor="white", edgecolor="none")
+
     if show:
         plt.show()
     else:
         plt.close(fig)
-    
-    return fig, axes
+
+    return [(fig, axes)]
 
 
 # ============================================================================
@@ -395,22 +473,22 @@ def plot_comparison_slider(
     else:
         lines['shock_rho'], = ax_rho.plot([], [], color="green", linestyle="-.", lw=2)
 
-    lines['sim_p'], = ax_p.plot(x_sim, sim_data.p[k], color=sim_data.color, lw=2)
-    lines['ref_p'], = ax_p.plot(x_ref, ref_data.p[ref_k], color=ref_data.color, linestyle='--', lw=2)
+    lines['sim_p'], = ax_p.plot(x_sim, sim_data.p[k] / PLOT_P_SCALE, color=sim_data.color, lw=2)
+    lines['ref_p'], = ax_p.plot(x_ref, ref_data.p[ref_k] / PLOT_P_SCALE, color=ref_data.color, linestyle='--', lw=2)
     if shock_data is not None:
-        lines['shock_p'], = ax_p.plot(x_shock, shock_data.p[shock_k], color=shock_data.color, linestyle=shock_data.linestyle, lw=2)
+        lines['shock_p'], = ax_p.plot(x_shock, shock_data.p[shock_k] / PLOT_P_SCALE, color=shock_data.color, linestyle=shock_data.linestyle, lw=2)
     else:
         lines['shock_p'], = ax_p.plot([], [], color="green", linestyle="-.")
-    lines['sim_u'], = ax_u.plot(x_sim, sim_data.u[k], color=sim_data.color, lw=2)
-    lines['ref_u'], = ax_u.plot(x_ref, ref_data.u[ref_k], color=ref_data.color, linestyle='--', lw=2)
+    lines['sim_u'], = ax_u.plot(x_sim, sim_data.u[k] / PLOT_U_SCALE, color=sim_data.color, lw=2)
+    lines['ref_u'], = ax_u.plot(x_ref, ref_data.u[ref_k] / PLOT_U_SCALE, color=ref_data.color, linestyle='--', lw=2)
     if shock_data is not None:
-        lines['shock_u'], = ax_u.plot(x_shock, shock_data.u[shock_k], color=shock_data.color, linestyle=shock_data.linestyle, lw=2)
+        lines['shock_u'], = ax_u.plot(x_shock, shock_data.u[shock_k] / PLOT_U_SCALE, color=shock_data.color, linestyle=shock_data.linestyle, lw=2)
     else:
         lines['shock_u'], = ax_u.plot([], [], color="green", linestyle="-.")
-    lines['sim_e'], = ax_e.plot(x_sim, sim_data.e[k], color=sim_data.color, lw=2)
-    lines['ref_e'], = ax_e.plot(x_ref, ref_data.e[ref_k], color=ref_data.color, linestyle='--', lw=2)
+    lines['sim_e'], = ax_e.plot(x_sim, sim_data.e[k] / PLOT_E_SCALE, color=sim_data.color, lw=2)
+    lines['ref_e'], = ax_e.plot(x_ref, ref_data.e[ref_k] / PLOT_E_SCALE, color=ref_data.color, linestyle='--', lw=2)
     if shock_data is not None:
-        lines['shock_e'], = ax_e.plot(x_shock, shock_data.e[shock_k], color=shock_data.color, linestyle=shock_data.linestyle, lw=2)
+        lines['shock_e'], = ax_e.plot(x_shock, shock_data.e[shock_k] / PLOT_E_SCALE, color=shock_data.color, linestyle=shock_data.linestyle, lw=2)
     else:
         lines['shock_e'], = ax_e.plot([], [], color="green", linestyle="-.")
 
@@ -441,13 +519,13 @@ def plot_comparison_slider(
     ax_rho.legend(loc="best")
     ax_rho.grid(True, alpha=0.3)
     
-    ax_p.set_ylabel(r"$P$ [Barye]")
+    ax_p.set_ylabel(r"$P$ [MBar]")
     ax_p.grid(True, alpha=0.3)
     
-    ax_u.set_ylabel(r"$u$ [cm/s]")
+    ax_u.set_ylabel(r"$u$ [km/s]")
     ax_u.grid(True, alpha=0.3)
     
-    ax_e.set_ylabel(r"$e$ [erg/g]")
+    ax_e.set_ylabel(r"$e$ [hJ/g]")
     ax_e.grid(True, alpha=0.3)
     
     ax_Tm.set_ylabel(r"$T_{\mathrm{mat}}$ [HeV]")
@@ -457,8 +535,11 @@ def plot_comparison_slider(
     ax_T.grid(True, alpha=0.3)
     
     ax_E_rad.set_ylabel(r"$E_{\mathrm{rad}}$ [erg/cm³]")
-    ax_E_rad.set_xlabel(xlabel)
     ax_E_rad.grid(True, alpha=0.3)
+
+    for ax in (ax_rho, ax_p, ax_u, ax_e, ax_Tm, ax_T, ax_E_rad):
+        ax.set_xlabel(xlabel)
+        ax.tick_params(axis="x", labelbottom=True)
     
     title_text = fig.suptitle("")
     
@@ -466,7 +547,9 @@ def plot_comparison_slider(
         sim_t = sim_data.times[k]
         ref_t = ref_data.times[ref_k]
         base_title = title if title else "Shock Comparison"
-        title_text.set_text(f"{base_title}\Simulatuion: t={sim_t:.2e}, Reference: t={ref_t:.2e}")
+        title_text.set_text(
+            f"{base_title}\nSimulation: t={sim_t:.2e} s, Reference: t={ref_t:.2e} s"
+        )
     
     set_title(k, ref_k)
     
@@ -488,20 +571,20 @@ def plot_comparison_slider(
         if shock_data is not None:
             lines['shock_rho'].set_data(x_shock, shock_data.rho[shock_k])
         
-        lines['sim_p'].set_data(x_sim, sim_data.p[k])
-        lines['ref_p'].set_data(x_ref, ref_data.p[ref_k])
+        lines['sim_p'].set_data(x_sim, sim_data.p[k] / PLOT_P_SCALE)
+        lines['ref_p'].set_data(x_ref, ref_data.p[ref_k] / PLOT_P_SCALE)
         if shock_data is not None:
-            lines['shock_p'].set_data(x_shock, shock_data.p[shock_k])
+            lines['shock_p'].set_data(x_shock, shock_data.p[shock_k] / PLOT_P_SCALE)
         
-        lines['sim_u'].set_data(x_sim, sim_data.u[k])
-        lines['ref_u'].set_data(x_ref, ref_data.u[ref_k])
+        lines['sim_u'].set_data(x_sim, sim_data.u[k] / PLOT_U_SCALE)
+        lines['ref_u'].set_data(x_ref, ref_data.u[ref_k] / PLOT_U_SCALE)
         if shock_data is not None:
-            lines['shock_u'].set_data(x_shock, shock_data.u[shock_k])
+            lines['shock_u'].set_data(x_shock, shock_data.u[shock_k] / PLOT_U_SCALE)
         
-        lines['sim_e'].set_data(x_sim, sim_data.e[k])
-        lines['ref_e'].set_data(x_ref, ref_data.e[ref_k])
+        lines['sim_e'].set_data(x_sim, sim_data.e[k] / PLOT_E_SCALE)
+        lines['ref_e'].set_data(x_ref, ref_data.e[ref_k] / PLOT_E_SCALE)
         if shock_data is not None:
-            lines['shock_e'].set_data(x_shock, shock_data.e[shock_k])
+            lines['shock_e'].set_data(x_shock, shock_data.e[shock_k] / PLOT_E_SCALE)
         
         if _has_Tm:
             lines['sim_Tm'].set_data(x_sim, sim_data.T_material[k])
@@ -586,30 +669,36 @@ def plot_comparison_overlay(
         ax_rho.plot(x_ref, ref_data.rho[ref_k], color=colors_ref[i], lw=1.5, linestyle='--')
         
         # Pressure
-        ax_p.plot(x_sim, sim_data.p[sim_k], color=colors_sim[i], lw=1.5)
-        ax_p.plot(x_ref, ref_data.p[ref_k], color=colors_ref[i], lw=1.5, linestyle='--')
+        ax_p.plot(x_sim, sim_data.p[sim_k] / PLOT_P_SCALE, color=colors_sim[i], lw=1.5)
+        ax_p.plot(x_ref, ref_data.p[ref_k] / PLOT_P_SCALE, color=colors_ref[i], lw=1.5, linestyle='--')
         
         # Velocity
-        ax_u.plot(x_sim, sim_data.u[sim_k], color=colors_sim[i], lw=1.5)
-        ax_u.plot(x_ref, ref_data.u[ref_k], color=colors_ref[i], lw=1.5, linestyle='--')
+        ax_u.plot(x_sim, sim_data.u[sim_k] / PLOT_U_SCALE, color=colors_sim[i], lw=1.5)
+        ax_u.plot(x_ref, ref_data.u[ref_k] / PLOT_U_SCALE, color=colors_ref[i], lw=1.5, linestyle='--')
         
         # Energy
-        ax_e.plot(x_sim, sim_data.e[sim_k], color=colors_sim[i], lw=1.5)
-        ax_e.plot(x_ref, ref_data.e[ref_k], color=colors_ref[i], lw=1.5, linestyle='--')
+        ax_e.plot(x_sim, sim_data.e[sim_k] / PLOT_E_SCALE, color=colors_sim[i], lw=1.5)
+        ax_e.plot(x_ref, ref_data.e[ref_k] / PLOT_E_SCALE, color=colors_ref[i], lw=1.5, linestyle='--')
     
     # Labels and styling
     ax_rho.set_ylabel(r"$\rho$ [g/cm³]")
+    ax_rho.set_xlabel(xlabel)
+    ax_rho.tick_params(axis="x", labelbottom=True)
     ax_rho.grid(True, alpha=0.3)
     
     ax_p.set_ylabel(r"$P$ [MBar]")
+    ax_p.set_xlabel(xlabel)
+    ax_p.tick_params(axis="x", labelbottom=True)
     ax_p.grid(True, alpha=0.3)
     
     ax_u.set_ylabel(r"$u$ [km/s]")
     ax_u.set_xlabel(xlabel)
+    ax_u.tick_params(axis="x", labelbottom=True)
     ax_u.grid(True, alpha=0.3)
     
     ax_e.set_ylabel(r"$e$ [hJ/g]")
     ax_e.set_xlabel(xlabel)
+    ax_e.tick_params(axis="x", labelbottom=True)
     ax_e.grid(True, alpha=0.3)
     
     # Legend with custom handles
@@ -679,12 +768,12 @@ def save_comparison_gif(
     lines = {}
     lines['sim_rho'], = ax_rho.plot(x_sim, sim_data.rho[k], 'b-', lw=2, label=sim_data.label)
     lines['ref_rho'], = ax_rho.plot(x_ref, ref_data.rho[ref_k], 'r--', lw=2, label=ref_data.label)
-    lines['sim_p'], = ax_p.plot(x_sim, sim_data.p[k], 'b-', lw=2)
-    lines['ref_p'], = ax_p.plot(x_ref, ref_data.p[ref_k], 'r--', lw=2)
-    lines['sim_u'], = ax_u.plot(x_sim, sim_data.u[k], 'b-', lw=2)
-    lines['ref_u'], = ax_u.plot(x_ref, ref_data.u[ref_k], 'r--', lw=2)
-    lines['sim_e'], = ax_e.plot(x_sim, sim_data.e[k], 'b-', lw=2)
-    lines['ref_e'], = ax_e.plot(x_ref, ref_data.e[ref_k], 'r--', lw=2)
+    lines['sim_p'], = ax_p.plot(x_sim, sim_data.p[k] / PLOT_P_SCALE, 'b-', lw=2)
+    lines['ref_p'], = ax_p.plot(x_ref, ref_data.p[ref_k] / PLOT_P_SCALE, 'r--', lw=2)
+    lines['sim_u'], = ax_u.plot(x_sim, sim_data.u[k] / PLOT_U_SCALE, 'b-', lw=2)
+    lines['ref_u'], = ax_u.plot(x_ref, ref_data.u[ref_k] / PLOT_U_SCALE, 'r--', lw=2)
+    lines['sim_e'], = ax_e.plot(x_sim, sim_data.e[k] / PLOT_E_SCALE, 'b-', lw=2)
+    lines['ref_e'], = ax_e.plot(x_ref, ref_data.e[ref_k] / PLOT_E_SCALE, 'r--', lw=2)
     
     ax_rho.set_ylabel(r"$\rho$ [g/cm³]")
     ax_rho.legend(loc="best")
@@ -692,11 +781,12 @@ def save_comparison_gif(
     ax_p.set_ylabel(r"$P$ [MBar]")
     ax_p.grid(True, alpha=0.3)
     ax_u.set_ylabel(r"$u$ [km/s]")
-    ax_u.set_xlabel(xlabel)
     ax_u.grid(True, alpha=0.3)
     ax_e.set_ylabel(r"$e$ [hJ/g]")
-    ax_e.set_xlabel(xlabel)
     ax_e.grid(True, alpha=0.3)
+    for ax in (ax_rho, ax_p, ax_u, ax_e):
+        ax.set_xlabel(xlabel)
+        ax.tick_params(axis="x", labelbottom=True)
     
     title_text = fig.suptitle("")
     
@@ -714,12 +804,12 @@ def save_comparison_gif(
         
         lines['sim_rho'].set_data(x_sim, sim_data.rho[k])
         lines['ref_rho'].set_data(x_ref, ref_data.rho[ref_k])
-        lines['sim_p'].set_data(x_sim, sim_data.p[k])
-        lines['ref_p'].set_data(x_ref, ref_data.p[ref_k])
-        lines['sim_u'].set_data(x_sim, sim_data.u[k])
-        lines['ref_u'].set_data(x_ref, ref_data.u[ref_k])
-        lines['sim_e'].set_data(x_sim, sim_data.e[k])
-        lines['ref_e'].set_data(x_ref, ref_data.e[ref_k])
+        lines['sim_p'].set_data(x_sim, sim_data.p[k] / PLOT_P_SCALE)
+        lines['ref_p'].set_data(x_ref, ref_data.p[ref_k] / PLOT_P_SCALE)
+        lines['sim_u'].set_data(x_sim, sim_data.u[k] / PLOT_U_SCALE)
+        lines['ref_u'].set_data(x_ref, ref_data.u[ref_k] / PLOT_U_SCALE)
+        lines['sim_e'].set_data(x_sim, sim_data.e[k] / PLOT_E_SCALE)
+        lines['ref_e'].set_data(x_ref, ref_data.e[ref_k] / PLOT_E_SCALE)
         
         sim_t = sim_data.times[k]
         ref_t = ref_data.times[ref_k]

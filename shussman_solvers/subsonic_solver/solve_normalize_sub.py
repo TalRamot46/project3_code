@@ -31,7 +31,7 @@ def solve_normalize(
     mu: float,
     r: float,
     tau: float,
-    iternum: int = 10,
+    iternum: int = 1000,
     xsi0: float = 1.0,
     P0: float = 4.0,
 ):
@@ -51,6 +51,7 @@ def solve_normalize(
 
     for i in range(2):
         for j in range(iternum):
+            print(f"Solving for j = {j}")
             y0 = np.array([0.002, 0.0, b[j], 0.0, 0.0], dtype=float)
             sol = integrate_ode(
                 lambda t, y: F(t, y, alpha, beta, lambda_, mu, r, tau),

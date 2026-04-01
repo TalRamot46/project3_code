@@ -51,8 +51,8 @@ def material_au() -> MaterialSub:
     mat_beta = 1.6
     mat_lambda = 0.2
     mat_mu = 0.14
-    mat_f = 3.4e13 / HEV_IN_KELVIN**mat_beta
-    mat_g = 1.0 / 7200 / HEV_IN_KELVIN**mat_alpha
+    mat_f = 3.4e13 / (HEV_IN_KELVIN**mat_beta)
+    mat_g = 1.0 / (7200 * (HEV_IN_KELVIN**mat_alpha))
     mat_sigma = STEFAN_BOLTZMANN_KELVIN
     mat_r = 0.25
     return MaterialSub(

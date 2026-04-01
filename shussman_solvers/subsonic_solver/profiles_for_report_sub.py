@@ -78,7 +78,8 @@ def compute_profiles_for_report(
         "T_heat": T_heat,
         "u_heat": u_heat,
         "rho_heat": rho_heat,
-        "Pw": Pw,
+        "P0_phys_Barye": P0_out, # Barye, comes from manager_sub
+        "Pw3": Pw[2],
     }
 
 def extract_m_final_expression(mat: MaterialSub, tau: float):
@@ -91,10 +92,12 @@ if __name__ == "__main__":
     from shussman_solvers.subsonic_solver.materials_sub import material_au
 
     mat = material_au()
-    tau = 0.0
-    data = compute_profiles_for_report(mat, tau=tau, times_ns=np.array([1.0]), T0_phys_HeV=1) # Corresponds to T0=10000HeV
+    tau = 0
+    T0_phys_HeV = 1
+    data = compute_profiles_for_report(mat, tau=tau, times_ns=np.array([0.01, 0.1]), T0_phys_HeV=T0_phys_HeV) # Corresponds to T0=10000HeV
     import matplotlib.pyplot as plt
-    plt.plot(data["m_heat"][0,:], data["T_heat"][0,:])
+    plt.plot(data["m_heat"][-1,:], data["P_heat"][-1,:])
+    print(data["Pw"])
     plt.show()
 
     # mat_be = material_au()

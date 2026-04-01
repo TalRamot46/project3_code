@@ -15,6 +15,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import numpy as np
+
 # Add project3_code to path for imports
 _this_file = Path(__file__).resolve()
 _project_root = _this_file.parent.parent.parent.parent  # project3_code
@@ -30,7 +32,7 @@ from project3_code.hydro_sim.verification.compare_shock_plots import (
     SimulationData,
     load_shussman_data,
     load_hydro_history,
-    plot_comparison_single_time,
+    plot_comparison_in_selected_times,
     plot_comparison_slider,
     plot_comparison_overlay,
     save_comparison_gif,
@@ -193,9 +195,9 @@ def _plot_results(
     elif config.mode == PlotMode.SINGLE:
         time = config.time_for_single if config.time_for_single else case.t_end
         savepath = str(png_path) if config.save_png else None
-        plot_comparison_single_time(
+        plot_comparison_in_selected_times(
             sim_data, ref_data,
-            time=time,
+            times=np.asarray([time], dtype=float),
             xaxis=config.xaxis,
             savepath=savepath,
             show=config.show_plot,
@@ -227,9 +229,9 @@ def _plot_results(
     # Additional saves if requested
     if config.save_png and config.mode != PlotMode.SINGLE:
         # Save a single-time plot as well
-        plot_comparison_single_time(
+        plot_comparison_in_selected_times(
             sim_data, ref_data,
-            time=case.t_end,
+            times=np.asarray([case.t_end], dtype=float),
             xaxis=config.xaxis,
             savepath=str(png_path),
             show=False,

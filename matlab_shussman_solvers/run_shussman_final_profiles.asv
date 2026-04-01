@@ -1,0 +1,44 @@
+function run_shussman_final_profiles(output_path)
+%RUN_SHUSSMAN_FINAL_PROFILES Run subsonic then shock report scripts and save the pressure figure.
+%
+%   run_shussman_final_profiles()
+%   run_shussman_final_profiles('C:\path\to\out.png')
+%
+% Order matches the manual workflow:
+%   1. sub/profiles_for_report_sub.m  (must run from sub/ so sub Au + manager resolve)
+%   2. shock/profiles_for_report_shock.m (must run from shock/)
+%   3. shock/my_final_profiles.m (figure: combined vs heat vs shock pressure vs m)
+%
+% Requires MATLAB with -batch-capable release (R2019a+) for non-interactive use.
+
+if nargin < 1 || isempty(output_path)
+    output_path = fullfile(fileparts(mfilename('fullpath')), 'shussman_pressure_profiles.png');
+end
+
+root = fileparts(mfilename('fullpath'));
+subdir = fullfile(root, 'sub');
+shockdir = fullfile(root, 'shock');
+
+if ~isfolder(subdir) || ~isfolder(shockdir)
+    error('run_shussman_final_profiles:MissingFolder', ...
+        'Expected sub/ and shock/ under %s', root);
+end
+
+% Use run(fullfile(...)) so each script's directory is on the path for Au.m / manager.m
+% (reliable in -batch; cd inside a function is not always enough for script resolution).
+print("running sub...")
+run(fullfile(subdir, 'profiles_for_report_sub.m'));
+print("running shock...")
+
+run(fullfile(shockdir, 'profiles_for_report_shock.m'));
+run(fullfile(shockdir, 'my_final_profiles.m'));
+
+f = gcf;
+if verLessThan('matlab', '9.8') % R2020a
+    print(f, output_path, '-dpng', '-r150');
+else
+    exportgraphics(f, output_path, 'Resolution', 150);
+end
+
+fprintf('Saved figure to: %s\n', output_path);
+end

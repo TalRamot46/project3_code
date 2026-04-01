@@ -128,7 +128,7 @@ def calculate_abcd(
         F = chi * c * sigma[1:-1] / (1 + A[1:-1])
         a = -coeff * left_flux_coeff
         c_coeff = -coeff * right_flux_coeff
-        b = coeff * (left_flux_coeff - right_flux_coeff) + 1 / dt + F
+        b = coeff * (left_flux_coeff + right_flux_coeff) + 1 / dt + F
     else:
         raise ValueError(
             f"Invalid radiation coefficient scheme '{coeff_scheme}'. "

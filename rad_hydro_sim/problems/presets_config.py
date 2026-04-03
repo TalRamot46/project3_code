@@ -272,7 +272,7 @@ PRESET_TEST_CASES = {
 
         initial_condition="temperature, density",
         scenario="full_rad_hydro",
-        title="Fig 8 comparison (τ=0, Shussman verification)",
+        title=r"Fig 8 comparison ($T_0 = 1$ HeV, $\tau = 0$, $Au$, early time)",
         geom=planar(),
         times_for_png=np.array([0.05e-9, 0.1e-9, 0.15e-9], dtype=float),
     ),
@@ -311,7 +311,7 @@ PRESET_TEST_CASES = {
 
         initial_condition="temperature, density",
         scenario="full_rad_hydro",
-        title="Fig 9 comparison (τ=0.123, Shussman verification)",
+        title=r"Fig 9 comparison ($T_0 = 1$ HeV, $\tau = 0.123$, $Au$, early times)",
         geom=planar(),
         times_for_png=np.array([0.05e-9, 0.1e-9, 0.15e-9], dtype=float),
     ),
@@ -335,7 +335,7 @@ PRESET_TEST_CASES = {
         tau = 0.17,
 
         # initial conditions
-        rho0 = 19.32,
+        rho0 = 0.1,
         p0 = None,
         u0 = None,
         T_initial_Kelvin = 300, # 300 K in Hev
@@ -350,7 +350,7 @@ PRESET_TEST_CASES = {
 
         initial_condition="temperature, density",
         scenario="full_rad_hydro",
-        title="Fig 10 comparison (τ=0.17 (tau_s = 0) Shussman verification)",
+        title=r"Fig 10 comparison ($T_0 = 1$ HeV, $\tau = 0.17$, $Au$, early times)",
         geom=planar(),
         times_for_png=np.array([0.05e-9, 0.1e-9, 0.15e-9], dtype=float),
     ),

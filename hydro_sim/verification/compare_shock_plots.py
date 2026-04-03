@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from project3_code.rad_hydro_sim.verification.hydro_data import RadHydroData
 from project3_code.rad_hydro_sim.plotting import RadHydroHistory
 @dataclass
-class SimulationData:
+class HydroSimData:
     """Container for simulation data at multiple times."""
     times: np.ndarray      # (nt,)
     m: list                # list of (N,) arrays - mass coordinate
@@ -34,9 +34,9 @@ class SimulationData:
 
 
 # Type alias: anything with SimulationData layout (RadHydroData is duck-typed compatible)
-HydroDataLike = Union[SimulationData, RadHydroData]
+HydroDataLike = Union[HydroSimData, RadHydroData]
 
-def load_rad_hydro_history(history: RadHydroHistory, label: str = "Rad-Hydro (full)") -> RadHydroData:
+def load_rad_hydro_history(history: RadHydroHistory, label: str) -> RadHydroData:
     """Convert hydro_sim HydroHistory to SimulationData. Re-export from shock comparison."""
     times = np.asarray(history.t, dtype=float)
     nt = len(times)
@@ -104,7 +104,7 @@ def _as_list(arr):
     raise ValueError(f"Unsupported array shape: {arr.shape}")
 
 
-def load_shussman_data(npz_path: str | Path) -> SimulationData:
+def load_shussman_data(npz_path: str | Path) -> HydroSimData:
     """Load data from shussman_shock_solver NPZ file.
     Supports both formats: 'times_sec' (seconds) or 'times' (nanoseconds).
     """
@@ -137,7 +137,7 @@ def load_shussman_data(npz_path: str | Path) -> SimulationData:
         gamma = data.get("gamma", 5/3)
         e = [p_i / (rho_i * (gamma - 1) + 1e-30) for p_i, rho_i in zip(p, rho)]
     
-    return SimulationData(
+    return HydroSimData(
         times=times_sec,
         m=m, x=x, rho=rho, p=p, u=u, e=e,
         label="Self-Similar (Shussman)",
@@ -146,7 +146,7 @@ def load_shussman_data(npz_path: str | Path) -> SimulationData:
     )
 
 
-def load_hydro_history(history) -> SimulationData:
+def load_hydro_history(history) -> HydroSimData:
     """Convert hydro_sim SimulationHistory to SimulationData format."""
     times = history.t
     nt = len(times)
@@ -171,7 +171,7 @@ def load_hydro_history(history) -> SimulationData:
         u_list.append(history.u[k])
         e_list.append(history.e[k])
     
-    return SimulationData(
+    return HydroSimData(
         times=times,
         m=m_list, x=x_list, rho=rho_list, p=p_list, u=u_list, e=e_list,
         label="Hydro Simulation",
@@ -303,7 +303,7 @@ def plot_comparison_in_selected_times(
         er = ref_data.e[ref_idx] / PLOT_E_SCALE
 
         ax_rho.plot(x_sim, sim_data.rho[sim_idx], color=color, linestyle="-", lw=lw_sim, alpha=0.92)
-        ax_rho.plot(x_ref, ref_data.rho[ref_idx], color=color, linestyle="--", lw=lw_ref, alpha=0.92)
+        ax_rho.plot(x_ref, ref_data.rho[ref_idx], color=color, linestyle="--", lw=lw_ref, label=ref_data.label, alpha=0.92)
         if shock_data is not None and shock_idx is not None and x_shock is not None:
             ax_rho.plot(
                 x_shock,
@@ -407,7 +407,6 @@ def plot_comparison_in_selected_times(
         sp = Path(savepath)
         sp.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(str(sp), dpi=200, bbox_inches="tight", facecolor="white", edgecolor="none")
-
     if show:
         plt.show()
     else:

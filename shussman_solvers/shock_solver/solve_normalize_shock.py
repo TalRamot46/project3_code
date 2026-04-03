@@ -15,7 +15,8 @@ def solve_normalize3(tau: float, r: float, iternum: int = 20, xi_f0: float = 4.0
     x_out = None
     best_i = 0
 
-    for i in range(iternum):
+    from tqdm import tqdm, trange
+    for i in trange(iternum, desc="Solving for xi_f"):
         xi_f = a[i]
 
         # Hugoniot initial condition at the shock front (xi = xi_f)

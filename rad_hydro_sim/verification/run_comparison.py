@@ -40,7 +40,7 @@ from project3_code.rad_hydro_sim.verification.verification_config import (
     make_verification_output_paths,
 )
 from project3_code.rad_hydro_sim.verification.radiation_data import (
-    RadiationData,
+    RadiationSimData,
     rad_hydro_history_to_radiation_data,
     diffusion_output_to_radiation_data,
     supersonic_output_to_radiation_data,
@@ -86,8 +86,8 @@ def _verification_suptitle(case: RadHydroCase, subtitle: str) -> str:
 
 def run_supersonic_solver_reference(
     case,
-    n_times: int = 30,
-) -> RadiationData | None:
+    n_times: int = 30
+    ) -> RadiationSimData | None:
     """
     Run the supersonic (radiation self-similar) solver with parameters matching the RadHydroCase.
 
@@ -146,7 +146,7 @@ def run_radiation_only_comparison(
     show_plot: bool = True,
     save_png: bool = True,
     save_gif: bool = True,
-) -> None:
+    ) -> None:
     """Run rad_hydro (radiation_only preset), 1D Diffusion, and Supersonic solver; compare T, E_rad."""
     from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
     from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
@@ -211,7 +211,7 @@ def run_radiation_only_comparison(
 
     if not skip_rad_hydro:
         loaded = np.load(str(sim_npz), allow_pickle=True)
-        sim_data = RadiationData(
+        sim_data = RadiationSimData(
             times=np.asarray(loaded["times"], dtype=float),
             x=_to_list_of_arrays(loaded["x"]),
             T=_to_list_of_arrays(loaded["T"]),
@@ -223,7 +223,7 @@ def run_radiation_only_comparison(
         print(f"Loaded sim_data from {sim_npz}")
     if not skip_diffusion:
         loaded = np.load(str(ref_npz), allow_pickle=True)
-        ref_data = RadiationData(
+        ref_data = RadiationSimData(
             times=np.asarray(loaded["times"], dtype=float),
             x=_to_list_of_arrays(loaded["x"]),
             T=_to_list_of_arrays(loaded["T"]),
@@ -333,7 +333,7 @@ def _rad_hydro_case_to_shock_material(case: RadHydroCase) -> "Material":
 def run_shock_solver_hydro_reference(
     case_rh,
     times_sec: np.ndarray,
-) -> "SimulationData | None":
+    ) -> "SimulationData | None":
     """
     Run shock solver with P(t) = P0 * t^tau boundary conditions matching the RadHydroCase.
 
@@ -344,7 +344,7 @@ def run_shock_solver_hydro_reference(
         from project3_code.shussman_solvers.shock_solver.profiles_for_report_shock import (
             compute_shock_profiles,
         )
-        from project3_code.hydro_sim.verification.compare_shock_plots import SimulationData
+        from project3_code.hydro_sim.verification.compare_shock_plots import HydroSimData
     except ImportError as e:
         print(f"Could not import shock solver: {e}, skipping.")
         return None
@@ -359,7 +359,7 @@ def run_shock_solver_hydro_reference(
         mat=mat,
         P0_phys_Barye=P0_Barye,
         tau=tau,
-        Pw=None,
+        Pw3=None,
         times_ns=times_ns,
         patching_method=False,
         save_npz=None,
@@ -368,7 +368,7 @@ def run_shock_solver_hydro_reference(
     times_out = np.asarray(data["times_sec"], dtype=float)
     if times_out.ndim > 1:
         times_out = times_out.ravel()
-    return SimulationData(
+    return HydroSimData(
         times=times_out,
         m=list(data["m_shock"]),
         x=list(data["x_shock"]),
@@ -389,7 +389,7 @@ def run_hydro_only_comparison(
     show_plot: bool = True,
     save_png: bool = True,
     save_gif: bool = True,
-) -> None:
+    ) -> None:
     """Run rad_hydro and hydro_sim and shock solver with matching P0*t^tau; compare rho, p, u, e."""
     from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
     from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
@@ -571,8 +571,7 @@ def run_full_rad_hydro_comparison(
     preset_name = get_preset_for_mode(VerificationMode.FULL_RAD_HYDRO)
     case, config = get_preset(preset_name)
     case_title = case.title or preset_name
-    output_prefix = get_output_prefix_for_mode(VerificationMode.FULL_RAD_HYDRO)
-    png_path, gif_path = make_verification_output_paths(f"{output_prefix}_{case_title}")
+    png_path, gif_path = make_verification_output_paths(f"{case_title}")
 
     sim_data = None
     if not skip_rad_hydro:
@@ -581,22 +580,22 @@ def run_full_rad_hydro_comparison(
             rad_hydro_case=case,
             simulation_config=config,
         )
-        sim_data = load_rad_hydro_history(history_rh)
+        sim_data = load_rad_hydro_history(history_rh, label="Rad-Hydro Simulation")
         print(f"Stored {len(sim_data.times)} time steps.")
 
         # save the sim_data to rad_hydro_sim/data/
-        sim_npz = get_rad_hydro_npz_path(case_title, prefix="sim_data")
-        np.savez(
-            str(sim_npz),
-            times=sim_data.times, m=sim_data.m, x=sim_data.x,
-            rho=sim_data.rho, p=sim_data.p, u=sim_data.u, e=sim_data.e,
-            T=sim_data.T, E_rad=sim_data.E_rad,
-            T_material=sim_data.T_material if sim_data.T_material else [],
-        )
-        print(f"Saved sim_data to {sim_npz}")
+        # sim_npz = get_rad_hydro_npz_path(case_title, prefix="sim_data")
+        # np.savez(
+        #     str(sim_npz),
+        #     times=sim_data.times, m=sim_data.m, x=sim_data.x,
+        #     rho=sim_data.rho, p=sim_data.p, u=sim_data.u, e=sim_data.e,
+        #     T=sim_data.T, E_rad=sim_data.E_rad,
+        #     T_material=sim_data.T_material if sim_data.T_material else [],
+        # )
+        # print(f"Saved sim_data to {sim_npz}")
 
         # load sim_data back from the file (round-trip for debugging)
-        loaded = np.load(str(sim_npz), allow_pickle=True)
+        # loaded = np.load(str(sim_npz), allow_pickle=True)
         def _to_list_of_arrays(arr):
             a = np.asarray(arr)
             if a.dtype == object:
@@ -605,23 +604,23 @@ def run_full_rad_hydro_comparison(
                 return [a[i, :].astype(float, copy=False) for i in range(a.shape[0])]
             return [a.astype(float, copy=False)]
 
-        T_raw = _to_list_of_arrays(loaded["T"]) if "T" in loaded else []
+        T_raw = _to_list_of_arrays(sim_data.T) if sim_data.T else []
         T_hev = [t_arr / KELVIN_PER_HEV for t_arr in T_raw]
-        Tm_raw = _to_list_of_arrays(loaded["T_material"]) if "T_material" in loaded else []
+        Tm_raw = _to_list_of_arrays(sim_data.T_material) if sim_data.T_material else []
         Tm_hev = [t_arr / KELVIN_PER_HEV for t_arr in Tm_raw]
         sim_data = RadHydroData(
-            times=np.asarray(loaded["times"], dtype=float),
-            m=_to_list_of_arrays(loaded["m"]),
-            x=_to_list_of_arrays(loaded["x"]),
-            rho=_to_list_of_arrays(loaded["rho"]),
-            p=_to_list_of_arrays(loaded["p"]),
-            u=_to_list_of_arrays(loaded["u"]),
-            e=_to_list_of_arrays(loaded["e"]),
+            times=np.asarray(sim_data.times, dtype=float),
+            m=_to_list_of_arrays(sim_data.m),
+            x=_to_list_of_arrays(sim_data.x),
+            rho=_to_list_of_arrays(sim_data.rho),
+            p=_to_list_of_arrays(sim_data.p),
+            u=_to_list_of_arrays(sim_data.u),
+            e=_to_list_of_arrays(sim_data.e),
             T=T_hev,
-            E_rad=_to_list_of_arrays(loaded["E_rad"]) if "E_rad" in loaded else [],
+            E_rad=_to_list_of_arrays(sim_data.E_rad) if sim_data.E_rad else [],
             T_material=Tm_hev,
-            label="Rad-Hydro (full)",
-            color="blue",
+            label="Rad-Hydro Simulation",
+            color="black",
             linestyle="-",
         )
 
@@ -647,7 +646,7 @@ def run_full_rad_hydro_comparison(
         ref_data = sim_data
         print(f"Copied ref_data to sim_data")
 
-    sub_full = "Full rad_hydro vs Shussman (subsonic + shock)"
+    sub_full = "Full rad-hydro simulation vs Shussman semi-analytic solver (patching method)"
     title_fig = _verification_suptitle(case, sub_full)
     print("\nPlotting full rad_hydro comparison (rho, P, u, e vs x)...")
     if show_plot:
@@ -669,7 +668,6 @@ def run_full_rad_hydro_comparison(
             show=False,
             title=title_fig,
         )
-        print(f"Saved PNG: {png_path}")
     if save_gif:
         # Also save an animated GIF of the Rad-Hydro history with Shussman overlay for verification
         save_history_gif(

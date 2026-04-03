@@ -11,7 +11,7 @@ import numpy as np
 
 
 @dataclass
-class RadiationData:
+class RadiationSimData:
     """Temperature and radiation energy density at multiple times."""
     times: np.ndarray           # (n_times,) [s]
     x: List[np.ndarray]        # length n_times, each (N,) [cm]
@@ -22,14 +22,14 @@ class RadiationData:
     linestyle: str = "-"
 
 
-def rad_hydro_history_to_radiation_data(history) -> RadiationData:
-    """Convert RadHydroHistory to RadiationData (same grid at each time)."""
+def rad_hydro_history_to_radiation_data(history) -> RadiationSimData:
+    """Convert RadHydroHistory to RadiationSimData (same grid at each time)."""
     times = np.asarray(history.t, dtype=float)
     n = len(times)
     x_list = [history.x[k].copy() for k in range(n)]
     T_list = [history.T[k].copy() for k in range(n)]
     E_rad_list = [history.E_rad[k].copy() for k in range(n)]
-    return RadiationData(
+    return RadiationSimData(
         times=times,
         x=x_list,
         T=T_list,
@@ -45,11 +45,11 @@ def diffusion_output_to_radiation_data(
     x_grid: np.ndarray,
     T_list: List[np.ndarray],
     E_rad_list: List[np.ndarray],
-) -> RadiationData:
-    """Wrap 1D Diffusion output into RadiationData (fixed grid, same x for all times)."""
+) -> RadiationSimData:
+    """Wrap 1D Diffusion output into RadiationSimData (fixed grid, same x for all times)."""
     # Diffusion uses fixed grid; repeat for each time for consistent list-of-arrays format
     x_list = [x_grid.copy() for _ in range(len(times_sec))]
-    return RadiationData(
+    return RadiationSimData(
         times=np.asarray(times_sec, dtype=float),
         x=x_list,
         T=T_list,
@@ -66,9 +66,9 @@ def supersonic_output_to_radiation_data(
     label: str = "Supersonic solver (reference)",
     color: str = "green",
     linestyle: str = ":",
-) -> RadiationData:
+) -> RadiationSimData:
     """
-    Convert supersonic solver output (compute_profiles_for_report) to RadiationData.
+    Convert supersonic solver output (compute_profiles_for_report) to RadiationSimData.
 
     The solver uses dimensionless time in (0, 1]; we map to physical time as
     times_sec = profiles_dict["times"] * t_end_sec.
@@ -82,7 +82,7 @@ def supersonic_output_to_radiation_data(
     T_list = [T_heat_Kelvin[i, :].copy() for i in range(T_heat_Kelvin.shape[0])]
     E_rad_list = [a_Kelvin*T_heat_Kelvin[i,:].copy()**4 for i in range(T_heat_Kelvin.shape[0])]
     x_list = [profiles_dict["x_heat"][i, :].copy() for i in range(T_heat_Kelvin.shape[0])]
-    return RadiationData(
+    return RadiationSimData(
         times=np.asarray(times_sec, dtype=float),
         x=x_list,
         T=T_list,

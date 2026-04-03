@@ -14,10 +14,10 @@ from matplotlib.ticker import MaxNLocator, ScalarFormatter
 from project3_code.rad_hydro_sim.plotting import mpl_style  # noqa: F401 - apply project style
 from matplotlib.widgets import Slider
 
-from project3_code.rad_hydro_sim.verification.radiation_data import RadiationData
+from project3_code.rad_hydro_sim.verification.radiation_data import RadiationSimData
 
 
-def _interpolate_to_time(data: RadiationData, target_time: float) -> int:
+def _interpolate_to_time(data: RadiationSimData, target_time: float) -> int:
     """Index of closest time."""
     return int(np.argmin(np.abs(data.times - target_time)))
 
@@ -32,13 +32,13 @@ def _format_time_legend(t_sec: float) -> str:
 
 
 def plot_radiation_comparison_single_time(
-    sim_data: RadiationData,
-    ref_data: RadiationData,
+    sim_data: RadiationSimData,
+    ref_data: RadiationSimData,
     time: float,
     savepath: str | Path | None = None,
     show: bool = True,
     title: str | None = None,
-    extra_ref_data: Optional[List[RadiationData]] = None,
+    extra_ref_data: Optional[List[RadiationSimData]] = None,
 ):
     """Plot T and E_rad vs x at a single time (2 panels). Optionally add extra reference curves."""
     sim_k = _interpolate_to_time(sim_data, time)
@@ -136,9 +136,9 @@ def plot_radiation_comparison_single_time(
 
 
 def plot_radiation_comparison_slider(
-    sim_data: RadiationData,
-    ref_data: RadiationData,
-    super_data: Optional[RadiationData] = None,
+    sim_data: RadiationSimData,
+    ref_data: RadiationSimData,
+    super_data: Optional[RadiationSimData] = None,
     show: bool = True,
     title: str | None = None,
 ):

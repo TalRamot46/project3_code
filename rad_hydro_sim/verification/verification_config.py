@@ -88,7 +88,8 @@ def make_verification_output_paths(case_name: str) -> Tuple[Path, Path]:
     gif_dir = base / "gif"
     png_dir.mkdir(parents=True, exist_ok=True)
     gif_dir.mkdir(parents=True, exist_ok=True)
-    safe = case_name.replace(" ", "_").replace("=", "").replace("(", "").replace(")", "")
+    safe = case_name.replace(" ", "_").replace("=", "").replace("(", "").replace(")", "") \
+            .replace("\\", "").replace("$","")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"{safe}_{timestamp}"
     return png_dir / f"{filename}.png", gif_dir / f"{filename}.gif"

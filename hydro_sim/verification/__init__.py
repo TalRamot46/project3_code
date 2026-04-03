@@ -25,7 +25,7 @@ from .presets import (
 
 # Plotting utilities
 from .compare_shock_plots import (
-    SimulationData,
+    HydroSimData,
     load_shussman_data,
     load_hydro_history,
     plot_comparison_in_selected_times,
@@ -51,7 +51,7 @@ __all__ = [
     "COMPARISON_CASES",
     "COMPARISON_CONFIGS",
     # Plotting
-    "SimulationData",
+    "HydroSimData",
     "load_shussman_data",
     "load_hydro_history",
     "plot_comparison_in_selected_times",

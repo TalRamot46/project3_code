@@ -31,9 +31,9 @@ def solve_normalize(
     mu: float,
     r: float,
     tau: float,
-    iternum: int = 1000,
-    xsi0: float = 1.0,
-    P0: float = 4.0,
+    iternum: int,
+    xsi0: float,
+    P0: float,
 ):
     """
     Normalize using binary shooting: adjust P(1) so integration completes; adjust xsi from calibrator.
@@ -49,9 +49,11 @@ def solve_normalize(
     x_out = None
     sol = None
 
+    # use tqdm to show progress
+    from tqdm import tqdm, trange
     for i in range(2):
-        for j in range(iternum):
-            print(f"Solving for j = {j}")
+        print(f"Solving for i = {i}/1")
+        for j in tqdm(range(iternum), desc=f"Solving for i = {i}"):
             y0 = np.array([0.002, 0.0, b[j], 0.0, 0.0], dtype=float)
             sol = integrate_ode(
                 lambda t, y: F(t, y, alpha, beta, lambda_, mu, r, tau),

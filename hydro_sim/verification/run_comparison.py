@@ -29,7 +29,7 @@ from project3_code.hydro_sim.verification.presets import get_preset, list_preset
 
 # Plotting
 from project3_code.hydro_sim.verification.compare_shock_plots import (
-    SimulationData,
+    HydroSimData,
     load_shussman_data,
     load_hydro_history,
     plot_comparison_in_selected_times,
@@ -43,7 +43,7 @@ from project3_code.hydro_sim.verification.compare_shock_plots import (
 # Simulation Runners
 # ============================================================================
 
-def run_hydro_simulation(case: ComparisonCase, config: ComparisonConfig) -> SimulationData:
+def run_hydro_simulation(case: ComparisonCase, config: ComparisonConfig) -> HydroSimData:
     """
     Run the hydro_sim simulation and return data in comparison format.
     
@@ -78,7 +78,7 @@ def run_hydro_simulation(case: ComparisonCase, config: ComparisonConfig) -> Simu
     return load_hydro_history(history)
 
 
-def run_shussman_solver(case: ComparisonCase, save_path: str | None = None) -> SimulationData:
+def run_shussman_solver(case: ComparisonCase, save_path: str | None = None) -> HydroSimData:
     """
     Run the shussman_shock_solver and return data in comparison format.
     
@@ -174,8 +174,8 @@ def run_comparison(case: ComparisonCase, config: ComparisonConfig) -> None:
 
 
 def _plot_results(
-    sim_data: SimulationData,
-    ref_data: SimulationData,
+    sim_data: HydroSimData,
+    ref_data: HydroSimData,
     case: ComparisonCase,
     config: ComparisonConfig,
     png_path: Path,

@@ -15,7 +15,7 @@ from project3_code.rad_hydro_sim.verification.verification_config import (
     VerificationMode,
     get_preset_for_mode,
 )
-from project3_code.rad_hydro_sim.verification.radiation_data import RadiationData
+from project3_code.rad_hydro_sim.verification.radiation_data import RadiationSimData
 
 
 # Set to True when debugging to display comparison plots (use default Debug Tests config)
@@ -38,8 +38,8 @@ def _index_closest_time(
 
 
 def _interpolate_to_common_grid(
-    data_a: RadiationData,
-    data_b: RadiationData,
+    data_a: RadiationSimData,
+    data_b: RadiationSimData,
     fraction: float,
     n_points: int = 60,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -145,7 +145,7 @@ def _run_radiation_data(
     skip_supersonic: bool = False,
     N: int = 100,
     n_times_diffusion: int = 10,
-) -> Tuple[RadiationData | None, RadiationData | None, RadiationData | None]:
+) -> Tuple[RadiationSimData | None, RadiationSimData | None, RadiationSimData | None]:
     """Run radiation-only comparison and return (sim_data, ref_data, super_data)."""
     from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
     from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro

@@ -201,7 +201,7 @@ def build_piecewise_reference(
         e_list.append(e_k)
         T_list.append(T_k)
 
-    return RadHydroData(times=times, m=m_list, x=x_list, rho=rho_list, p=p_list, u=u_list, e=e_list, T=T_list, E_rad=E_list, label="Shussman (piecewise)", color="green", linestyle="-.")
+    return RadHydroData(times=times, m=m_list, x=x_list, rho=rho_list, p=p_list, u=u_list, e=e_list, T=T_list, E_rad=E_list, label="Model (Shussman & Heizler, 2015)", color="green", linestyle="-.")
 
 def run_shussman_piecewise_reference(
     case,

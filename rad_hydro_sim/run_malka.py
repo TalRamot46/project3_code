@@ -53,13 +53,13 @@ from project3_code.rad_hydro_sim.simulation.radiation_step import KELVIN_PER_HEV
 from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
 
 # Select sweep when running this file as a script: "rho0" or "t0"
-INTERMEDIATE_SWEEP: Literal["rho0", "t0"] = "t0"
+INTERMEDIATE_SWEEP: Literal["rho0", "t0"] = "rho0"
 
 # Areal mass [g/cm^2] fixed to match preset (15 mg/cm^2)
-AREAL_MASS_G_PER_CM2 = 15e-3
+AREAL_MASS_G_PER_CM2 = 3e-3
 
 # Malka–Heizler reference density [g/cm^3]
-RHO0_MALKA_G_CC = 0.01
+RHO0_MALKA_G_CC = 19.32
 
 # Log grid rho0 [g/cm^3]
 RHO0_MIN = 0.1
@@ -67,12 +67,9 @@ RHO0_MAX = 19.32
 NUM_RHO0_POINTS = 16
 
 # Log grid drive temperature [eV] (code uses HeV = 100 eV per radiation_step)
-T0_EV_MIN = 5.0
-T0_EV_MAX = 200.0
-NUM_T0_POINTS = 16
-
-# Density rise vs rho0 to flag shock cell when scanning from the cold (right) boundary
-SHOCK_DENSITY_THRESHOLD = 1.1
+T0_EV_MIN = 0.001
+T0_EV_MAX = 100.0
+NUM_T0_POINTS = 4
 
 # Parallel simulations (i7-class: cap at 10 physical cores; never exceed os.cpu_count())
 INTERMEDIATE_MAX_WORKERS = 10
@@ -178,7 +175,7 @@ def find_shock_front(
     # start running from the right and find the first time of drho_dm below threshold=-0.1
     flag = False
     for i in range(len(drho_dm) - 1, -1, -1):
-        if not flag and drho_dm[i] < -1:
+        if not flag and drho_dm[i] < -10:
             flag = True
         elif flag and drho_dm[i] > 0:
             return i, rho[i]
@@ -198,7 +195,7 @@ def _run_single_rho0_job(
     case_i = replace(
         base_case,
         rho0=rho0_new,
-        x_max=AREAL_MASS_G_PER_CM2 / rho0_new,
+        x_max=AREAL_MASS_G_PER_CM2 * rho0_new / RHO0_MALKA_G_CC,
     )
     x_cells, state, _, _ = simulate_rad_hydro(
         case_i,
@@ -208,14 +205,18 @@ def _run_single_rho0_job(
     )
     m_coordinate = np.cumsum(state.m_cells)
     rho = np.asarray(state.rho, dtype=float)
-    shock_idx, shock_density = find_shock_front(rho, m_coordinate)
+    # decrease noise near shock front by using window rolling mean
+    import pandas as pd
+    rho_rolling_mean = np.array(pd.Series(rho).rolling(window=5, center=True).mean().values)
+    shock_idx, shock_density = find_shock_front(rho_rolling_mean, m_coordinate)
     return (
-        rho,
+        rho_rolling_mean,
         m_coordinate,
         np.asarray(x_cells, dtype=float),
         int(shock_idx),
         float(shock_density),
     )
+
 
 
 def _run_single_t0_job(
@@ -229,7 +230,7 @@ def _run_single_t0_job(
     base_case, base_config = get_preset(PRESET_MALKA_HEIZLER)
     config_batch = replace(base_config, show_slider=False, show_plot=False)
     rho0_fixed = float(RHO0_MALKA_G_CC)
-    x_max_fixed = AREAL_MASS_G_PER_CM2 / rho0_fixed * 2
+    x_max_fixed = AREAL_MASS_G_PER_CM2 * T_eV / T0_EV_MAX
     T0_K = t0_eV_to_kelvin(T_eV)
     case_i = replace(
         base_case,
@@ -245,9 +246,12 @@ def _run_single_t0_job(
     )
     m_coordinate = np.cumsum(state.m_cells)
     rho = np.asarray(state.rho, dtype=float)
-    shock_idx, shock_density = find_shock_front(rho, m_coordinate)
+    # decrease noise near shock front by using window rolling mean
+    import pandas as pd
+    rho_rolling_mean = np.array(pd.Series(rho).rolling(window=5, center=True).mean().values)
+    shock_idx, shock_density = find_shock_front(rho_rolling_mean, m_coordinate)
     return (
-        rho,
+        rho_rolling_mean,
         m_coordinate,
         np.asarray(x_cells, dtype=float),
         int(shock_idx),
@@ -271,13 +275,15 @@ def _plot_density_profiles_grid(
     fig, axes = plt.subplots(
         nrows, ncols, figsize=(3.4 * ncols, 2.8 * nrows), squeeze=False, sharey=False
     )
+    # create a color map for the profiles
+    color_map = plt.get_cmap("viridis")
     for i in range(k):
         r, c = divmod(i, ncols)
         ax = axes[r][c]
         m = m_profiles[i]
         m = m * 1e3 # convert to mg/cm^2
         rho = rho_profiles[i]
-        ax.plot(m, rho, color=f"C{i % 10}", lw=1.2)
+        ax.plot(m, rho, color=color_map(i / k), lw=1.2)
         ax.axhline(
             float(rho0_reference[i]),
             color="0.45",
@@ -300,6 +306,7 @@ def _plot_density_profiles_grid(
                 color="crimson",
                 verticalalignment="bottom",
             )
+        # also plot the gradient of rho vs m
         ax.set_title(row_labels[i], fontsize=9)
         ax.set_xlabel(r"$m$ [mg/cm$^2$]")
         ax.set_ylabel(r"$\rho$ [g/cm$^3$]")
@@ -314,8 +321,14 @@ def _plot_density_profiles_grid(
     plt.close(fig)
 
 
-def main() -> None:
-    _, base_config = get_preset(PRESET_MALKA_HEIZLER)
+# decrease noise near shock front by using r-lowess
+def r_lowess(x, y, frac=0.3):
+    from scipy.stats import lowess
+    return lowess(y, x, frac=frac)
+
+def main_rho0_sweep() -> None:
+    case_i, base_config = get_preset(PRESET_MALKA_HEIZLER)
+    t_end = case_i.t_sec_end
     n_cells = int(base_config.N)
     workers = _parallel_worker_count()
 
@@ -365,7 +378,6 @@ def main() -> None:
         density_m_g_cm2=m_profiles,
         density_x_cm=x_profiles,
         shock_cell_index=shock_fronts,
-        threshold=SHOCK_DENSITY_THRESHOLD,
         areal_mass_g_cm2=AREAL_MASS_G_PER_CM2,
     )
     print(f"Saved {npz_path}")
@@ -387,7 +399,7 @@ def main() -> None:
     ax.set_ylabel(r"$\rho_{\mathrm{max}} / \rho_0$")
     ax.set_title(
         "Shock density ratio vs initial density "
-        f"(threshold={SHOCK_DENSITY_THRESHOLD}, $t_\\mathrm{{end}}$=1 ns)"
+        f"$t_\\mathrm{{end}}$={t_end:.2e} ns)"
     )
     ax.grid(True, which="both", alpha=0.35)
     fig.tight_layout()
@@ -405,7 +417,7 @@ def main() -> None:
         rho_profiles,
         shock_fronts,
         row_lbl,
-        rf"Density profiles ($\rho_0$ sweep, $t_{{\mathrm{{end}}}}$ = 1 ns, threshold = {SHOCK_DENSITY_THRESHOLD})",
+        rf"Density profiles ($\rho_0$ sweep, $t_{{\mathrm{{end}}}}$ = {t_end:.2e} ns)",
         prof_png,
         rho0_reference=rho0_grid,
     )
@@ -414,7 +426,8 @@ def main() -> None:
 
 def main_T0_sweep() -> None:
     """Fixed rho0 = 19.32 g/cm^3; sweep T0_Kelvin via log-spaced T0 in eV (50–200 eV)."""
-    _, base_config = get_preset(PRESET_MALKA_HEIZLER)
+    case_i, base_config = get_preset(PRESET_MALKA_HEIZLER)
+    t_end = case_i.t_sec_end
     rho0_fixed = RHO0_MALKA_G_CC
     workers = _parallel_worker_count()
 
@@ -467,7 +480,6 @@ def main_T0_sweep() -> None:
         density_m_g_cm2=m_profiles,
         density_x_cm=x_profiles,
         shock_cell_index=shock_fronts,
-        threshold=SHOCK_DENSITY_THRESHOLD,
         areal_mass_g_cm2=AREAL_MASS_G_PER_CM2,
     )
     print(f"Saved {npz_path}")
@@ -490,7 +502,7 @@ def main_T0_sweep() -> None:
     ax.set_ylabel(r"$\rho_{\mathrm{max}} / \rho_0$")
     ax.set_title(
         rf"Shock density ratio vs $T_0$ ($\rho_0$ = {rho0_fixed} g/cm$^3$, "
-        f"threshold={SHOCK_DENSITY_THRESHOLD}, $t_\\mathrm{{end}}$=1 ns)"
+        f"$t_\\mathrm{{end}}$={t_end:.2e} ns)"
     )
     ax.grid(True, which="both", alpha=0.35)
     fig.tight_layout()
@@ -509,7 +521,7 @@ def main_T0_sweep() -> None:
         rho_profiles,
         shock_fronts,
         row_lbl,
-        rf"Density profiles ($T_0$ sweep, $\rho_0$ = {rho0_fixed} g/cm$^3$, $t_{{\mathrm{{end}}}}$ = 1 ns, threshold = {SHOCK_DENSITY_THRESHOLD})",
+        rf"Density profiles ($T_0$ sweep, $\rho_0$ = {rho0_fixed} g/cm$^3$, $t_{{\mathrm{{end}}}}$ = {t_end:.2e} ns)",
         prof_png,
         rho0_reference=rho0_ref,
     )
@@ -520,4 +532,5 @@ if __name__ == "__main__":
     if INTERMEDIATE_SWEEP == "t0":
         main_T0_sweep()
     else:
-        main()
+        main_rho0_sweep()
+

@@ -25,6 +25,7 @@ PRESET_FIG_8 = "fig_8_comparison"
 PRESET_FIG_9 = "fig_9_comparison"
 PRESET_FIG_10 = "fig_10_comparison"
 PRESET_MATLAB = "matlab_comparison"
+PRESET_MALKA_HEIZLER = "malka_heizler_comparison"
 # Full rad-hydro presets (for grouping in list_presets)
 FULL_RAD_HYDRO_PRESET_NAMES = (PRESET_RAD_HYDRO_CONSTANT_T, PRESET_FIG_10)
 from project3_code.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
@@ -394,6 +395,45 @@ PRESET_TEST_CASES = {
         force_black = None,
         times_for_png=np.array([0.05e-9, 0.1e-9, 0.15e-9], dtype=float),
     ),
+    PRESET_MALKA_HEIZLER: RadHydroCase(
+    # Rosen's opacity parameters
+        g_Kelvin = 1.0 / (7200 * KELVIN_PER_HEV**1.5),
+        alpha = 1.5,
+        lambda_ = 0.2,
+
+        # Rosen's specific energy parameters
+        f_Kelvin = 3.4e13 / (KELVIN_PER_HEV**1.6),
+        beta_Rosen = 1.6,
+        mu = 0.14,
+
+        # coupling factor
+        chi = 1e3,
+
+        # Boundary conditions
+        T0_Kelvin = 1 * KELVIN_PER_HEV,
+        P0_Barye = None,
+        tau = 0.0,
+
+        # initial conditions
+        rho0 = 19.32,
+        p0 = None,
+        u0 = None,
+        T_initial_Kelvin = 300, # 300 K in Hev
+
+        # adiabatic index
+        r = 0.25, # r = \gamma_adiabatic - 1
+
+        # grid parameters
+        x_min = 0,
+        x_max = 15e-3 / 19.32, # m_max = 15 mg/cm^2
+        t_sec_end = 1e-9,
+
+        initial_condition="temperature, density",
+        scenario="full_rad_hydro",
+        title="Prset Intermediate (T0=1 HeV, t=1 ns, Malka & Heizler verification)",
+        geom=planar(),
+        force_black = None
+    )
 }
 
 # ---------------------------------------------------------------------------

@@ -1,3 +1,6 @@
+import os
+from typing import Any, Optional
+
 import numpy as np
 from tqdm import tqdm
 
@@ -65,8 +68,21 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
 def simulate_rad_hydro(
     rad_hydro_case: RadHydroCase,
     simulation_config: SimulationConfig,
+    *,
+    tqdm_line: int | None = None,
+    tqdm_desc: str | None = None,
+    mp_progress: Any = None,
+    mp_progress_index: int | None = None,
 ) -> tuple:
-    """This method activates the rad-hydro integrator for a given problem case and simulation type. It initializes the problem, runs the time integration loop, and returns the final state and history."""
+    """This method activates the rad-hydro integrator for a given problem case and simulation type. It initializes the problem, runs the time integration loop, and returns the final state and history.
+
+    If ``tqdm_line`` is set (e.g. sweep index in parallel runs), the progress bar uses that
+    row ``position`` so multiple bars do not overwrite the same terminal line.
+
+    If ``mp_progress`` and ``mp_progress_index`` are set (e.g. ``multiprocessing.Array``),
+    each step writes ``min(1, state.t / t_end)`` into that slot for a parent-process aggregate
+    bar; the in-process tqdm is disabled in that mode.
+    """
     # Unpack parameters from case & config
     # Initialize problem
     state = initialize_problem(rad_hydro_case, simulation_config)
@@ -97,9 +113,27 @@ def simulate_rad_hydro(
     store_frame()
     dt_prev = np.inf
     step = 0
-    
+
+    use_mp_progress = mp_progress is not None and mp_progress_index is not None
+    if use_mp_progress:
+        assert mp_progress_index is not None
+        prog_slot = int(mp_progress_index)
+    else:
+        prog_slot = -1
+
     # Main time integration loop
-    with tqdm(total=t_end) as pbar:
+    pbar_kw: dict = {"total": t_end}
+    if use_mp_progress:
+        pbar_kw["disable"] = True
+    elif os.environ.get("TQDM_DISABLE", "0") == "1":
+        pbar_kw["disable"] = True
+    if tqdm_line is not None and not use_mp_progress:
+        pbar_kw["position"] = int(tqdm_line)
+        pbar_kw["leave"] = True
+        pbar_kw["mininterval"] = 0.25
+        if tqdm_desc:
+            pbar_kw["desc"] = tqdm_desc
+    with tqdm(**pbar_kw) as pbar:
         while state.t < t_end:
             # Adaptive timestep
             if step > 2:
@@ -136,11 +170,16 @@ def simulate_rad_hydro(
             # Progress bar: use actual time advanced (step_rad_hydro may advance by more than dt in some code paths)
             pbar.update(new_state.t - state.t)
             state = new_state
+            if use_mp_progress:
+                mp_progress[prog_slot] = min(1.0, float(state.t) / float(t_end))
 
             # storing the new state
             step += 1
             if (step % simulation_config.store_every) == 0:
                 store_frame()
+
+        if use_mp_progress:
+            mp_progress[prog_slot] = 1.0
 
     # Ensure last frame stored
     if times[-1] != state.t:

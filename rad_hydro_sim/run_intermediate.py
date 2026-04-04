@@ -59,7 +59,7 @@ INTERMEDIATE_SWEEP: Literal["rho0", "t0"] = "t0"
 AREAL_MASS_G_PER_CM2 = 15e-3
 
 # Malka–Heizler reference density [g/cm^3]
-RHO0_MALKA_G_CC = 19.32
+RHO0_MALKA_G_CC = 0.01
 
 # Log grid rho0 [g/cm^3]
 RHO0_MIN = 0.1
@@ -67,9 +67,9 @@ RHO0_MAX = 19.32
 NUM_RHO0_POINTS = 16
 
 # Log grid drive temperature [eV] (code uses HeV = 100 eV per radiation_step)
-T0_EV_MIN = 50.0
+T0_EV_MIN = 5.0
 T0_EV_MAX = 200.0
-NUM_T0_POINTS = 5
+NUM_T0_POINTS = 16
 
 # Density rise vs rho0 to flag shock cell when scanning from the cold (right) boundary
 SHOCK_DENSITY_THRESHOLD = 1.1
@@ -229,7 +229,7 @@ def _run_single_t0_job(
     base_case, base_config = get_preset(PRESET_MALKA_HEIZLER)
     config_batch = replace(base_config, show_slider=False, show_plot=False)
     rho0_fixed = float(RHO0_MALKA_G_CC)
-    x_max_fixed = AREAL_MASS_G_PER_CM2 / rho0_fixed
+    x_max_fixed = AREAL_MASS_G_PER_CM2 / rho0_fixed * 2
     T0_K = t0_eV_to_kelvin(T_eV)
     case_i = replace(
         base_case,
@@ -293,7 +293,7 @@ def _plot_density_profiles_grid(
             ax.scatter([m_s], [r_s], color="crimson", s=36, zorder=5, marker="o")
             ax.annotate(
                 f"shock\n$\\rho$ = {r_s:.4g}",
-                xy=(m_s, r_s),
+                xy=(m_s, 0.8 * r_s),
                 xytext=(5, 8),
                 textcoords="offset points",
                 fontsize=7,

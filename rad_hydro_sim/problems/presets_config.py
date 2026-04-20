@@ -426,7 +426,7 @@ PRESET_TEST_CASES = {
         # grid parameters
         x_min = 0,
         x_max = 1.25e-3 / 19.32, # m_max = 15 mg/cm^2
-        t_sec_end = 5e-11,
+        t_sec_end = 1e-9,
 
         initial_condition="temperature, density",
         scenario="full_rad_hydro",

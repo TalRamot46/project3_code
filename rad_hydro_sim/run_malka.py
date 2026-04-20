@@ -64,12 +64,12 @@ RHO0_MALKA_G_CC = 19.32
 # Log grid rho0 [g/cm^3]
 RHO0_MIN = 0.1
 RHO0_MAX = 19.32
-NUM_RHO0_POINTS = 16
+NUM_RHO0_POINTS = 6
 
 # Log grid drive temperature [eV] (code uses HeV = 100 eV per radiation_step)
 T0_EV_MIN = 0.001
 T0_EV_MAX = 100.0
-NUM_T0_POINTS = 4
+NUM_T0_POINTS = 16
 
 # Parallel simulations (i7-class: cap at 10 physical cores; never exceed os.cpu_count())
 INTERMEDIATE_MAX_WORKERS = 10
@@ -179,6 +179,12 @@ def find_shock_front(
             flag = True
         elif flag and drho_dm[i] > 0:
             return i, rho[i]
+    
+    # if we didn't find a subsonic shock front, proceeding to find a supersonic shock front
+    # by finding the first zero crossing of drho_dm
+    for i in range(len(drho_dm)):
+        if drho_dm[i] < 0.001:
+            return i, rho[i]
     return -1, float("nan")
 
 
@@ -195,7 +201,7 @@ def _run_single_rho0_job(
     case_i = replace(
         base_case,
         rho0=rho0_new,
-        x_max=AREAL_MASS_G_PER_CM2 * rho0_new / RHO0_MALKA_G_CC,
+        x_max=AREAL_MASS_G_PER_CM2,
     )
     x_cells, state, _, _ = simulate_rad_hydro(
         case_i,
@@ -217,7 +223,18 @@ def _run_single_rho0_job(
         float(shock_density),
     )
 
-
+def _interpolate_x_max(T_eV: float) -> float:
+    data = {
+        0.001: 0.01 / RHO0_MAX / 1000,
+        0.01: 0.012 / RHO0_MAX / 1000,
+        0.02: 0.015 / RHO0_MAX / 1000,
+        0.1: 0.013 / RHO0_MAX / 1000,
+        1: 0.1 / RHO0_MAX / 1000,
+        10: 0.2 / RHO0_MAX / 1000,
+        20: 0.5 / RHO0_MAX / 1000,
+        100: 3.0 / RHO0_MAX / 1000,
+    }
+    return np.interp(T_eV, list(data.keys()), list(data.values()))
 
 def _run_single_t0_job(
     job_pack: tuple[int, float],
@@ -230,7 +247,8 @@ def _run_single_t0_job(
     base_case, base_config = get_preset(PRESET_MALKA_HEIZLER)
     config_batch = replace(base_config, show_slider=False, show_plot=False)
     rho0_fixed = float(RHO0_MALKA_G_CC)
-    x_max_fixed = AREAL_MASS_G_PER_CM2 * T_eV / T0_EV_MAX
+    x_max_fixed = _interpolate_x_max(T_eV)
+    print(f"x_max_fixed: {x_max_fixed}")
     T0_K = t0_eV_to_kelvin(T_eV)
     case_i = replace(
         base_case,
@@ -328,13 +346,15 @@ def r_lowess(x, y, frac=0.3):
 
 def main_rho0_sweep() -> None:
     case_i, base_config = get_preset(PRESET_MALKA_HEIZLER)
-    t_end = case_i.t_sec_end
+    t_end_sec = case_i.t_sec_end * 1e9
     n_cells = int(base_config.N)
     workers = _parallel_worker_count()
 
     rho0_grid = np.logspace(
-        np.log10(RHO0_MIN), np.log10(RHO0_MAX), NUM_RHO0_POINTS
+        np.log10(RHO0_MIN), np.log10(RHO0_MAX), NUM_RHO0_POINTS-5
     )
+    rho0_grid = np.concatenate([rho0_grid, 
+    np.logspace(np.log10(0.5), np.log10(1.1), 5)])
     k_run = len(rho0_grid)
     ratios = np.empty_like(rho0_grid)
     rho_max_arr = np.empty_like(rho0_grid)
@@ -399,7 +419,7 @@ def main_rho0_sweep() -> None:
     ax.set_ylabel(r"$\rho_{\mathrm{max}} / \rho_0$")
     ax.set_title(
         "Shock density ratio vs initial density "
-        f"$t_\\mathrm{{end}}$={t_end:.2e} ns)"
+        f"$t_\\mathrm{{end}}$={t_end_sec:.2e} s)"
     )
     ax.grid(True, which="both", alpha=0.35)
     fig.tight_layout()
@@ -417,7 +437,7 @@ def main_rho0_sweep() -> None:
         rho_profiles,
         shock_fronts,
         row_lbl,
-        rf"Density profiles ($\rho_0$ sweep, $t_{{\mathrm{{end}}}}$ = {t_end:.2e} ns)",
+        rf"Density profiles ($\rho_0$ sweep, $t_{{\mathrm{{end}}}}$ = {t_end_sec:.2e} s)",
         prof_png,
         rho0_reference=rho0_grid,
     )
@@ -427,7 +447,7 @@ def main_rho0_sweep() -> None:
 def main_T0_sweep() -> None:
     """Fixed rho0 = 19.32 g/cm^3; sweep T0_Kelvin via log-spaced T0 in eV (50–200 eV)."""
     case_i, base_config = get_preset(PRESET_MALKA_HEIZLER)
-    t_end = case_i.t_sec_end
+    t_end_sec = case_i.t_sec_end * 1e9
     rho0_fixed = RHO0_MALKA_G_CC
     workers = _parallel_worker_count()
 
@@ -502,7 +522,7 @@ def main_T0_sweep() -> None:
     ax.set_ylabel(r"$\rho_{\mathrm{max}} / \rho_0$")
     ax.set_title(
         rf"Shock density ratio vs $T_0$ ($\rho_0$ = {rho0_fixed} g/cm$^3$, "
-        f"$t_\\mathrm{{end}}$={t_end:.2e} ns)"
+        f"$t_\\mathrm{{end}}$={t_end_sec:.2e} s)"
     )
     ax.grid(True, which="both", alpha=0.35)
     fig.tight_layout()
@@ -521,7 +541,7 @@ def main_T0_sweep() -> None:
         rho_profiles,
         shock_fronts,
         row_lbl,
-        rf"Density profiles ($T_0$ sweep, $\rho_0$ = {rho0_fixed} g/cm$^3$, $t_{{\mathrm{{end}}}}$ = {t_end:.2e} ns)",
+        rf"Density profiles ($T_0$ sweep, $\rho_0$ = {rho0_fixed} g/cm$^3$, $t_{{\mathrm{{end}}}}$ = {t_end_sec:.2e} s)",
         prof_png,
         rho0_reference=rho0_ref,
     )

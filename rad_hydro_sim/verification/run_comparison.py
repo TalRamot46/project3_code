@@ -5,11 +5,21 @@ Unified runner for rad_hydro_sim verification comparisons.
 Compares:
   1. Radiation-only: run_rad_hydro (radiation_only_constant_temperature_drive)
      vs 1D Diffusion self similar in gold (constant temperature drive)
-     vs Supersonic solver (radiation self-similar, same physics).
+     vs Supersonic solver (radiation self-similar, same physics)
+     vs Menahem SubsonicHeatWave (same physics, independent implementation).
   2. Hydro-only: run_rad_hydro (hydro_only_power_law_pressure_drive)
-     vs hydro_sim run_hydro (matching driven shock case).
+     vs hydro_sim run_hydro (matching driven shock case)
+     vs Shussman / Menahem piston shock solver.
   3. Full rad_hydro: run_rad_hydro (constant temperature drive) vs Shussman piecewise
-     reference (subsonic solver to shock front; shock solver driven by front pressure).
+     reference (subsonic solver to shock front; shock solver driven by front pressure)
+     and/or Menahem AblationSolver (piecewise patching handled internally).
+
+Reference solver selection
+--------------------------
+Each comparison accepts a ``reference_solver: ReferenceSolver`` flag (default
+``BOTH``): choose ``SHUSSMAN`` for legacy behaviour, ``MENAHEM`` for the newer
+solver only, or ``BOTH`` to cross-check the two semi-analytic references
+against each other and against the simulation.
 
 Usage:
   # In main(), set MODE and run:
@@ -35,6 +45,7 @@ from project3_code.rad_hydro_sim.output_paths import get_rad_hydro_npz_path
 from project3_code.rad_hydro_sim.plotting.gif import save_history_gif
 from project3_code.rad_hydro_sim.verification.verification_config import (
     VerificationMode,
+    ReferenceSolver,
     get_preset_for_mode,
     get_output_prefix_for_mode,
     make_verification_output_paths,
@@ -48,6 +59,11 @@ from project3_code.rad_hydro_sim.verification.radiation_data import (
 from project3_code.rad_hydro_sim.verification.compare_radiation_plots import (
     plot_radiation_comparison_single_time,
     plot_radiation_comparison_slider,
+)
+from project3_code.rad_hydro_sim.verification.menahem_comparison import (
+    run_menahem_subsonic_reference,
+    run_menahem_shock_reference,
+    run_menahem_piecewise_reference,
 )
 
 from project3_code.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
@@ -78,6 +94,52 @@ def _verification_suptitle(case: RadHydroCase, subtitle: str) -> str:
     if not sub:
         return preset
     return f"{preset}\n{sub}"
+
+
+# =============================================================================
+# Shared helpers
+# =============================================================================
+
+def _to_list_of_arrays(arr) -> list[np.ndarray]:
+    """Convert a saved npz array (2D or object array of arrays) to list of 1D arrays."""
+    a = np.asarray(arr)
+    if a.dtype == object:
+        return [np.asarray(v, dtype=float) for v in a.tolist()]
+    if a.ndim == 2:
+        return [a[i, :].astype(float, copy=False) for i in range(a.shape[0])]
+    return [a.astype(float, copy=False)]
+
+
+def _save_load_radiation_sim(
+    data: RadiationSimData,
+    path: Path,
+    *,
+    label: str,
+    color: str,
+    linestyle: str,
+) -> RadiationSimData:
+    """Round-trip ``RadiationSimData`` through an npz for reproducibility / debugging.
+
+    Saves the four primary fields (times, x, T, E_rad) then reloads them,
+    returning a fresh ``RadiationSimData`` with the requested label/color.
+    """
+    np.savez(
+        str(path),
+        times=data.times, x=data.x, T=data.T, E_rad=data.E_rad,
+    )
+    print(f"Saved {label} to {path}")
+    loaded = np.load(str(path), allow_pickle=True)
+    out = RadiationSimData(
+        times=np.asarray(loaded["times"], dtype=float),
+        x=_to_list_of_arrays(loaded["x"]),
+        T=_to_list_of_arrays(loaded["T"]),
+        E_rad=_to_list_of_arrays(loaded["E_rad"]),
+        label=label,
+        color=color,
+        linestyle=linestyle,
+    )
+    print(f"Loaded {label} from {path}")
+    return out
 
 
 # =============================================================================
@@ -146,8 +208,17 @@ def run_radiation_only_comparison(
     show_plot: bool = True,
     save_png: bool = True,
     save_gif: bool = True,
+    reference_solver: ReferenceSolver = ReferenceSolver.BOTH,
     ) -> None:
-    """Run rad_hydro (radiation_only preset), 1D Diffusion, and Supersonic solver; compare T, E_rad."""
+    """Run rad_hydro (radiation_only preset), 1D Diffusion, and the selected
+    semi-analytic reference(s); compare T, E_rad.
+
+    ``reference_solver`` selects which semi-analytic radiation reference(s) to
+    overlay on top of the 1D Diffusion curve:
+    - ``SHUSSMAN``: Shussman Supersonic solver only.
+    - ``MENAHEM``:  Menahem SubsonicHeatWave only.
+    - ``BOTH``:     both curves overlaid for cross-verification (default).
+    """
     from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
     from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
     from project3_code.rad_hydro_sim.verification.run_diffusion_1d import run_diffusion_1d
@@ -158,6 +229,7 @@ def run_radiation_only_comparison(
     output_prefix = get_output_prefix_for_mode(VerificationMode.RADIATION_ONLY)
     png_path, gif_path = make_verification_output_paths(f"{output_prefix}_{case_title}")
 
+    history = None
     sim_data = None
     if not skip_rad_hydro:
         print("Running rad_hydro (radiation_only_constant_temperature_drive)...")
@@ -167,12 +239,6 @@ def run_radiation_only_comparison(
         )
         sim_data = rad_hydro_history_to_radiation_data(history)
         print(f"Stored {len(sim_data.times)} time steps.")
-
-        # Save and load from rad_hydro_sim/data/ (same path for round-trip)
-        # import matplotlib.pyplot as plt
-        # plt.plot(sim_data.x[-1], sim_data.T[-1], label="Sim data")
-        # # plt.plot(ref_data.x[-1], ref_data.T[-1], label="Ref data")
-        # plt.show()
 
     ref_data = None
     if not skip_diffusion:
@@ -190,87 +256,68 @@ def run_radiation_only_comparison(
         )
         ref_data = diffusion_output_to_radiation_data(times_sec, z, T_list, E_rad_list)
         print(f"Stored {len(ref_data.times)} time steps.")
-    
-    if not skip_rad_hydro:
-        sim_npz = get_rad_hydro_npz_path(case_title, prefix="sim_data")
-        np.savez(str(sim_npz), times=sim_data.times, x=sim_data.x, T=sim_data.T, E_rad=sim_data.E_rad)
-        print(f"Saved sim_data to {sim_npz}")
-    if not skip_diffusion:
-        ref_npz = get_rad_hydro_npz_path(case_title, prefix="ref_data")
-        np.savez(str(ref_npz), times=ref_data.times, x=ref_data.x, T=ref_data.T, E_rad=ref_data.E_rad)
-        print(f"Saved ref_data to {ref_npz}")
 
-    def _to_list_of_arrays(arr):
-        """Convert saved array (2D or object array of arrays) to list of 1D arrays."""
-        a = np.asarray(arr)
-        if a.dtype == object:
-            return [np.asarray(v, dtype=float) for v in a.tolist()]
-        if a.ndim == 2:
-            return [a[i, :].astype(float, copy=False) for i in range(a.shape[0])]
-        return [a.astype(float, copy=False)]
-
-    if not skip_rad_hydro:
-        loaded = np.load(str(sim_npz), allow_pickle=True)
-        sim_data = RadiationSimData(
-            times=np.asarray(loaded["times"], dtype=float),
-            x=_to_list_of_arrays(loaded["x"]),
-            T=_to_list_of_arrays(loaded["T"]),
-            E_rad=_to_list_of_arrays(loaded["E_rad"]),
+    # Round-trip sim_data and ref_data through npz for reproducibility.
+    if sim_data is not None:
+        sim_data = _save_load_radiation_sim(
+            sim_data,
+            get_rad_hydro_npz_path(case_title, prefix="sim_data"),
             label="Rad-Hydro (radiation only)",
             color="blue",
             linestyle="-",
         )
-        print(f"Loaded sim_data from {sim_npz}")
-    if not skip_diffusion:
-        loaded = np.load(str(ref_npz), allow_pickle=True)
-        ref_data = RadiationSimData(
-            times=np.asarray(loaded["times"], dtype=float),
-            x=_to_list_of_arrays(loaded["x"]),
-            T=_to_list_of_arrays(loaded["T"]),
-            E_rad=_to_list_of_arrays(loaded["E_rad"]),
+    if ref_data is not None:
+        ref_data = _save_load_radiation_sim(
+            ref_data,
+            get_rad_hydro_npz_path(case_title, prefix="ref_data"),
             label="1D Diffusion (reference)",
             color="red",
             linestyle="--",
         )
-        print(f"Loaded ref_data from {ref_npz}")
 
-    super_data = None
-    if not skip_supersonic:
+    # Semi-analytic extras: Supersonic (Shussman) and/or SubsonicHeatWave (Menahem)
+    extra_refs: list[RadiationSimData] = []
+    if not skip_supersonic and reference_solver.use_shussman:
         print("Running Supersonic solver (radiation self-similar) reference...")
-        super_data = run_supersonic_solver_reference(
-            case,
-            n_times=100,
-        )
-        # convert T to Kelvin
+        super_data = run_supersonic_solver_reference(case, n_times=100)
         if super_data is not None:
-            print(f"Stored {len(super_data.times)} time steps.")
+            print(f"Stored {len(super_data.times)} time steps (Shussman supersonic).")
+            extra_refs.append(super_data)
 
-    # if any of the data among sim_data, ref_data and super_data is None, 
-    # set it to the other data. Be aware of not setting None to None.
-    if sim_data is None and ref_data is not None and super_data is not None:
-        sim_data = ref_data
-    elif sim_data is not None and ref_data is None and super_data is not None:
-        ref_data = super_data
-    elif sim_data is not None and ref_data is not None and super_data is None:
-        super_data = sim_data
-    elif sim_data is not None and ref_data is None and super_data is None:
-        ref_data = sim_data
-        super_data = sim_data
-    elif sim_data is None and ref_data is None and super_data is not None:
-        sim_data = super_data
-        ref_data = super_data
-    elif sim_data is None and ref_data is None and super_data is None:
-        print("Need at least one data for comparison.")
+    if not skip_supersonic and reference_solver.use_menahem:
+        print("Running Menahem SubsonicHeatWave reference...")
+        # Use the same time grid as the 1D Diffusion reference for direct comparison.
+        times_for_menahem = ref_data.times if ref_data is not None else (
+            sim_data.times if sim_data is not None else np.linspace(
+                0.05, 0.95, 20
+            ) * float(case.t_sec_end)
+        )
+        menahem_sub = run_menahem_subsonic_reference(case, times_for_menahem)
+        if menahem_sub is not None:
+            print(f"Stored {len(menahem_sub.times)} time steps (Menahem subsonic).")
+            extra_refs.append(menahem_sub)
+
+    # Need at least one radiation curve to plot; pair sim_data and ref_data up
+    # sensibly if one is missing so the primary plot signature stays happy.
+    if sim_data is None and ref_data is None and not extra_refs:
+        print("Need at least one radiation data source for comparison.")
         return
-    else:
-        print("All data is set.")
-    sub_rad = "Radiation-only: Rad-Hydro vs 1D Diffusion" + (" + Supersonic solver" if super_data is not None else "")
+    if sim_data is None:
+        sim_data = ref_data if ref_data is not None else extra_refs[0]
+    if ref_data is None:
+        ref_data = extra_refs[0] if extra_refs else sim_data
+
+    extras_tag = ""
+    if extra_refs:
+        extras_tag = " + " + " + ".join(e.label for e in extra_refs)
+    sub_rad = "Radiation-only: Rad-Hydro vs 1D Diffusion" + extras_tag
     title = _verification_suptitle(case, sub_rad)
 
     print("\nPlotting radiation comparison (T, E_rad vs x)...")
     if show_plot:
         plot_radiation_comparison_slider(
-            sim_data, ref_data, super_data,
+            sim_data, ref_data,
+            extra_ref_data=extra_refs,
             show=True,
             title=title,
         )
@@ -281,11 +328,10 @@ def run_radiation_only_comparison(
             savepath=str(png_path),
             show=False,
             title=title,
-            extra_ref_data=[super_data] if super_data is not None else None,
+            extra_ref_data=extra_refs or None,
         )
         print(f"Saved PNG: {png_path}")
-    if save_gif:
-        # Also save an animated GIF of the Rad-Hydro history for this case
+    if save_gif and history is not None:
         save_history_gif(
             history,
             case,
@@ -389,8 +435,16 @@ def run_hydro_only_comparison(
     show_plot: bool = True,
     save_png: bool = True,
     save_gif: bool = True,
+    reference_solver: ReferenceSolver = ReferenceSolver.BOTH,
     ) -> None:
-    """Run rad_hydro and hydro_sim and shock solver with matching P0*t^tau; compare rho, p, u, e."""
+    """Run rad_hydro and hydro_sim and shock solver with matching P0*t^tau; compare rho, p, u, e.
+
+    ``reference_solver`` picks which shock reference(s) to overlay on top of the
+    hydro_sim run:
+    - ``SHUSSMAN``: Shussman shock solver only (legacy behaviour).
+    - ``MENAHEM``:  Menahem piston shock only.
+    - ``BOTH``:     both, so the two semi-analytic shocks can be cross-checked.
+    """
     from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
     from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
     from project3_code.hydro_sim.problems.driven_shock_problem import DrivenShockCase
@@ -458,18 +512,37 @@ def run_hydro_only_comparison(
         print(f"Stored {len(ref_data.times)} time steps.")
 
     shock_data = None
+    menahem_shock = None
     if not skip_shock_solver and (sim_data is not None or ref_data is not None):
         times_source = sim_data.times if sim_data is not None else ref_data.times
-        print("Running shock solver (P0*t^τ)...")
-        shock_data = run_shock_solver_hydro_reference(case_rh, times_source)
-        if shock_data is not None:
-            print(f"Stored {len(shock_data.times)} time steps.")
+        if reference_solver.use_shussman:
+            print("Running Shussman shock solver (P0*t^τ)...")
+            shock_data = run_shock_solver_hydro_reference(case_rh, times_source)
+            if shock_data is not None:
+                print(f"Stored {len(shock_data.times)} time steps (Shussman shock).")
+        if reference_solver.use_menahem:
+            print("Running Menahem piston shock reference...")
+            menahem_shock = run_menahem_shock_reference(case_rh, times_source)
+            if menahem_shock is not None:
+                print(f"Stored {len(menahem_shock.times)} time steps (Menahem shock).")
 
     if sim_data is None or ref_data is None:
         print("Need both rad_hydro and hydro_sim data for comparison.")
         return
 
-    title_base = "Hydro-only: Rad-Hydro vs run_hydro" + (" + Shock solver" if shock_data is not None else "")
+    # Primary "shock_data" slot is Shussman when both are selected (keeps legacy
+    # green dotted style); Menahem rides the new generic ``extra_data`` list.
+    primary_shock = shock_data if shock_data is not None else menahem_shock
+    extra_shocks: list = []
+    if primary_shock is menahem_shock:
+        # Shussman was skipped; Menahem has already taken the primary slot.
+        pass
+    elif menahem_shock is not None:
+        extra_shocks.append(menahem_shock)
+
+    shock_labels = [s.label for s in (primary_shock, *extra_shocks) if s is not None]
+    extras_tag = (" + " + " + ".join(shock_labels)) if shock_labels else ""
+    title_base = "Hydro-only: Rad-Hydro vs run_hydro" + extras_tag
     title_fig = _verification_suptitle(case_rh, title_base)
     print("\nPlotting hydro comparison (rho, P, u, e vs x)...")
     if show_plot:
@@ -478,7 +551,8 @@ def run_hydro_only_comparison(
             xaxis="m",
             show=True,
             title=title_fig,
-            shock_data=shock_data,
+            shock_data=primary_shock,
+            extra_data=extra_shocks or None,
         )
     if save_png:
         plot_comparison_in_selected_times(
@@ -488,7 +562,8 @@ def run_hydro_only_comparison(
             savepath=str(png_path),
             show=False,
             title=title_fig,
-            shock_data=shock_data,
+            shock_data=primary_shock,
+            extra_data=extra_shocks or None,
         )
         print(f"Saved PNG: {png_path}")
     if save_gif:
@@ -544,14 +619,25 @@ def _pad_rad_hydro_data_to_min_frames(data, min_frames: int = 2, t_end_ns: float
 def run_full_rad_hydro_comparison(
     skip_rad_hydro: bool = False,
     skip_shussman: bool = False,
+    skip_menahem: bool = False,
     show_plot: bool = True,
     save_png: bool = True,
     save_gif: bool = True,
+    reference_solver: ReferenceSolver = ReferenceSolver.BOTH,
 ) -> None:
     """
-    Run rad_hydro with constant temperature drive and compare to piecewise Shussman
-    reference: subsonic solver (profiles until shock front) + shock solver (driven by
-    pressure at front from subsonic). Shock front is diagnosed from rad_hydro solution.
+    Run rad_hydro with constant temperature drive and compare to semi-analytic references:
+
+    - Shussman piecewise reference: subsonic solver (profiles until shock front) + shock
+      solver (driven by pressure at front from subsonic). Shock front is diagnosed from
+      rad_hydro solution.
+    - Menahem ``AblationSolver``: subsonic heat wave + piston shock patched internally
+      (no external shock-front diagnosis needed).
+
+    ``reference_solver`` picks which of the two references to run:
+    - ``SHUSSMAN``: Shussman only (legacy behaviour).
+    - ``MENAHEM``:  Menahem only.
+    - ``BOTH``:     overlay both (the first one becomes the primary ``ref_data``).
     """
     from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
     from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
@@ -596,14 +682,6 @@ def run_full_rad_hydro_comparison(
 
         # load sim_data back from the file (round-trip for debugging)
         # loaded = np.load(str(sim_npz), allow_pickle=True)
-        def _to_list_of_arrays(arr):
-            a = np.asarray(arr)
-            if a.dtype == object:
-                return [np.asarray(v, dtype=float) for v in a.tolist()]
-            if a.ndim == 2:
-                return [a[i, :].astype(float, copy=False) for i in range(a.shape[0])]
-            return [a.astype(float, copy=False)]
-
         T_raw = _to_list_of_arrays(sim_data.T) if sim_data.T else []
         T_hev = [t_arr / KELVIN_PER_HEV for t_arr in T_raw]
         Tm_raw = _to_list_of_arrays(sim_data.T_material) if sim_data.T_material else []
@@ -624,18 +702,46 @@ def run_full_rad_hydro_comparison(
             linestyle="-",
         )
 
-    ref_data = None
-    if not skip_shussman:
+    # Build the semi-analytic references (Shussman and/or Menahem)
+    if skip_rad_hydro:
+        # 0.01 ns to t_end (1 ns), 100 frames for slider
+        t_min = max(case.t_sec_end / 100, 1e-15)
+        times_sec = np.linspace(t_min, case.t_sec_end, 100)
+    else:
+        times_sec = np.linspace(0, case.t_sec_end, 10000)
+    time_ns = np.atleast_1d(times_sec * 1e9).ravel()
+    T0_HeV = float(case.T0_Kelvin) / KELVIN_PER_HEV  # pyright: ignore[reportArgumentType]
+
+    shussman_ref: "RadHydroData | None" = None
+    if not skip_shussman and reference_solver.use_shussman:
         print("Building Shussman piecewise reference (subsonic + shock)...")
-        if skip_rad_hydro:
-            # 0.01 ns to t_end (1 ns), 100 frames for slider
-            t_min = max(case.t_sec_end / 100, 1e-15)
-            times_sec = np.linspace(t_min, case.t_sec_end, 100)
-        else:
-            times_sec = np.linspace(0, case.t_sec_end, 10000)
-        time_ns = np.atleast_1d(times_sec * 1e9).ravel()
-        T0_HeV = float(case.T0_Kelvin)/KELVIN_PER_HEV  # pyright: ignore[reportArgumentType]
-        ref_data = run_shussman_piecewise_reference(case, times_ns=time_ns, T0_HeV=T0_HeV)
+        shussman_ref = run_shussman_piecewise_reference(case, times_ns=time_ns, T0_HeV=T0_HeV)
+
+    menahem_ref: "RadHydroData | None" = None
+    if not skip_menahem and reference_solver.use_menahem:
+        print("Building Menahem ablation reference (subsonic heat wave + piston shock)...")
+        # Menahem expects seconds; reuse a coarse grid aligned with Shussman.
+        menahem_times = times_sec if skip_rad_hydro else np.linspace(
+            max(case.t_sec_end / 100, 1e-15), case.t_sec_end, 100
+        )
+        menahem_ref = run_menahem_piecewise_reference(case, menahem_times)
+
+    # Pick a "primary" reference (the one passed as ``ref_data`` in the plot
+    # functions) and route any remaining ones through ``extra_data``.
+    # Preference: when user chose BOTH we show Shussman as primary (legacy
+    # plotting style / GIF) and overlay Menahem as an extra. When MENAHEM is
+    # selected, Menahem takes the primary slot.
+    if reference_solver == ReferenceSolver.MENAHEM:
+        primary_ref = menahem_ref
+        extra_refs: list = [shussman_ref] if shussman_ref is not None else []
+    else:
+        primary_ref = shussman_ref if shussman_ref is not None else menahem_ref
+        extra_refs = []
+        if menahem_ref is not None and primary_ref is not menahem_ref:
+            extra_refs.append(menahem_ref)
+
+    extra_refs = [r for r in extra_refs if r is not None]
+    ref_data = primary_ref
 
     if skip_rad_hydro:
         sim_data = ref_data
@@ -644,9 +750,18 @@ def run_full_rad_hydro_comparison(
             t_end_ns = float(case.t_sec_end) * 1e9
             sim_data = _pad_rad_hydro_data_to_min_frames(sim_data, min_frames=2, t_end_ns=t_end_ns)
         ref_data = sim_data
-        print(f"Copied ref_data to sim_data")
+        print("Copied ref_data to sim_data")
 
-    sub_full = "Full rad-hydro simulation vs Shussman semi-analytic solver (patching method)"
+    if sim_data is None or ref_data is None:
+        print("Need at least one reference or simulation dataset to plot.")
+        return
+
+    ref_labels = [r.label for r in (ref_data, *extra_refs) if r is not None]
+    sub_full = (
+        "Full rad-hydro simulation vs "
+        + " + ".join(ref_labels)
+        + " (patching method)"
+    )
     title_fig = _verification_suptitle(case, sub_full)
     print("\nPlotting full rad_hydro comparison (rho, P, u, e vs x)...")
     if show_plot:
@@ -656,6 +771,7 @@ def run_full_rad_hydro_comparison(
             xaxis="m",
             show=True,
             title=title_fig,
+            extra_data=extra_refs or None,
         )
 
     if save_png:
@@ -667,9 +783,9 @@ def run_full_rad_hydro_comparison(
             savepath=str(png_path),
             show=False,
             title=title_fig,
+            extra_data=extra_refs or None,
         )
-    if save_gif:
-        # Also save an animated GIF of the Rad-Hydro history with Shussman overlay for verification
+    if save_gif and not skip_rad_hydro:
         save_history_gif(
             history_rh,
             case,
@@ -882,18 +998,28 @@ def run_comparison(
     skip_hydro_sim: bool = False,
     skip_shock_solver: bool = False,
     skip_shussman: bool = False,
+    skip_menahem: bool = False,
     compare_force_black_cases: bool = False,
     compare_radiation_coeff_schemes: bool = False,
     show_plot: bool = True,
     save_png: bool = True,
     save_gif: bool = True,
+    reference_solver: ReferenceSolver = ReferenceSolver.BOTH,
 ) -> None:
-    """Run the verification comparison for the given mode."""
+    """Run the verification comparison for the given mode.
+
+    ``reference_solver`` selects which semi-analytic reference(s) to overlay on
+    the rad_hydro simulation (applies to all three modes):
+    - ``ReferenceSolver.SHUSSMAN``: Shussman solvers only (legacy behaviour).
+    - ``ReferenceSolver.MENAHEM``:  Menahem solvers only.
+    - ``ReferenceSolver.BOTH``:     both, for cross-verification (default).
+    """
     preset_name = get_preset_for_mode(mode)
     print("=" * 60)
     print("Rad-Hydro Verification Comparison")
     print("=" * 60)
     print(f"Mode: {mode.value} (preset: {preset_name})")
+    print(f"Reference solver(s): {reference_solver.value}")
     print()
 
     if mode == VerificationMode.RADIATION_ONLY:
@@ -904,6 +1030,7 @@ def run_comparison(
             show_plot=show_plot,
             save_png=save_png,
             save_gif=save_gif,
+            reference_solver=reference_solver,
         )
     elif mode == VerificationMode.HYDRO_ONLY:
         run_hydro_only_comparison(
@@ -913,6 +1040,7 @@ def run_comparison(
             show_plot=show_plot,
             save_png=save_png,
             save_gif=save_gif,
+            reference_solver=reference_solver,
         )
     elif mode == VerificationMode.FULL_RAD_HYDRO:
         if compare_force_black_cases:
@@ -931,17 +1059,23 @@ def run_comparison(
             run_full_rad_hydro_comparison(
                 skip_rad_hydro=skip_rad_hydro,
                 skip_shussman=skip_shussman,
+                skip_menahem=skip_menahem,
                 show_plot=show_plot,
                 save_png=save_png,
                 save_gif=save_gif,
+                reference_solver=reference_solver,
             )
 
 def main() -> None:
-    """Entry point: select mode and run comparison."""
+    """Entry point: select mode and which reference solver(s) to overlay."""
     MODE = VerificationMode.FULL_RAD_HYDRO
     # MODE = VerificationMode.RADIATION_ONLY
     # MODE = VerificationMode.HYDRO_ONLY
-    
+
+    REFERENCE_SOLVER = ReferenceSolver.BOTH
+    # REFERENCE_SOLVER = ReferenceSolver.SHUSSMAN
+    # REFERENCE_SOLVER = ReferenceSolver.MENAHEM
+
     run_comparison(
         MODE,
         skip_rad_hydro=False,
@@ -950,11 +1084,13 @@ def main() -> None:
         skip_hydro_sim=False,
         skip_shock_solver=False,
         skip_shussman=False,
+        skip_menahem=False,
         compare_force_black_cases=False,
         compare_radiation_coeff_schemes=False,
         show_plot=True,
         save_png=True,
-        save_gif=True
+        save_gif=True,
+        reference_solver=REFERENCE_SOLVER,
     )
 
 if __name__ == "__main__":

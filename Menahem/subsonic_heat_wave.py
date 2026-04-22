@@ -958,14 +958,14 @@ class SubsonicHeatWave():
         result = self.get_self_similar_profiles(xsi_vec=xsi_vec, xsi_f=xsi_f, Pf=Pf)
         V, P, U, T, S, imin = result["V"], result["P"], result["U"], result["T"], result["S"], result["imin"]
 
-        # plt.plot(xsi_vec, 1./V, c="r",       lw=2, label=f"$R(\\xi)$",)
+        plt.plot(xsi_vec, 1./V, c="r",       lw=2, label=f"$R(\\xi)$",)
         plt.plot(xsi_vec, V,                 lw=2, label=f"$V(\\xi)$")
         plt.plot(xsi_vec, -U,   c="fuchsia", lw=2, label=f"$-U(\\xi)$")
         plt.plot(xsi_vec, P,    c="lime",    lw=2, label=f"$P(\\xi)$ p0={P[imin]:g}")
         plt.plot(xsi_vec, T,    c="b",       lw=2, label=f"$T(\\xi)$ T0={T[imin]:g}")
-        # plt.plot(xsi_vec, S,    c="k",       lw=2, label=f"$S(\\xi)$")
+        plt.plot(xsi_vec, S,    c="k",       lw=2, label=f"$S(\\xi)$")
 
-        # # plot asymptotic solution near xsi_f
+        # plot asymptotic solution near xsi_f
         result_as = list(zip(*[self.get_asymptotic_solution_near_front(xsi=xsi) for xsi in xsi_vec]))
         Vas, Pas, Uas = np.array(result_as[0]), np.array(result_as[2]), np.array(result_as[4])
         Tas = self.get_T(P=Pas, V=Vas)
@@ -974,16 +974,16 @@ class SubsonicHeatWave():
         plt.plot(xsi_vec, Pas,    lw=2, ls="--", label=f"$P(\\xi)$ asymp")
         plt.plot(xsi_vec, Tas,    lw=2, ls="--", label=f"$T(\\xi)$ asymp")
 
-        # plt.xscale("log")
-        # plt.yscale("log")
+        plt.xscale("log")
+        plt.yscale("log")
         plt.title(self.title+f", $\\xi_{{f}}={xsi_f:.4g}, P_{{f}}={Pf:.4g}$", fontsize=10)
         plt.grid()
         plt.legend(fontsize=12)
         plt.xlabel("$\\xi$", fontsize=12)
-        # plt.autoscale(enable=True, axis='both', tight=True)
+        plt.autoscale(enable=True, axis='both', tight=True)
         plt.xlim([0.,xsi_f])
         plt.ylim([0.,1.])
-        # plt.show()
+        plt.show()
 
 
         V_integral = [self.get_V_integral(xsi=xsi, V=Vi, U=Ui, xsi0=xsi_vec[0], V0=V[0], U0=U[0]) for xsi, Vi, Ui in zip(xsi_vec, V, U)]
@@ -1000,7 +1000,7 @@ class SubsonicHeatWave():
         plt.legend(fontsize=12)
         plt.xlabel("$\\xi$", fontsize=12)
         plt.autoscale(enable=True, axis='both', tight=True)
-        # plt.show()
+        plt.show()
 
         return self
 
@@ -1172,7 +1172,7 @@ def test_profiles():
     solver.find_xsi_f()
     
     solver.test_etot_integral()
-    # solver.plot_profiles()
+    solver.plot_profiles()
     # solver.test_V_integral()
 
     L = 1e-3
@@ -1229,58 +1229,58 @@ def test_profiles():
     #     list(np.linspace(L/5, L, num_cells+1)) \
     # ))))
 
-    # num_cells = 1000
-    # coordinate = np.array(list(sorted(set(
-    #     list(np.linspace(0., L, num_cells+1)) \
-    # ))))
+    num_cells = 1000
+    coordinate = np.array(list(sorted(set(
+        list(np.linspace(0., L, num_cells+1)) \
+    ))))
 
-    # dx = coordinate[1:] - coordinate[:-1]
-    # rcell = 0.5*(coordinate[1:] + coordinate[:-1])
+    dx = coordinate[1:] - coordinate[:-1]
+    rcell = 0.5*(coordinate[1:] + coordinate[:-1])
 
-    # # exact integral of mass in each cell gives this density
-    # mass_cells = rho0 * dx
-    # mass = np.cumsum(mass_cells)
-    # mass = np.array([1e-30, 1e-7*mass[0]]+ list(mass))
+    # exact integral of mass in each cell gives this density
+    mass_cells = rho0 * dx
+    mass = np.cumsum(mass_cells)
+    mass = np.array([1e-30, 1e-7*mass[0]]+ list(mass))
 
-    # ##### plot hydro profiles
-    # for time in np.array([0.5,1., 1.5])*Units.nsec:
-    #     solution = solver.solve(mass=mass, time=time)
+    ##### plot hydro profiles
+    for time in np.array([0.5,1., 1.5])*Units.nsec:
+        solution = solver.solve(mass=mass, time=time)
         
-    #     for use_r in [True, False]:
-    #         for fg in ["density", "velocity", "pressure", "temperature", "radiation_energy_flux"]:
-    #             plt.figure(fg+str(use_r))
-    #             if use_r: 
-    #                 plt.plot(solution["position"], solution[fg], label=f"t={time:g}", marker="o")
-    #                 plt.axvline(x=solution["boundary_position"], lw=2, c="k", ls="--")
-    #             else:    
-    #                 plt.plot(mass, solution[fg], label=f"t={time:g}")
-    #                 plt.axvline(x=solution["ablated_mass"], lw=2, c="k", ls="--")
-    # for use_r in [True, False]:
-    #     for fg in ["density", "velocity", "pressure", "temperature", "radiation_energy_flux"]:
-    #         plt.figure(fg+str(use_r))
-    #         plt.legend()
-    #         plt.grid()
-    #         plt.autoscale(enable=True, axis='both', tight=True)
-    #         if use_r: plt.xlabel("x [cm]")
-    #         else: plt.xlabel("mass [g/cm^2]")
-    #         plt.ylabel(fg)
+        for use_r in [True, False]:
+            for fg in ["density", "velocity", "pressure", "temperature", "radiation_energy_flux"]:
+                plt.figure(fg+str(use_r))
+                if use_r: 
+                    plt.plot(solution["position"], solution[fg], label=f"t={time:g}", marker="o")
+                    plt.axvline(x=solution["boundary_position"], lw=2, c="k", ls="--")
+                else:    
+                    plt.plot(mass, solution[fg], label=f"t={time:g}")
+                    plt.axvline(x=solution["ablated_mass"], lw=2, c="k", ls="--")
+    for use_r in [True, False]:
+        for fg in ["density", "velocity", "pressure", "temperature", "radiation_energy_flux"]:
+            plt.figure(fg+str(use_r))
+            plt.legend()
+            plt.grid()
+            plt.autoscale(enable=True, axis='both', tight=True)
+            if use_r: plt.xlabel("x [cm]")
+            else: plt.xlabel("mass [g/cm^2]")
+            plt.ylabel(fg)
 
-    # plt.show()
+    plt.show()
 
-    # ########## plot position as a function of time
-    # position_times = np.array([np.array(solver.solve(mass=mass, time=time)["position"]) for time in times[1:]]).T
+    ########## plot position as a function of time
+    position_times = np.array([np.array(solver.solve(mass=mass, time=time)["position"]) for time in times[1:]]).T
 
-    # plt.figure("position")
-    # for pos in position_times:
-    #     plt.plot(times[1:], pos, c="k", lw=0.5)#, marker="o", markersize=1.)
-    # plt.axhline(y=0,            lw=1.5, ls="--", c="r", label="ablation front")
-    # plt.plot(times, x_boundary, lw=1.5, ls="--", c="b", label="boundary")
-    # plt.legend()
-    # plt.autoscale(enable=True, axis='both', tight=True)
-    # plt.xlabel("time [sec]")
-    # plt.ylabel("position [cm]")
-    # plt.show()
-    # quit()
+    plt.figure("position")
+    for pos in position_times:
+        plt.plot(times[1:], pos, c="k", lw=0.5)#, marker="o", markersize=1.)
+    plt.axhline(y=0,            lw=1.5, ls="--", c="r", label="ablation front")
+    plt.plot(times, x_boundary, lw=1.5, ls="--", c="b", label="boundary")
+    plt.legend()
+    plt.autoscale(enable=True, axis='both', tight=True)
+    plt.xlabel("time [sec]")
+    plt.ylabel("position [cm]")
+    plt.show()
+    quit()
 
 if __name__ == "__main__":
 

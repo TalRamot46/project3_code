@@ -212,6 +212,7 @@ def plot_comparison_in_selected_times(
     title: str | None = None,
     shock_data: HydroDataLike | None = None,
     cmap_name: str = "plasma",
+    extra_data: list["HydroDataLike"] | None = None,
 ) -> list[tuple[Any, Any]]:
     """
     One figure: overlay every requested snapshot (nearest stored time in each dataset).
@@ -240,6 +241,8 @@ def plot_comparison_in_selected_times(
     times = np.asarray(times, dtype=float)
     if times.size == 0:
         raise ValueError("times must be non-empty")
+
+    extras: list[HydroDataLike] = list(extra_data) if extra_data else []
 
     cmap = plt.get_cmap(cmap_name)
     n_t = int(times.size)
@@ -374,6 +377,32 @@ def plot_comparison_in_selected_times(
                 )
             )
 
+        for extra in extras:
+            extra_idx = interpolate_to_time(extra, t_req)
+            if extra_idx is None:
+                continue
+            if xaxis == "m":
+                x_extra = extra.m[extra_idx]
+            else:
+                x_extra = extra.x[extra_idx]
+            estyle = extra.linestyle or "-."
+            ecolor = color  # time-varying color so the snapshot cue still works
+            ax_rho.plot(x_extra, extra.rho[extra_idx], color=ecolor, linestyle=estyle, lw=lw_shock, alpha=0.92)
+            ax_p.plot(x_extra, extra.p[extra_idx] / PLOT_P_SCALE, color=ecolor, linestyle=estyle, lw=lw_shock, alpha=0.92)
+            ax_u.plot(x_extra, extra.u[extra_idx] / PLOT_U_SCALE, color=ecolor, linestyle=estyle, lw=lw_shock, alpha=0.92)
+            ax_e.plot(x_extra, extra.e[extra_idx] / PLOT_E_SCALE, color=ecolor, linestyle=estyle, lw=lw_shock, alpha=0.92)
+            if hasattr(extra, "T") and extra.T:
+                ax_T.plot(x_extra, extra.T[extra_idx], color=ecolor, linestyle=estyle, lw=lw_shock, alpha=0.92)
+            if hasattr(extra, "E_rad") and extra.E_rad:
+                ax_E_rad.plot(x_extra, extra.E_rad[extra_idx], color=ecolor, linestyle=estyle, lw=lw_shock, alpha=0.92)
+            legend_handles.append(
+                Line2D(
+                    [0], [0],
+                    color=ecolor, lw=lw_shock, linestyle=estyle,
+                    label=f"{extra.label} ({t_lbl})",
+                )
+            )
+
     ax_rho.set_ylabel(r"$\rho$ [g/cm³]")
     ax_p.set_ylabel(r"$P$ [MBar]")
     ax_u.set_ylabel(r"$u$ [km/s]")
@@ -426,6 +455,7 @@ def plot_comparison_slider(
     show: bool = True,
     title: str | None = None,
     shock_data: HydroDataLike | None = None,
+    extra_data: list["HydroDataLike"] | None = None,
 ):
     """
     Interactive 4-panel comparison with time slider.
@@ -437,7 +467,11 @@ def plot_comparison_slider(
         show: Whether to display the figure
         title: Optional figure title
         shock_data: Optional third dataset (e.g. shock solver P0*t^τ)
+        extra_data: Optional list of additional datasets (each plotted with
+            its own color/linestyle). Use this to overlay e.g. Menahem's
+            piston-shock next to the Shussman ``shock_data`` curve.
     """
+    extras: list[HydroDataLike] = list(extra_data) if extra_data else []
     # Use simulation times as reference
     all_times = sim_data.times
     
@@ -513,7 +547,27 @@ def plot_comparison_slider(
     else:
         lines['sim_E_rad'], = ax_E_rad.plot([], [], color=sim_data.color, lw=2)
         lines['ref_E_rad'], = ax_E_rad.plot([], [], color=ref_data.color, linestyle='--', lw=2)
-    
+
+    # Extra datasets: one line per panel per extra, keyed by extra index.
+    extra_lines: list[dict[str, Any]] = []
+    for ei, extra in enumerate(extras):
+        ek = interpolate_to_time(extra, all_times[k])
+        if ek is None:
+            extra_lines.append({})
+            continue
+        x_ex = extra.m[ek] if xaxis == "m" else extra.x[ek]
+        ls = extra.linestyle or "-."
+        el: dict[str, Any] = {}
+        el['rho'], = ax_rho.plot(x_ex, extra.rho[ek], color=extra.color, linestyle=ls, lw=2, label=extra.label)
+        el['p'], = ax_p.plot(x_ex, extra.p[ek] / PLOT_P_SCALE, color=extra.color, linestyle=ls, lw=2)
+        el['u'], = ax_u.plot(x_ex, extra.u[ek] / PLOT_U_SCALE, color=extra.color, linestyle=ls, lw=2)
+        el['e'], = ax_e.plot(x_ex, extra.e[ek] / PLOT_E_SCALE, color=extra.color, linestyle=ls, lw=2)
+        if hasattr(extra, "T") and extra.T:
+            el['T'], = ax_T.plot(x_ex, extra.T[ek], color=extra.color, linestyle=ls, lw=2)
+        if hasattr(extra, "E_rad") and extra.E_rad:
+            el['E_rad'], = ax_E_rad.plot(x_ex, extra.E_rad[ek], color=extra.color, linestyle=ls, lw=2)
+        extra_lines.append(el)
+
     ax_rho.set_ylabel(r"$\rho$ [g/cm³]")
     ax_rho.legend(loc="best")
     ax_rho.grid(True, alpha=0.3)
@@ -593,7 +647,23 @@ def plot_comparison_slider(
         if hasattr(sim_data, 'E_rad') and sim_data.E_rad and hasattr(ref_data, 'E_rad') and ref_data.E_rad:
             lines['sim_E_rad'].set_data(x_sim, sim_data.E_rad[k])
             lines['ref_E_rad'].set_data(x_ref, ref_data.E_rad[ref_k])
-        
+
+        for extra, el in zip(extras, extra_lines):
+            if not el:
+                continue
+            ek = interpolate_to_time(extra, all_times[k])
+            if ek is None:
+                continue
+            x_ex = extra.m[ek] if xaxis == "m" else extra.x[ek]
+            el['rho'].set_data(x_ex, extra.rho[ek])
+            el['p'].set_data(x_ex, extra.p[ek] / PLOT_P_SCALE)
+            el['u'].set_data(x_ex, extra.u[ek] / PLOT_U_SCALE)
+            el['e'].set_data(x_ex, extra.e[ek] / PLOT_E_SCALE)
+            if 'T' in el:
+                el['T'].set_data(x_ex, extra.T[ek])
+            if 'E_rad' in el:
+                el['E_rad'].set_data(x_ex, extra.E_rad[ek])
+
         set_title(k, ref_k)
         
         for ax in axes.flat:

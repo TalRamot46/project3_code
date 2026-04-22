@@ -141,10 +141,30 @@ def plot_radiation_comparison_slider(
     super_data: Optional[RadiationSimData] = None,
     show: bool = True,
     title: str | None = None,
+    extra_ref_data: Optional[List[RadiationSimData]] = None,
 ):
-    """Interactive 2-panel (T, E_rad) comparison with time slider. Optionally add extra reference curves."""
+    """Interactive 2-panel (T, E_rad) comparison with time slider.
+
+    Parameters
+    ----------
+    sim_data, ref_data
+        Primary simulation and primary reference (always plotted).
+    super_data
+        Backward-compatible alias for a single extra reference (legacy kwarg).
+    extra_ref_data
+        Additional references (e.g. Supersonic solver + Menahem subsonic). Any
+        entry in this list is plotted with its own color/linestyle. ``super_data``
+        is prepended to the list for backward compatibility.
+    """
     all_times = sim_data.times
     n = len(all_times)
+
+    # Merge legacy ``super_data`` kwarg into ``extra_ref_data`` list.
+    extras: List[RadiationSimData] = []
+    if super_data is not None:
+        extras.append(super_data)
+    if extra_ref_data:
+        extras.extend(extra_ref_data)
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5), sharex=True)
     plt.subplots_adjust(bottom=0.15)
@@ -161,19 +181,21 @@ def plot_radiation_comparison_slider(
         ref_data.x[ref_k0], ref_data.T[ref_k0],
         color=ref_data.color, linestyle="--", lw=2, label=ref_data.label,
     )
-    if super_data is not None:
-        super_k0 = _interpolate_to_time(super_data, all_times[k0])
-        line_super_t, = ax_t.plot(
-            super_data.x[super_k0], super_data.T[super_k0],
-            color=super_data.color, linestyle="--", lw=2, label=super_data.label,
+
+    extra_lines_t: List = []
+    extra_lines_e: List = []
+    for extra in extras:
+        k_ex = _interpolate_to_time(extra, all_times[k0])
+        lt, = ax_t.plot(
+            extra.x[k_ex], extra.T[k_ex],
+            color=extra.color, linestyle=extra.linestyle, lw=2, label=extra.label,
         )
-        line_super_e, = ax_e.plot(
-            super_data.x[super_k0], super_data.E_rad[super_k0],
-            color=super_data.color, linestyle="--", lw=2,
+        le, = ax_e.plot(
+            extra.x[k_ex], extra.E_rad[k_ex],
+            color=extra.color, linestyle=extra.linestyle, lw=2,
         )
-    else:
-        line_super_t, = ax_t.plot([], [], color="green", linestyle="--", lw=2)
-        line_super_e, = ax_e.plot([], [], color="green", linestyle="--", lw=2)
+        extra_lines_t.append(lt)
+        extra_lines_e.append(le)
 
     line_sim_e, = ax_e.plot(
         sim_data.x[k0], sim_data.E_rad[k0],
@@ -185,7 +207,7 @@ def plot_radiation_comparison_slider(
     )
 
     ax_t.set_ylabel(r"Temperature $T$ [K]")
-    ax_t.legend(loc="best")
+    ax_t.legend(loc="best", fontsize=9)
     ax_t.grid(True, alpha=0.3)
     ax_e.set_ylabel(r"$E_{\mathrm{rad}}$ [erg/cm³]")
     ax_e.set_xlabel(r"Position $x$ [cm]")
@@ -203,13 +225,13 @@ def plot_radiation_comparison_slider(
         base = title or "Radiation comparison"
         t_sim = all_times[k]
         t_ref = ref_data.times[ref_k]
-        if super_data is not None:
-            super_k = _interpolate_to_time(super_data, all_times[k])
-            line_super_t.set_data(super_data.x[super_k], super_data.T[super_k])
-            line_super_e.set_data(super_data.x[super_k], super_data.E_rad[super_k])
-            title_text.set_text(f"{base}\nSim: t={t_sim:.2e}s, Ref: t={t_ref:.2e}s, Super: t={super_data.times[super_k]:.2e}s")
-        else:
-            title_text.set_text(f"{base}\nSim: t={t_sim:.2e}s, Ref: t={t_ref:.2e}s")
+        parts = [f"Sim: t={t_sim:.2e}s", f"Ref: t={t_ref:.2e}s"]
+        for lt, le, extra in zip(extra_lines_t, extra_lines_e, extras):
+            k_ex = _interpolate_to_time(extra, all_times[k])
+            lt.set_data(extra.x[k_ex], extra.T[k_ex])
+            le.set_data(extra.x[k_ex], extra.E_rad[k_ex])
+            parts.append(f"{extra.label}: t={extra.times[k_ex]:.2e}s")
+        title_text.set_text(f"{base}\n" + ", ".join(parts))
         for ax in axes:
             ax.relim()
             ax.autoscale_view()

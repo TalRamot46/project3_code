@@ -39,6 +39,26 @@ class VerificationMode(str, Enum):
     FULL_RAD_HYDRO = "full_rad_hydro"   # vs Shussman subsonic + shock (constant T drive)
 
 
+class ReferenceSolver(str, Enum):
+    """Which semi-analytic reference solver(s) to overlay.
+
+    - ``SHUSSMAN``: use only the Shussman solvers (original behaviour).
+    - ``MENAHEM``: use only Menahem's solvers (newer, preferred implementation).
+    - ``BOTH``: run both and show them side-by-side so they can be cross-checked.
+    """
+    SHUSSMAN = "shussman"
+    MENAHEM = "menahem"
+    BOTH = "both"
+
+    @property
+    def use_shussman(self) -> bool:
+        return self in (ReferenceSolver.SHUSSMAN, ReferenceSolver.BOTH)
+
+    @property
+    def use_menahem(self) -> bool:
+        return self in (ReferenceSolver.MENAHEM, ReferenceSolver.BOTH)
+
+
 # ============================================================================
 # Preset names (physical case keys) and mode → preset mapping
 # ============================================================================

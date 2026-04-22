@@ -477,34 +477,34 @@ def test_profiles():
     plt.show()
 
     ########## plot position as a function of time
-    results = [solver.solve(mass=mass, time=time) for time in times[1:]]
-    position_times = np.array([r["position"] for r in results]).T
-    shock_position = np.array([r["shock_position"] for r in results])
-    piston_position = np.array([r["piston_position"] for r in results])
-    heat_position = np.array([r["heat_position"] for r in results])
-    boundary_position = np.array([r["boundary_position"] for r in results])
-    plt.figure("position")
-    for pos in position_times:
-        plt.plot(times[1:], pos, c="k",    lw=0.5)#, marker="o", markersize=1.)
-    plt.plot(times[1:], shock_position,    lw=2.5, ls="--", c="r", label="shock")
-    plt.plot(times[1:], heat_position,     lw=2.5, ls="--", c="fuchsia", label="heat")
-    plt.plot(times[1:], piston_position,   lw=1.5, ls="--", c="b", label="piston")
-    plt.plot(times[1:], boundary_position, lw=1.5, ls="--", c="k", label="boundary")
+    # results = [solver.solve(mass=mass, time=time) for time in times[1:]]
+    # position_times = np.array([r["position"] for r in results]).T
+    # shock_position = np.array([r["shock_position"] for r in results])
+    # piston_position = np.array([r["piston_position"] for r in results])
+    # heat_position = np.array([r["heat_position"] for r in results])
+    # boundary_position = np.array([r["boundary_position"] for r in results])
+    # plt.figure("position")
+    # for pos in position_times:
+    #     plt.plot(times[1:], pos, c="k",    lw=0.5)#, marker="o", markersize=1.)
+    # plt.plot(times[1:], shock_position,    lw=2.5, ls="--", c="r", label="shock")
+    # plt.plot(times[1:], heat_position,     lw=2.5, ls="--", c="fuchsia", label="heat")
+    # plt.plot(times[1:], piston_position,   lw=1.5, ls="--", c="b", label="piston")
+    # plt.plot(times[1:], boundary_position, lw=1.5, ls="--", c="k", label="boundary")
 
-    plt.legend()
-    plt.xlabel("time [sec]")
-    plt.ylabel("position [cm]")
-    plt.autoscale(enable=True, axis='both', tight=True)
-    plt.suptitle(solver.heat_solver.title, fontsize=12)
-    plt.savefig("rt.png", bbox_inches='tight')
-    plt.savefig("rt.pdf", bbox_inches='tight')
+    # plt.legend()
+    # plt.xlabel("time [sec]")
+    # plt.ylabel("position [cm]")
+    # plt.autoscale(enable=True, axis='both', tight=True)
+    # plt.suptitle(solver.heat_solver.title, fontsize=12)
+    # plt.savefig("rt.png", bbox_inches='tight')
+    # plt.savefig("rt.pdf", bbox_inches='tight')
 
-    plt.xlim([0., times[-1]])
-    plt.ylim([-0.1*L, L])
-    plt.suptitle(solver.heat_solver.title, fontsize=12)
-    plt.savefig("rt_zoom.pdf", bbox_inches='tight')
-    plt.savefig("rt_zoom.png", bbox_inches='tight')
-    plt.show()
+    # plt.xlim([0., times[-1]])
+    # plt.ylim([-0.1*L, L])
+    # plt.suptitle(solver.heat_solver.title, fontsize=12)
+    # plt.savefig("rt_zoom.pdf", bbox_inches='tight')
+    # plt.savefig("rt_zoom.png", bbox_inches='tight')
+    # plt.show()
 
     # plt.plot(np.log(times[1:]), np.log(heat_position),    lw=2.5, ls="--", c="r", label="shock/heat")
     # plt.plot(np.log(times[1:]), np.log(shock_position),    lw=2.5, ls="--", c="r", label="shock/heat")

@@ -102,7 +102,7 @@ class AblationSolver():
         assert type(mass) == np.ndarray
         assert len(mass) > 0
         assert all(m>0. for m in mass)
-        assert np.min(mass[1:]-mass[:1]) > 0. #Lagrangian coordinate (acumulated cell mass) is monotone
+        assert np.min(mass[1:]-mass[:-1]) > 0. #Lagrangian coordinate (acumulated cell mass) is monotone
 
         ablated_mass = self.heat_solver.ablated_mass(time=time)
 
@@ -189,7 +189,7 @@ def test_profiles_omega():
         mu_heat=0.1206770123528319,
         gamma_heat=1.262299832903183,
         Tb=Tb,
-        rho0=19.3,
+        rho0=19.32,
         omega=omega,
     )
     

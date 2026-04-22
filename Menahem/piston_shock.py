@@ -988,7 +988,6 @@ def test_profiles():
     # solver.test_V_integral()
     solver.test_etot_integral()
     #### plot shock position
-    
     x_shock = np.linspace(0., L*1., 1000)
     times = np.array([solver.shock_time(shock_position=x) for x in x_shock])
     v_shock = np.array([solver.shock_velocity(time=t) for t in times])

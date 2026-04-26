@@ -1009,7 +1009,7 @@ def test_profiles():
     plt.autoscale(enable=True, axis='both', tight=True)
     plt.xlabel("time [sec]")
     plt.ylabel("position [cm]")
-    plt.show()
+    # plt.show()
     
     plt.figure()
     plt.plot(times, np.abs(x_shock2/x_shock-1.), label="shock position err two methods", ls="--")
@@ -1018,7 +1018,7 @@ def test_profiles():
     plt.autoscale(enable=True, axis='both', tight=True)
     plt.xlabel("time [sec]")
     plt.ylabel("err")
-    plt.show()
+    # plt.show()
 
     plt.figure()
     plt.plot(times, v_shock, label="shock")
@@ -1028,7 +1028,7 @@ def test_profiles():
     plt.autoscale(enable=True, axis='both', tight=True)
     plt.xlabel("time [sec]")
     plt.ylabel("velocity [cm/s]")
-    plt.show()
+    # plt.show()
 
     plt.figure()
     plt.plot(times, etot, label="total energy")
@@ -1039,7 +1039,7 @@ def test_profiles():
     plt.autoscale(enable=True, axis='both', tight=True)
     plt.xlabel("time [sec]")
     plt.ylabel("energy [erg]")
-    plt.show()
+    # plt.show()
 
     num_cells = 200
     coordinate = np.linspace(0., L, num_cells+1)
@@ -1098,7 +1098,7 @@ def test_profiles():
             plt.savefig(f"{fg}_euler_{use_r}_{tau}_{omega}.png", bbox_inches='tight')
             plt.savefig(f"{fg}_euler_{use_r}_{tau}_{omega}.pdf", bbox_inches='tight')
     
-    plt.show()
+    # plt.show()
 
     ########## plot position as a function of time
     position_times = np.array([np.array(solver.solve(mass=mass, time=time)["position"]) for time in times[1:]]).T

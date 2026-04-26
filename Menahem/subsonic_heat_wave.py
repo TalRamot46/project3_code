@@ -1,3 +1,4 @@
+from typing import Any
 import numpy as np
 import sys
 import scipy.integrate
@@ -942,7 +943,7 @@ class SubsonicHeatWave():
         plt.plot(xsi_vec, e_term,"r", label="E*xsi")
         plt.legend()
         plt.grid()
-        plt.show()
+        # plt.show()
 
         return self
 
@@ -1240,7 +1241,7 @@ def test_profiles():
     # exact integral of mass in each cell gives this density
     mass_cells = rho0 * dx
     mass = np.cumsum(mass_cells)
-    mass = np.array([1e-30, 1e-7*mass[0]]+ list(mass))
+    mass = np.array([1e-30, 1e-7*mass[0]]+ list[Any](mass))
 
     ##### plot hydro profiles
     for time in np.array([0.5,1., 1.5])*Units.nsec:
@@ -1265,7 +1266,7 @@ def test_profiles():
             else: plt.xlabel("mass [g/cm^2]")
             plt.ylabel(fg)
 
-    plt.show()
+    # plt.show()
 
     ########## plot position as a function of time
     position_times = np.array([np.array(solver.solve(mass=mass, time=time)["position"]) for time in times[1:]]).T

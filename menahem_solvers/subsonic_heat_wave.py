@@ -289,6 +289,8 @@ class SubsonicHeatWave():
 
         # the eulerian positions of the given Lagrangian coordinates
         position = self._position_temporal_factor(time=time) * np.array([self.get_position_self_similar_factor(xsi=xsi_i, V=Vi, U=Ui) for xsi_i, Vi, Ui in zip(xsi_vec, V, U)])
+        plt.figure("self similar profile")
+        plt.plot(mass, np.array([self.get_position_self_similar_factor(xsi=xsi_i, V=Vi, U=Ui) for xsi_i, Vi, Ui in zip(xsi_vec, V, U)]))
         
         assert all(x <= 0. or np.isnan(x) for x in position)
 
@@ -649,7 +651,7 @@ class SubsonicHeatWave():
             self.plot_profiles()
             sys.exit(1)
 
-        self.set_energy_integrals()
+        # self.set_energy_integrals()
         return self
 
     def plot_fPf(self, *, xsi_f):

@@ -230,7 +230,7 @@ def test_profiles_omega():
     plt.ylabel("ablated mass [g]", fontsize=12)
     plt.xlabel("time [sec]", fontsize=12)
     plt.suptitle(solver.heat_solver.title, fontsize=12)
-    plt.show()
+    # plt.show()
 
     # plt.plot(times, -x_boundary)
     # plt.grid()
@@ -295,7 +295,7 @@ def test_profiles_omega():
             else: plt.xlabel("mass [g/cm^2]")
             plt.ylabel(fg)
 
-    plt.show()
+    # plt.show()
 
     ########## plot position as a function of time
     results = [solver.solve(mass=mass, time=time) for time in times[1:]]
@@ -312,6 +312,10 @@ def test_profiles_omega():
     plt.plot(times[1:], piston_position,   lw=1.5, ls="--", c="b", label="piston")
     plt.plot(times[1:], boundary_position, lw=1.5, ls="--", c="g", label="boundary")
 
+    pre_factor = np.array([solver.heat_solver._position_temporal_factor(time=t) for t in times[1:]])
+    self_similar_profile = np.array([solver.heat_solver.get_position_self_similar_factor(xsi=xsi_i, V=Vi, U=Ui) for xsi_i, Vi, Ui in zip(xsi_vec, V, U)])
+
+    
     plt.legend()
     plt.xlabel("time [sec]")
     plt.ylabel("position [cm]")
@@ -325,7 +329,7 @@ def test_profiles_omega():
     plt.suptitle(solver.heat_solver.title, fontsize=12)
     plt.savefig("rt_zoom.pdf", bbox_inches='tight')
     plt.savefig("rt_zoom.png", bbox_inches='tight')
-    plt.show()
+    # plt.show()
     quit()
 
 def test_profiles():
@@ -410,7 +414,7 @@ def test_profiles():
     plt.ylabel("ablated mass [g]", fontsize=12)
     plt.xlabel("time [sec]", fontsize=12)
     plt.suptitle(solver.heat_solver.title, fontsize=12)
-    plt.show()
+    # plt.show()
 
     # plt.plot(times, -x_boundary)
     # plt.grid()
@@ -432,7 +436,7 @@ def test_profiles():
     # # ))))
 
     L = 1e-3
-    num_cells = 5000
+    num_cells = 1000
     coordinate = np.array(list(sorted(set(
         list(np.linspace(0., L, num_cells+1)) \
     ))))
@@ -474,37 +478,43 @@ def test_profiles():
                 plt.xlim(xmax=m_max)
             plt.ylabel(fg)
 
-    plt.show()
+    # plt.show()
 
     ########## plot position as a function of time
-    # results = [solver.solve(mass=mass, time=time) for time in times[1:]]
-    # position_times = np.array([r["position"] for r in results]).T
-    # shock_position = np.array([r["shock_position"] for r in results])
-    # piston_position = np.array([r["piston_position"] for r in results])
-    # heat_position = np.array([r["heat_position"] for r in results])
-    # boundary_position = np.array([r["boundary_position"] for r in results])
-    # plt.figure("position")
-    # for pos in position_times:
-    #     plt.plot(times[1:], pos, c="k",    lw=0.5)#, marker="o", markersize=1.)
-    # plt.plot(times[1:], shock_position,    lw=2.5, ls="--", c="r", label="shock")
-    # plt.plot(times[1:], heat_position,     lw=2.5, ls="--", c="fuchsia", label="heat")
-    # plt.plot(times[1:], piston_position,   lw=1.5, ls="--", c="b", label="piston")
-    # plt.plot(times[1:], boundary_position, lw=1.5, ls="--", c="k", label="boundary")
+    results = [solver.solve(mass=mass, time=time) for time in times[1:]]
+    position_times = np.array([r["position"] for r in results]).T
+    shock_position = np.array([r["shock_position"] for r in results])
+    piston_position = np.array([r["piston_position"] for r in results])
+    heat_position = np.array([r["heat_position"] for r in results])
+    boundary_position = np.array([r["boundary_position"] for r in results])
 
-    # plt.legend()
-    # plt.xlabel("time [sec]")
-    # plt.ylabel("position [cm]")
-    # plt.autoscale(enable=True, axis='both', tight=True)
-    # plt.suptitle(solver.heat_solver.title, fontsize=12)
-    # plt.savefig("rt.png", bbox_inches='tight')
-    # plt.savefig("rt.pdf", bbox_inches='tight')
+    plt.figure("position")
+    chosen_indices = np.linspace(0, len(position_times), 100, endpoint=False).astype(int)
+    for pos in position_times[chosen_indices]:
+        plt.plot(times[1:], pos, c="k",    lw=0.5)#, marker="o", markersize=1.)
+    plt.plot(times[1:], shock_position,    lw=2.5, ls="--", c="r", label="shock")
+    plt.plot(times[1:], heat_position,     lw=2.5, ls="--", c="fuchsia", label="heat")
+    plt.plot(times[1:], piston_position,   lw=1.5, ls="--", c="b", label="piston")
+    plt.plot(times[1:], boundary_position, lw=1.5, ls="--", c="k", label="boundary")
+    
+    # find the velocity of the heat wave
+    heat_velocity = solver.heat_solver.boundary_velocity(time=times[1:])
+    plt.plot(times[1:], heat_velocity, lw=2.5, ls="-", c="g", label="heat velocity")
 
-    # plt.xlim([0., times[-1]])
-    # plt.ylim([-0.1*L, L])
-    # plt.suptitle(solver.heat_solver.title, fontsize=12)
-    # plt.savefig("rt_zoom.pdf", bbox_inches='tight')
-    # plt.savefig("rt_zoom.png", bbox_inches='tight')
-    # plt.show()
+    plt.legend()
+    plt.xlabel("time [sec]")
+    plt.ylabel("position [cm]")
+    plt.autoscale(enable=True, axis='both', tight=True)
+    plt.suptitle(solver.heat_solver.title, fontsize=12)
+    plt.savefig("rt.png", bbox_inches='tight')
+    plt.savefig("rt.pdf", bbox_inches='tight')
+
+    plt.xlim([0., times[-1]])
+    plt.ylim(-L, L)
+    plt.suptitle(solver.heat_solver.title, fontsize=12)
+    plt.savefig("rt_zoom.pdf", bbox_inches='tight')
+    plt.savefig("rt_zoom.png", bbox_inches='tight')
+    plt.show()
 
     # plt.plot(np.log(times[1:]), np.log(heat_position),    lw=2.5, ls="--", c="r", label="shock/heat")
     # plt.plot(np.log(times[1:]), np.log(shock_position),    lw=2.5, ls="--", c="r", label="shock/heat")

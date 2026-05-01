@@ -95,9 +95,10 @@ def main():
         PRESET_CONSTANT_PRESSURE,
         PRESET_FIG_8,
         PRESET_FIG_10,
-        PRESET_CONSTANT_T_RADIATION
+        PRESET_CONSTANT_T_RADIATION,
+        PRESET_MALKA_HEIZLER
     )
-    preset_name = PRESET_CONSTANT_T_RADIATION  
+    preset_name = PRESET_MALKA_HEIZLER  
     
     # Get case and config from preset
     case, config = get_preset(preset_name)

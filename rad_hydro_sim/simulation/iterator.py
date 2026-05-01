@@ -178,6 +178,12 @@ def simulate_rad_hydro(
             if (step % simulation_config.store_every) == 0:
                 store_frame()
 
+            if state.t > 0.5e-9:
+                import matplotlib.pyplot as plt
+                plt.plot(state.m_cells, state.rho)
+                plt.plot(state.m_cells, state.q)
+                plt.show()
+
         if use_mp_progress:
             mp_progress[prog_slot] = 1.0
 

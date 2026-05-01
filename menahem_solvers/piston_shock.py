@@ -248,6 +248,7 @@ class PistonShock():
             if xsi <= self.xsi_s else \
             # unshocked region
             self.initial_position(mass=m)
+            # definitions of dummy variables
             for xsi, m, Vi, Ui in zip(xsi_vec, mass, V, U)
         ])
         

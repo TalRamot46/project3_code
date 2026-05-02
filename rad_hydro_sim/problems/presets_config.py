@@ -465,7 +465,7 @@ PRESET_TEST_CASES = {
 
         # grid parameters
         x_min = 0,
-        x_max = 1e-3, # m_max = 1 mg/cm^2
+        x_max = 1e-3, 
         t_sec_end = 2.061e-9,
 
         initial_condition="temperature, density",

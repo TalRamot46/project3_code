@@ -371,7 +371,7 @@ def grid_comparison_rad_hydro(
     # Menahem full model (AblationSolver) sampled on same times and mass grid.
     ablation_solver = AblationSolver(**_ablation_kwargs_from_case(case))
 
-    SAME_GRID = True
+    SAME_GRID = False
     if SAME_GRID:
         mass_grid = np.asarray(history.m[0], dtype=float)
     else:

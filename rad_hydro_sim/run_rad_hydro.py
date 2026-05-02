@@ -16,6 +16,9 @@ from project3_code.rad_hydro_sim.plotting.slider import plot_history_slider
 from project3_code.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 from project3_code.hydro_sim.problems.simulation_config import SIMULATION_CONFIGS, SimulationConfig
 
+import numpy as np
+
+
 def run_simulation(
     case: RadHydroCase,
     config: SimulationConfig,

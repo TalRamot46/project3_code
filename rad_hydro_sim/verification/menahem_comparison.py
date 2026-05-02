@@ -2,8 +2,8 @@
 """
 Menahem's analytic / semi-analytic solvers wrapped for rad_hydro_sim verification.
 
-The Menahem solver package lives as a plain folder ``project3_code/Menahem`` (no
-``__init__.py``) containing three modules:
+The Menahem solver package lives as a plain folder ``project3_code/menahem_solvers``
+(no ``__init__.py``) containing three modules:
 
 - ``subsonic_heat_wave.SubsonicHeatWave``: subsonic ablative heat wave
   (equivalent in role to Shussman's subsonic solver).
@@ -42,7 +42,7 @@ from typing import Optional
 import numpy as np
 
 # Menahem modules are a flat directory (no __init__.py); add it to sys.path.
-_MENAHEM_DIR = Path(__file__).resolve().parents[2] / "Menahem"
+_MENAHEM_DIR = Path(__file__).resolve().parents[2] / "menahem_solvers"
 if str(_MENAHEM_DIR) not in sys.path:
     sys.path.insert(0, str(_MENAHEM_DIR))
 
@@ -138,7 +138,7 @@ def _build_mass_grid(
     """Return a monotonically increasing Lagrangian mass coordinate array.
 
     Based on the discretisation used by Menahem's own tests
-    (see ``Menahem/ablation_solver.py::test_profiles``): build a dense spatial
+    (see ``menahem_solvers/ablation_solver.py::test_profiles``): build a dense spatial
     grid on ``[0, x_max]``, turn it into cumulative mass at ``case.rho0``
     (uniform initial density), and prepend a tiny cell so the solver has a
     well-defined minimum mass strictly greater than zero.
@@ -358,12 +358,22 @@ def run_menahem_piecewise_reference(
 
 
 if __name__ == "__main__":
-    # Quick smoke test: build each reference for the default full-rad-hydro preset.
+    # Quick smoke test: heat/ablation presets need T0_Kelvin; piston shock needs P0_Barye.
     from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
-    from project3_code.rad_hydro_sim.problems.presets_config import PRESET_FIG_8
+    from project3_code.rad_hydro_sim.problems.presets_config import (
+        PRESET_FIG_8,
+        PRESET_CONSTANT_PRESSURE,
+    )
 
-    case, _config = get_preset(PRESET_FIG_8)
-    t = np.array([0.25, 0.5, 0.75, 1.0]) * float(case.t_sec_end)
-    print("subsonic:", run_menahem_subsonic_reference(case, t))
-    print("shock:", run_menahem_shock_reference(case, t))
-    print("piecewise:", run_menahem_piecewise_reference(case, t))
+    case_heat, _ = get_preset(PRESET_FIG_8)
+    case_shock, _ = get_preset(PRESET_CONSTANT_PRESSURE)
+    t_heat = np.array([0.25, 0.5, 0.75, 1.0]) * float(case_heat.t_sec_end)
+    t_shock = np.array([0.25, 0.5, 0.75, 1.0]) * float(case_shock.t_sec_end)
+    
+    # plot the results
+    fig, ax = plt.subplots()
+    ax.plot(t_heat, run_menahem_subsonic_reference(case_heat, t_heat).T, label="subsonic")
+    ax.plot(t_shock, run_menahem_shock_reference(case_shock, t_shock).T, label="shock")
+    ax.plot(t_heat, run_menahem_piecewise_reference(case_heat, t_heat).T, label="piecewise")
+    ax.legend()
+    plt.show()

@@ -37,6 +37,13 @@ def get_rad_hydro_figures_dir() -> Path:
     base.mkdir(parents=True, exist_ok=True)
     return base
 
+def get_self_similar_fitting_figures_dir() -> Path:
+    """Figures directory: results/rad_hydro_sim/figures/self_similar_fitting (with png/ and gif/ inside)."""
+    from project3_code.hydro_sim.problems.simulation_config import get_results_dir
+    base = get_results_dir() / "self_similar_fitting"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
 def get_menahem_reproduction_figures_dir() -> Path:
     """Figures directory: results/rad_hydro_sim/figures/menahem_reproduction (with png/ and gif/ inside)."""
     from project3_code.hydro_sim.problems.simulation_config import get_results_dir

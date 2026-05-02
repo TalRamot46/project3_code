@@ -30,7 +30,7 @@ from project3_code.menahem_solvers.ablation_solver import AblationSolver
 from project3_code.rad_hydro_sim.output_paths import get_menahem_reproduction_figures_dir
 from project3_code.rad_hydro_sim.problems.presets_config import (
     PRESET_CONSTANT_PRESSURE,
-    PRESET_MALKA_HEIZLER,
+    PRESET_MENAHEM_ABLATION_COMPARISON,
 )
 from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
 from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
@@ -48,6 +48,30 @@ def _pressure_drive_sim_units(t_sec: float, p0_barye: float, tau: float) -> floa
         return 0.0
     return float(p0_barye) * ((float(t_sec) / S_PER_NS) ** float(tau))
 
+def _get_equally_spaced_elements(times: np.ndarray, n: int) -> np.ndarray:
+    # based on _interpolate_to_time in compare_radiation_plots.py - but runs faster using binary search.
+    # 1. Define the target ideal times (perfectly linear)
+    ideal_times = np.linspace(times.min(), times.max(), n)
+    
+    # 2. Find the indices in the actual 'times' array that are closest 
+    # to each 'ideal' time value. searchsorted is efficient here.
+    # We use searchsorted to find the insertion point, then adjust to the nearest neighbor.
+    indices = np.searchsorted(times, ideal_times)
+    
+    # Clip indices to ensure they are within the array bounds
+    indices = np.clip(indices, 0, len(times) - 1)
+    
+    # Optional: Refine to ensure we pick the ABSOLUTE closest neighbor 
+    # (searchsorted always leans one way)
+    for i in range(len(indices)):
+        idx = indices[i]
+        if idx > 0 and abs(times[idx-1] - ideal_times[i]) < abs(times[idx] - ideal_times[i]):
+            indices[i] = idx - 1
+            
+    # Ensure uniqueness in case n is very close to N or times are clustered
+    unique_indices = np.unique(indices)
+    
+    return times[unique_indices]
 
 def find_shock_front(
     rho: np.ndarray,
@@ -150,14 +174,28 @@ def _ablation_kwargs_from_case(case) -> dict:
     )
 
 
-def _build_mass_grid_uniform(case, num_cells: int) -> np.ndarray:
-    coordinate = np.linspace(0.0, float(case.x_max), int(num_cells) + 1)
-    dx = np.diff(coordinate)
-    mass_cells = np.full_like(dx, float(case.rho0)) * dx
-    mass = np.cumsum(mass_cells)
-    tiny_m = 1e-10 * mass[0]
-    return np.concatenate([[tiny_m * 1e-5, tiny_m], mass])
+def _build_mass_grid_uniform(case, omega: float, num_cells: int) -> np.ndarray:
+    # Cursor's version
+    # coordinate = np.linspace(0.0, float(case.x_max), int(num_cells) + 1)
+    # dx = np.diff(coordinate)
+    # mass_cells = np.full_like(dx, float(case.rho0)) * dx
+    # mass = np.cumsum(mass_cells)
+    # tiny_m = 1e-10 * mass[0]
+    # return np.concatenate([[tiny_m * 1e-5, tiny_m], mass])
 
+    coordinate = np.array(list(sorted(set(
+        list(np.linspace(0., float(case.x_max), num_cells+1)) \
+    ))))
+
+    dx = coordinate[1:] - coordinate[:-1]
+    density = case.rho0 / (1.-omega) * (coordinate[1:]**(1.-omega) - coordinate[:-1]**(1.-omega))/(coordinate[1:] - coordinate[:-1])
+
+    # exact integral of mass in each cell gives this density
+    mass_cells = density * dx
+    mass = np.cumsum(mass_cells)
+    mass = np.array([1e-30, 1e-7*mass[0]]+ list(mass))
+
+    return mass
 
 def grid_comparison_hydro(
     *,
@@ -309,26 +347,17 @@ def grid_comparison_hydro(
 
 def grid_comparison_rad_hydro(
     *,
-    tau: float,
     n_cells: int,
-    t_end_sec: float,
     store_every: int,
     shock_smoothing_window: int,
 ) -> Path:
     # Full rad-hydro simulation case (temperature drive + radiation coupling).
-    case_base, config_base = get_preset(PRESET_MALKA_HEIZLER)
-    case = replace(
-        case_base,
-        tau=float(tau),
-        t_sec_end=float(t_end_sec),
-        title=f"Rad-hydro grid comparison (tau={tau:g})",
-    )
+    case_base, config_base = get_preset(PRESET_MENAHEM_ABLATION_COMPARISON)
+    case = case_base
     config = replace(
         config_base,
         N=int(n_cells),
         store_every=max(1, int(store_every)),
-        show_plot=False,
-        show_slider=False,
     )
     _, _, _, history = simulate_rad_hydro(case, config)
     if case.rho0 is None:
@@ -338,13 +367,18 @@ def grid_comparison_rad_hydro(
 
     times = np.asarray(history.t, dtype=float)
     x_sim = np.asarray(history.x, dtype=float)
-    matched_sim_coordinates = np.zeros_like(x_sim, dtype=float)
-    matched_sim_coordinates[:, 1:] = 0.5 * (x_sim[:, 1:] + x_sim[:, :-1])
 
     # Menahem full model (AblationSolver) sampled on same times and mass grid.
     ablation_solver = AblationSolver(**_ablation_kwargs_from_case(case))
-    mass_grid = _build_mass_grid_uniform(case, n_cells)
-    times_model = np.linspace(0.0, times.max(), num=100, dtype=float)
+
+    SAME_GRID = True
+    if SAME_GRID:
+        mass_grid = np.asarray(history.m[0], dtype=float)
+    else:
+        mass_grid = _build_mass_grid_uniform(case, omega=0.0, num_cells=n_cells)
+    
+    # take 200 equally spaced times (as much as possible) between 0 and times.max() which *all appear inside times array*
+    times_model = _get_equally_spaced_elements(times, 200)
     results = [ablation_solver.solve(mass=mass_grid, time=max(float(t), 1e-18)) for t in times_model]
     position_times = np.array([r["position"] for r in results]).T
     shock_position = np.array([r["shock_position"] for r in results], dtype=float)
@@ -369,28 +403,39 @@ def grid_comparison_rad_hydro(
             x_shock_sim[k - 1] = float(x_sim[k, ishock])
 
     fig, ax = plt.subplots(figsize=(9.2, 6.4))
-    chosen_cell_indices = np.linspace(0, x_sim.shape[1] - 2, num=min(30, x_sim.shape[1] - 1), dtype=int)
-    for j in chosen_cell_indices:
-        ax.plot(times, matched_sim_coordinates[:, j + 1], color="royalblue", lw=0.45, alpha=0.55)
-    for j in chosen_cell_indices:
-        ax.plot(times_model, position_times[j + 2], color="black", lw=0.45, alpha=0.6)
+    legend_once_flag = False
+    NUM_PRESENTED_CELLS = 200
+    if SAME_GRID:
+        chosen_cell_indices = _get_equally_spaced_elements(np.arange(x_sim.shape[1]), min(NUM_PRESENTED_CELLS, x_sim.shape[1] - 1))
+        for j in chosen_cell_indices:
+            ax.plot(times, x_sim[:, j], color="royalblue", lw=1, alpha=1, label="Simulation Cells" if not legend_once_flag else None)
+            ax.plot(times_model, position_times[j], color="black", lw=1, alpha=1, label="Analytic Cells" if not legend_once_flag else None)
+            legend_once_flag = True
+    else:
+        chosen_cell_indices = _get_equally_spaced_elements(np.arange(x_sim.shape[1]), min(NUM_PRESENTED_CELLS, x_sim.shape[1] - 1))
+        matched_sim_coordinates = np.zeros_like(x_sim, dtype=float)
+        matched_sim_coordinates[:, 1:] = 0.5 * (x_sim[:, 1:] + x_sim[:, :-1])
+        for j in chosen_cell_indices:
+            ax.plot(times, matched_sim_coordinates[:, j + 1], color="royalblue", lw=1, alpha=1, label="Simulation Cells")
+        for j in chosen_cell_indices:
+            ax.plot(times_model, position_times[j + 2], color="black", lw=1, alpha=1, label="Analytic Cells")
 
     ax.plot(times[1:], x_shock_sim, lw=2.0, c="red", label="shock Simulation")
-    ax.plot(times[1:], shock_position, lw=2.0, ls="--", c="blue", label="shock Analytic")
-    ax.plot(times[1:], piston_position, lw=1.6, ls="--", c="green", label="piston Analytic")
-    ax.plot(times[1:], heat_position, lw=1.6, ls="--", c="fuchsia", label="heat Analytic")
-    ax.plot(times[1:], boundary_position, lw=1.6, ls="--", c="black", label="boundary Analytic")
+    ax.plot(times_model, shock_position, lw=2.0, ls="--", c="blue", label="shock Analytic")
+    ax.plot(times_model, piston_position, lw=1.6, ls="--", c="green", label="piston Analytic")
+    ax.plot(times_model, heat_position, lw=1.6, ls="--", c="fuchsia", label="heat Analytic")
+    ax.plot(times_model, boundary_position, lw=1.6, ls="--", c="black", label="boundary Analytic")
 
     ax.set_xlabel(r"$t$ [sec]")
     ax.set_ylabel(r"$x$ [cm]")
-    ax.set_title(rf"Full rad-hydro comparison, $\tau={tau:g}$, $N_{{cells}}={n_cells}$")
+    ax.set_title(rf"Full rad-hydro comparison, $\tau={case.tau:g}$, $N_{{cells}}={n_cells}$")
     ax.grid(alpha=0.25)
     ax.legend(loc="lower right", fontsize=9)
     ax.set_xlim(times.min(), times.max())
 
     out_dir = get_menahem_reproduction_figures_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
-    tau_tag = str(tau).replace(".", "p").replace("-", "m")
+    tau_tag = str(case.tau).replace(".", "p").replace("-", "m")
     import time
     time_signature = time.strftime("%Y%m%d_%H%M%S")
     out_path = out_dir / f"xt_menahem_vs_full_rad_hydro_tau_{tau_tag}_time_{time_signature}.png"
@@ -415,46 +460,35 @@ def main() -> None:
     # store_every = 1
     # shock_smoothing_window = 5
     # piston_rel_tol = 0.05
-
-    taus = [0.123]
-    n_cells = 100
+    n_cells = 1000
     omega = 0.
     gamma = 1.25
     rho0 = 19.32
     p0_barye = 1.0
-    t_end_sec = 1e-9
     store_every = 1
     shock_smoothing_window = 5
     piston_rel_tol = 0.05
-    print(f"Running taus={taus}")
     output_paths: list[Path] = []
-    for tau in taus:
-        if comparison_mode == "hydro":
-            out = grid_comparison_hydro(
-                tau=tau,
-                n_cells=n_cells,
-                omega=omega,
-                gamma=gamma,
-                rho0=rho0,
-                p0_barye=p0_barye,
-                length_cm=None,
-                t_end_sec=t_end_sec,
-                store_every=store_every,
-                shock_smoothing_window=shock_smoothing_window,
-                piston_rel_tol=piston_rel_tol,
-            )
-        elif comparison_mode == "rad_hydro":
-            out = grid_comparison_rad_hydro(
-                tau=tau,
-                n_cells=n_cells,
-                t_end_sec=t_end_sec,
-                store_every=store_every,
-                shock_smoothing_window=shock_smoothing_window,
-            )
-        else:
-            raise ValueError("comparison_mode must be either 'hydro' or 'rad_hydro'")
-        output_paths.append(out)
-        print(f"Saved: {out}")
+    if comparison_mode == "hydro":
+        out = grid_comparison_hydro(
+            tau=tau,
+            n_cells=n_cells,
+            omega=omega,
+            gamma=gamma,
+            rho0=rho0,
+            p0_barye=p0_barye,
+            length_cm=None,
+            t_end_sec=t_end_sec,
+            store_every=store_every,
+            shock_smoothing_window=shock_smoothing_window,
+            piston_rel_tol=piston_rel_tol,
+        )
+    elif comparison_mode == "rad_hydro":
+        out = grid_comparison_rad_hydro(
+            n_cells=n_cells,
+            store_every=store_every,
+            shock_smoothing_window=shock_smoothing_window,
+        )
 
 
 if __name__ == "__main__":

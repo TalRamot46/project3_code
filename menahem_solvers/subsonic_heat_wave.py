@@ -284,13 +284,20 @@ class SubsonicHeatWave():
         # self similar profiles
         result = self.get_self_similar_profiles(xsi_vec=xsi_vec)
         V, P, U, S = result["V"], result["P"], result["U"], result["S"]
+        T_dim = self.get_T(P=P, V=V)
+        in_region = np.isfinite(V) & (V > 0)
+        dimensionless = dict(
+            xsi=np.asarray(xsi_vec, dtype=float),
+            rho=np.where(in_region, 1.0 / V, np.nan),
+            P=np.asarray(P, dtype=float),
+            U=np.asarray(U, dtype=float),
+            T=np.asarray(T_dim, dtype=float),
+        )
 
         boundary_position = self.boundary_position(time=time)
 
         # the eulerian positions of the given Lagrangian coordinates
         position = self._position_temporal_factor(time=time) * np.array([self.get_position_self_similar_factor(xsi=xsi_i, V=Vi, U=Ui) for xsi_i, Vi, Ui in zip(xsi_vec, V, U)])
-        plt.figure("self similar profile")
-        plt.plot(mass, np.array([self.get_position_self_similar_factor(xsi=xsi_i, V=Vi, U=Ui) for xsi_i, Vi, Ui in zip(xsi_vec, V, U)]))
         
         assert all(x <= 0. or np.isnan(x) for x in position)
 
@@ -316,6 +323,7 @@ class SubsonicHeatWave():
             temperature=((p*v**(1-self.mu))/(self.r*self.f))**(1./self.beta),
             sie=p*v/self.r, #specific internal energy
             radiation_energy_flux=radiation_energy_flux,
+            dimensionless=dimensionless,
         )
  
     def get_self_similar_profiles(self, *, xsi_vec, xsi_f=None, Pf=None):

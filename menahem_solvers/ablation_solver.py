@@ -79,6 +79,9 @@ class AblationSolver():
             p0=p0s,
             tau=tau_s,
             gamma=gamma_shock,
+            eos_mu=mu_shock,
+            eos_beta=beta_shock,
+            eos_f=f_shock,
         )
 
         # these EOS parameters in the shock
@@ -138,6 +141,16 @@ class AblationSolver():
             result_shock[key] = result_shock[key][1:] # remove the shock solution at the ablated mass (that was added before in order the get the heat position)
             result[key] = np.array(list(result_heat[key]) + list(result_shock[key]))
             assert len(result[key]) == len(mass), f"{len(result[key])} {len(mass)}"
+
+        dim = {}
+        for dk in ("xsi", "rho", "P", "U", "T"):
+            dim[dk] = np.concatenate(
+                [
+                    np.asarray(result_heat["dimensionless"][dk], dtype=float),
+                    np.asarray(result_shock["dimensionless"][dk], dtype=float)[1:],
+                ]
+            )
+        result["dimensionless"] = dim
         
         # other scalar quantities
         result["heat_position"] = heat_position

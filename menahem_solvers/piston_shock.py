@@ -28,7 +28,16 @@ class PistonShock():
                  p0,        # boundary pressure coeff
                  tau,       # boundary pressure temporal power
                  gamma,     # adiabatic index
-                 ode_scheme="dopri5"):
+                 ode_scheme="dopri5",
+                 eos_mu=None,
+                 eos_beta=None,
+                 eos_f=None,
+                 ):
+        """
+        Optional eos_mu, eos_beta, eos_f: if all three are set, dimensionless
+        temperature in solve() uses ((P*rho^(mu-1))/(r*f))^(1/beta) with self-similar
+        P and rho=1/V; otherwise T_dim = P*V/r (ideal-gas internal-energy scaling).
+        """
 
         logger.info(f"creating a PistonShock calculator...")
 
@@ -56,6 +65,13 @@ class PistonShock():
         self.v0 = 1. / self.rho0
         self.r = gamma - 1.
         self.rep = f"tau={self.tau:g} w={self.omega:g}"
+
+        eos_set = sum(x is not None for x in (eos_mu, eos_beta, eos_f))
+        if eos_set not in (0, 3):
+            raise ValueError("eos_mu, eos_beta, eos_f must be given together or all omitted.")
+        self.eos_mu = eos_mu
+        self.eos_beta = eos_beta
+        self.eos_f = eos_f
 
         # coefficients for exact calculation of V integral
         self.q1 = 1.-self.omega
@@ -242,6 +258,26 @@ class PistonShock():
         # self similar profiles
         V, U, P = self.get_self_similar_profiles(xsi_vec=xsi_vec)
 
+        shocked = (xsi_vec <= self.xsi_s) & (V > 0)
+        rho_dim = np.where(shocked, 1.0 / V, np.nan)
+        P_dim = np.where(shocked, P, np.nan)
+        U_dim = np.where(shocked, U, np.nan)
+        if self.eos_mu is not None:
+            T_dim = np.where(
+                shocked,
+                ((P * (1.0 / V) ** (self.eos_mu - 1.0)) / (self.r * self.eos_f)) ** (1.0 / self.eos_beta),
+                np.nan,
+            )
+        else:
+            T_dim = np.where(shocked, P * V / self.r, np.nan)
+        dimensionless = dict(
+            xsi=np.asarray(xsi_vec, dtype=float),
+            rho=rho_dim,
+            P=P_dim,
+            U=U_dim,
+            T=T_dim,
+        )
+
         position = np.array([
              # shocked region
             self._position_temporal_factor(time=time)*(self.q1*xsi*Vi+self.q2*Ui)\
@@ -284,6 +320,7 @@ class PistonShock():
             velocity=u, 
             pressure=p,
             sie=p*v/self.r, #specific internal energy
+            dimensionless=dimensionless,
         )
         
     def get_shock_values(self,*, xsi_s):

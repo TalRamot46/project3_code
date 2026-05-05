@@ -702,13 +702,7 @@ def run_full_rad_hydro_comparison(
             linestyle="-",
         )
 
-    # Build the semi-analytic references (Shussman and/or Menahem)
-    if skip_rad_hydro:
-        # 0.01 ns to t_end (1 ns), 100 frames for slider
-        t_min = max(case.t_sec_end / 100, 1e-15)
-        times_sec = np.linspace(t_min, case.t_sec_end, 100)
-    else:
-        times_sec = np.linspace(0, case.t_sec_end, 10000)
+    times_sec = np.linspace(0, case.t_sec_end, 10000)
     time_ns = np.atleast_1d(times_sec * 1e9).ravel()
     T0_HeV = float(case.T0_Kelvin) / KELVIN_PER_HEV  # pyright: ignore[reportArgumentType]
 
@@ -1078,7 +1072,7 @@ def main() -> None:
 
     run_comparison(
         MODE,
-        skip_rad_hydro=False,
+        skip_rad_hydro=True,
         skip_diffusion=False,
         skip_supersonic=False,
         skip_hydro_sim=False,

@@ -253,6 +253,7 @@ def run_radiation_only_comparison(
             f_Kelvin=float(case.f_Kelvin),
             g_Kelvin=float(case.g_Kelvin),
             T_right_Kelvin=float(case.T_right_Kelvin or 0.0),
+            marshak_boundary=True,
         )
         ref_data = diffusion_output_to_radiation_data(times_sec, z, T_list, E_rad_list)
         print(f"Stored {len(ref_data.times)} time steps.")
@@ -283,19 +284,6 @@ def run_radiation_only_comparison(
         if super_data is not None:
             print(f"Stored {len(super_data.times)} time steps (Shussman supersonic).")
             extra_refs.append(super_data)
-
-    if not skip_supersonic and reference_solver.use_menahem:
-        print("Running Menahem SubsonicHeatWave reference...")
-        # Use the same time grid as the 1D Diffusion reference for direct comparison.
-        times_for_menahem = ref_data.times if ref_data is not None else (
-            sim_data.times if sim_data is not None else np.linspace(
-                0.05, 0.95, 20
-            ) * float(case.t_sec_end)
-        )
-        menahem_sub = run_menahem_subsonic_reference(case, times_for_menahem)
-        if menahem_sub is not None:
-            print(f"Stored {len(menahem_sub.times)} time steps (Menahem subsonic).")
-            extra_refs.append(menahem_sub)
 
     # Need at least one radiation curve to plot; pair sim_data and ref_data up
     # sensibly if one is missing so the primary plot signature stays happy.
@@ -1062,12 +1050,12 @@ def run_comparison(
 
 def main() -> None:
     """Entry point: select mode and which reference solver(s) to overlay."""
-    MODE = VerificationMode.FULL_RAD_HYDRO
-    # MODE = VerificationMode.RADIATION_ONLY
+    # MODE = VerificationMode.FULL_RAD_HYDRO
+    MODE = VerificationMode.RADIATION_ONLY
     # MODE = VerificationMode.HYDRO_ONLY
 
-    REFERENCE_SOLVER = ReferenceSolver.BOTH
-    # REFERENCE_SOLVER = ReferenceSolver.SHUSSMAN
+    # REFERENCE_SOLVER = ReferenceSolver.BOTH
+    REFERENCE_SOLVER = ReferenceSolver.SHUSSMAN
     # REFERENCE_SOLVER = ReferenceSolver.MENAHEM
 
     run_comparison(

@@ -355,6 +355,10 @@ class PistonShock():
         For the correct xsi_s, the value of P should be equal to 1.0,
         Therefore, the root of integrate_inward(xsi_s)[2]-1=0 is the exact xsi_s of the problem.
         """
+        if isinstance(xsi_s, np.ndarray):
+            # scipy root-finders may pass a single-value ndarray.
+            assert xsi_s.size == 1
+            xsi_s = float(xsi_s[0])
         assert xsi_s > 0., xsi_s
 
         # Hugoniot - values at the shock
@@ -387,6 +391,10 @@ class PistonShock():
         xsi_s is the root of this function
         returns P(0)-1, where P was integrated from the given xsi_s to the origin
         """
+        if isinstance(xsi_s, np.ndarray):
+            # fsolve wraps scalar unknowns as shape-(1,) arrays.
+            assert xsi_s.size == 1
+            xsi_s = float(xsi_s[0])
         return self.integrate_inward(xsi_s=xsi_s)[2]-1.
 
     def find_xsi_s_fsolve(self):

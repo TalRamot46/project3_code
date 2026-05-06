@@ -161,7 +161,7 @@ def U_m_of_T(UR):
 # -----------------------------
 # Core implicit step
 # -----------------------------
-def implicit_step_self_similar_model(E, UR, *, tau=0.0, t=0.0, dt_local=None):
+def implicit_step_self_similar_model(E, UR, *, tau=0.0, t=0.0, dt_local=None, marshak_boundary=False):
     """
     One backward-Euler step using:
       - variable D^n (harmonic face averages)
@@ -169,14 +169,18 @@ def implicit_step_self_similar_model(E, UR, *, tau=0.0, t=0.0, dt_local=None):
     Tridiagonal coefficients match your implementation.
 
     BCs:
-      E_left  = a*(T_bath * t^tau)^4
+      E_left  = a*(T_bath * t^tau)^4 if marshak_boundary else a*(T_bath * t^tau)^4 + 2 / (a * c) * radiation_energy_flux
       E_right = 0
     """
     if dt_local is None:
         dt_local = dt
 
-    N = E.size
-    n_int = N - 2  # solve for i=1..N-2
+    if marshak_boundary: 
+        N = E.size
+        n_int = N - 1  # solve for i=1..N-2
+    else:
+        N = E.size
+        n_int = N - 2  # solve for i=1..N-2
 
     # Boundary conditions
     # E_right: vacuum (0) when T_right_Kelvin=0; cold sink otherwise (match Rad-Hydro for verification)
@@ -189,6 +193,7 @@ def implicit_step_self_similar_model(E, UR, *, tau=0.0, t=0.0, dt_local=None):
         E_left = a * (T_bath * (t**tau)) ** 4
         E_right = 0.0 if T_right_Kelvin <= 0 else a * (T_right_Kelvin / KELVIN_PER_HEV) ** 4
 
+    T_left = (E_left / a) ** 0.25
     # Build D_i^n, beta_i^n, sigma_i^n from UR^n -> T^n
     Tn = (UR / a) ** 0.25
     Dn = D_of_T(Tn)
@@ -211,27 +216,50 @@ def implicit_step_self_similar_model(E, UR, *, tau=0.0, t=0.0, dt_local=None):
     upper = np.zeros(n_int - 1)
     rhs = np.zeros(n_int)
 
-    for k in range(n_int):
-        i = k + 1  # i=1..N-2
-        D_imh = D_face[i - 1]  # i-1/2
-        D_iph = D_face[i]      # i+1/2
+    if marshak_boundary:
+        diag[0] = 1 + 2 * D_face[0] / (c * dz)
+        upper[0] = - 2 * D_face[0] / (c * dz)
+        rhs[0] = a * (T_left) ** 4
 
-        a_i = -D_imh / dz**2
-        c_i = -D_iph / dz**2
-        b_i = (1.0 / dt_local) + (D_imh + D_iph) / dz**2 + coupling[i]
-        d_i = (E[i] / dt_local) + coupling[i] * UR[i]
+        for k in range(1, n_int):
+            i = k  # i=1..N-2
+            D_imh = D_face[i - 1]  # i-1/2
+            D_iph = D_face[i]      # i+1/2
 
-        diag[k] = b_i
-        rhs[k] = d_i
-        if k > 0:
+            a_i = -D_imh / dz**2
+            c_i = -D_iph / dz**2
+            b_i = (1.0 / dt_local) + (D_imh + D_iph) / dz**2 + coupling[i]
+            d_i = (E[i] / dt_local) + coupling[i] * UR[i]
+
+            diag[k] = b_i
+            rhs[k] = d_i
             lower[k - 1] = a_i
-        if k < n_int - 1:
-            upper[k] = c_i
+            if k < n_int - 1:
+                upper[k] = c_i
 
-    # BC contribution on first interior equation (i=1)
-    D_1mh = D_face[0]
-    a_1 = -D_1mh / dz**2
-    rhs[0] -= a_1 * E_left
+
+    else:
+        for k in range(n_int):
+            i = k + 1  # i=1..N-2
+            D_imh = D_face[i - 1]  # i-1/2
+            D_iph = D_face[i]      # i+1/2
+
+            a_i = -D_imh / dz**2
+            c_i = -D_iph / dz**2
+            b_i = (1.0 / dt_local) + (D_imh + D_iph) / dz**2 + coupling[i]
+            d_i = (E[i] / dt_local) + coupling[i] * UR[i]
+
+            diag[k] = b_i
+            rhs[k] = d_i
+            if k > 0:
+                lower[k - 1] = a_i
+            if k < n_int - 1:
+                upper[k] = c_i
+
+        # BC contribution on first interior equation (i=1)
+        D_1mh = D_face[0]
+        a_1 = -D_1mh / dz**2
+        rhs[0] -= a_1 * E_left
 
     # last BC term uses E_right=0 => no effect, kept for clarity
     # D_N2ph = D_face[-1]
@@ -268,7 +296,7 @@ def init_state():
     return E0, UR0
 
 
-def run_time_loop(E, UR, tau, times_to_store, *, dtfac=0.05, dtmin=5e-15):
+def run_time_loop(E, UR, tau, times_to_store, *, dtfac=0.05, dtmin=5e-15, marshak_boundary=False):
     """
     Run the PDE time loop; store Um, T at requested times.
     Returns stored_t, stored_Um, stored_T.
@@ -294,7 +322,7 @@ def run_time_loop(E, UR, tau, times_to_store, *, dtfac=0.05, dtmin=5e-15):
         Eold = E.copy()
         URold = UR.copy()
 
-        E, UR = implicit_step_self_similar_model(E, UR, tau=tau, t=t, dt_local=dt_local)
+        E, UR = implicit_step_self_similar_model(E, UR, tau=tau, t=t, dt_local=dt_local, marshak_boundary=marshak_boundary)
 
         t_next = t + dt_local
 

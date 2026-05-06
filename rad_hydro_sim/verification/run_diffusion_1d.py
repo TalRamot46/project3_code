@@ -36,6 +36,7 @@ def run_diffusion_1d(
     f_Kelvin: float | None = None,
     g_Kelvin: float | None = None,
     T_right_Kelvin: float = 0.0,
+    marshak_boundary: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, List[np.ndarray], List[np.ndarray]]:
     """
     Run the 1D Diffusion self-similar code with given physical parameters.
@@ -63,6 +64,9 @@ def run_diffusion_1d(
     T_right_Kelvin : float, optional
         Right boundary temperature [K]. Use 0 for vacuum (match Rad-Hydro).
         Default 0 for verification; 300 for original cold-sink behavior.
+    marshak_boundary : bool
+        Whether to use the Marshak boundary condition.
+        Default False for verification; True for original Marshak boundary condition.
 
     Returns
     -------
@@ -109,6 +113,7 @@ def run_diffusion_1d(
     diffusion.f_Kelvin = f_Kelvin
     diffusion.g_Kelvin = g_Kelvin
     diffusion.T_right_Kelvin = T_right_Kelvin
+    diffusion.marshak_boundary = marshak_boundary
 
     times_to_store = np.linspace(t_end * 0.05, t_end * 0.95, n_times)
 

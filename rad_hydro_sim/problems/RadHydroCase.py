@@ -83,6 +83,11 @@ class RadHydroCase(ABC):
         default_factory=lambda: np.array([], dtype=float)
     )
 
+    # Boundary condition type for the radiation solve at the left boundary.
+    # - "Marshak": Marshak (P1) boundary condition using a bath temperature drive
+    # - "Dirichelt": classical Dirichlet style (fixed left face temperature)
+    bc_type: Literal["Marshak", "Dirichelt"] = "Marshak"
+
     def _get_params(
         self,
     ) -> Tuple[float, float, float, float, float, float, float]:

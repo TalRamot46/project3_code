@@ -160,6 +160,60 @@ def calculate_abcd(
     return a, b, c_coeff, d
 
 
+def calculate_abcd_marshak(
+    sigma: np.ndarray,
+    D: np.ndarray,
+    A: np.ndarray,
+    m_cells: np.ndarray,
+    rho: np.ndarray,
+    E_rad: np.ndarray | None,
+    T_material: np.ndarray,
+    dt: float,
+    coeff_scheme: str = "legacy",
+    T_bath: float | None = None,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Return a,b,c,d but modify first/last diagonal & rhs according to Marshak BC.
+
+    This reuses `calculate_abcd` then applies the Marshak appendix corrections:
+      	ilde{b}_1 = b_1 + c * rho_1^* / (2 \Delta m_1)
+      	ilde{d}_1 = d_1 + (c * a * rho_1^* T_bath^4) / (2 \Delta m_1)
+      	ilde{b}_N = b_N + c * rho_N^* / (2 \Delta m_N)
+
+    Note: `T_bath` should be the bath temperature in Kelvin (used to compute a*T^4).
+    """
+    # Get base coefficients
+    a, b, c_coeff, d = calculate_abcd(
+        sigma, D, A, m_cells, rho, E_rad, T_material, dt, coeff_scheme=coeff_scheme
+    )
+
+    # Defensive copies
+    b = b.copy()
+    d = d.copy()
+
+    # Need a bath temperature to set the Marshak drive; if not provided, use left interior
+    if T_bath is None:
+        # fallback: use material temperature at left cell
+        T_bath = float(T_material[0]) if len(T_material) > 0 else 0.0
+
+    # Map indices: coefficient arrays are interior (length = Ncells - 2)
+    # The first interior equation corresponds to physical cell index 1 (python index 1),
+    # but the Marshak appendix refers to the first cell center j=1 (python index 0).
+    # We follow the appendix and use rho[0] and m_cells[0] for the left-most cell.
+    if b.size >= 1:
+        rho_left = float(rho[0])
+        dm_left = float(m_cells[0])
+        b[0] += c * rho_left / (2.0 * dm_left)
+        d[0] += (c * a_Kelvin * rho_left * (T_bath ** 4)) / (2.0 * dm_left)
+
+    # Modify last interior diagonal for vacuum/leakage at right (free streaming)
+    if b.size >= 1:
+        rho_right = float(rho[-1])
+        dm_right = float(m_cells[-1])
+        b[-1] += c * rho_right / (2.0 * dm_right)
+
+    return a, b, c_coeff, d
+
+
 def _get_right_bc_mode(rad_hydro_case: RadHydroCase) -> str:
     """Return normalized right-BC mode name."""
     mode = str(getattr(rad_hydro_case, "right_BC", "Neuman"))
@@ -350,22 +404,37 @@ def radiation_step(
     D = calculate_D_from_sigma(sigma)
     A = calculate_A(beta, sigma, dt)
 
-    # Calculate tridiagonal system coefficients
-    if mode == "gray corrected":
-        a, b, c_coeff, d = calculate_abcd(
-            sigma, D, A, m_cells, rho, None, T_material_star, dt, coeff_scheme=coeff_scheme
-        )
-    else:
-        a, b, c_coeff, d = calculate_abcd(
-            sigma, D, A, m_cells, rho, E_rad, T_material_star, dt, coeff_scheme=coeff_scheme
-        )
+    # Calculate tridiagonal system coefficients.
+    # If Marshak BC requested, compute the left bath drive first and let
+    # calculate_abcd_marshak apply the Marshak modifications to the system.
+    bc_type = getattr(rad_hydro_case, "bc_type", "Marshak")
 
-    # Apply boundary conditions
     t_drive = max(state_star.t, dt)
     T0_left = rad_hydro_case.T0_Kelvin if rad_hydro_case.T0_Kelvin is not None else 0.0
     T_left = T0_left * (t_drive/(10**-9))**rad_hydro_case.tau
     E_left = a_Kelvin * T_left**4
-    d[0] -= a[0] * E_left
+
+    if bc_type == "Marshak":
+        if mode == "gray corrected":
+            a, b, c_coeff, d = calculate_abcd_marshak(
+                sigma, D, A, m_cells, rho, None, T_material_star, dt, coeff_scheme=coeff_scheme, T_bath=T_left
+            )
+        else:
+            a, b, c_coeff, d = calculate_abcd_marshak(
+                sigma, D, A, m_cells, rho, E_rad, T_material_star, dt, coeff_scheme=coeff_scheme, T_bath=T_left
+            )
+        # Marshak included the left-drive directly in d[0], do not subtract a[0]*E_left
+    else:
+        if mode == "gray corrected":
+            a, b, c_coeff, d = calculate_abcd(
+                sigma, D, A, m_cells, rho, None, T_material_star, dt, coeff_scheme=coeff_scheme
+            )
+        else:
+            a, b, c_coeff, d = calculate_abcd(
+                sigma, D, A, m_cells, rho, E_rad, T_material_star, dt, coeff_scheme=coeff_scheme
+            )
+        # classical Dirichlet-like handling: subtract left boundary contribution
+        d[0] -= a[0] * E_left
 
     e_right_dirichlet = _apply_right_bc_to_system(b, c_coeff, d, rad_hydro_case)
 

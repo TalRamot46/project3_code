@@ -162,6 +162,7 @@ PRESET_TEST_CASES = {
         scenario="radiation_only",
         title="Radiation-only constant T drive (Au, 300 K)",
         geom=planar(),
+        bc_type="Marshak",
     ),
     PRESET_RAD_HYDRO_CONSTANT_T: RadHydroCase(
         # Rosen's opacity parameters

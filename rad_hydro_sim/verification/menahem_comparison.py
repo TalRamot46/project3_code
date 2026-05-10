@@ -47,7 +47,7 @@ if str(_MENAHEM_DIR) not in sys.path:
     sys.path.insert(0, str(_MENAHEM_DIR))
 
 from project3_code.rad_hydro_sim.verification.radiation_data import RadiationSimData
-from project3_code.rad_hydro_sim.verification.hydro_data import RadHydroData
+from project3_code.rad_hydro_sim.verification.hydro_data import RadHydroSimData
 from project3_code.hydro_sim.verification.compare_shock_plots import HydroSimData
 from project3_code.rad_hydro_sim.simulation.radiation_step import (
     a_Kelvin,
@@ -279,7 +279,7 @@ def run_menahem_piecewise_reference(
     label: str = "Menahem (ablation solver)",
     color: str = MENAHEM_COLOR,
     linestyle=MENAHEM_LINESTYLE,
-) -> Optional[RadHydroData]:
+) -> Optional[RadHydroSimData]:
     """Build full-rad-hydro reference from Menahem's ``AblationSolver``.
 
     The solver patches the subsonic heat wave and the piston shock internally;
@@ -340,7 +340,7 @@ def run_menahem_piecewise_reference(
         T_list.append(T_HeV)
         E_list.append(E_rad)
 
-    return RadHydroData(
+    return RadHydroSimData(
         times=times,
         m=m_list,
         x=x_list,
@@ -361,11 +361,11 @@ if __name__ == "__main__":
     # Quick smoke test: heat/ablation presets need T0_Kelvin; piston shock needs P0_Barye.
     from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
     from project3_code.rad_hydro_sim.problems.presets_config import (
-        PRESET_FIG_8,
+        PRESET_FIG_8_CONSTANT_TEMPERATURE,
         PRESET_CONSTANT_PRESSURE,
     )
 
-    case_heat, _ = get_preset(PRESET_FIG_8)
+    case_heat, _ = get_preset(PRESET_FIG_8_CONSTANT_TEMPERATURE)
     case_shock, _ = get_preset(PRESET_CONSTANT_PRESSURE)
     t_heat = np.array([0.25, 0.5, 0.75, 1.0]) * float(case_heat.t_sec_end)
     t_shock = np.array([0.25, 0.5, 0.75, 1.0]) * float(case_shock.t_sec_end)

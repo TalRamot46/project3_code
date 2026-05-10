@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Union
 from dataclasses import dataclass
 
-from project3_code.rad_hydro_sim.verification.hydro_data import RadHydroData
+from project3_code.rad_hydro_sim.verification.hydro_data import RadHydroSimData
 from project3_code.rad_hydro_sim.plotting import RadHydroHistory
 @dataclass
 class HydroSimData:
@@ -34,9 +34,9 @@ class HydroSimData:
 
 
 # Type alias: anything with SimulationData layout (RadHydroData is duck-typed compatible)
-HydroDataLike = Union[HydroSimData, RadHydroData]
+HydroDataLike = Union[HydroSimData, RadHydroSimData]
 
-def load_rad_hydro_history(history: RadHydroHistory, label: str) -> RadHydroData:
+def load_rad_hydro_history(history: RadHydroHistory, label: str) -> RadHydroSimData:
     """Convert hydro_sim HydroHistory to SimulationData. Re-export from shock comparison."""
     times = np.asarray(history.t, dtype=float)
     nt = len(times)
@@ -74,7 +74,7 @@ def load_rad_hydro_history(history: RadHydroHistory, label: str) -> RadHydroData
         if has_T_material:
             Tm_k = history.T_material[k]
             T_material_list.append(Tm_k.copy() if hasattr(Tm_k, "copy") else np.asarray(Tm_k))
-    return RadHydroData(
+    return RadHydroSimData(
         times=times,
         m=m_list,
         x=x_list,

@@ -96,9 +96,9 @@ def main():
     # Run list_presets() from presets_utils for a grouped list.
     from project3_code.rad_hydro_sim.problems.presets_config import (
         PRESET_CONSTANT_PRESSURE,
-        PRESET_FIG_8,
-        PRESET_FIG_10,
-        PRESET_CONSTANT_T_RADIATION,
+        PRESET_FIG_8_CONSTANT_TEMPERATURE,
+        PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE,
+        PRESET_CONSTANT_T_RADIATION_ONLY,
         PRESET_MALKA_HEIZLER
     )
     preset_name = PRESET_MALKA_HEIZLER  

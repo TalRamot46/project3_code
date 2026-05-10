@@ -85,8 +85,9 @@ class RadHydroCase(ABC):
 
     # Boundary condition type for the radiation solve at the left boundary.
     # - "Marshak": Marshak (P1) boundary condition using a bath temperature drive
-    # - "Dirichelt": classical Dirichlet style (fixed left face temperature)
-    bc_type: Literal["Marshak", "Dirichelt"] = "Marshak"
+    # - "Dirichlet": classical Dirichlet style (fixed left face temperature)
+    bc_type: Literal["Marshak", "Dirichlet"] = "Dirichlet"
+    T_left: float | None = None
 
     def _get_params(
         self,

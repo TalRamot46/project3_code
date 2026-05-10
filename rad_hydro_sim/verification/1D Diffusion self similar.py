@@ -648,22 +648,12 @@ def run_case(*, tau, times_to_store, reset_initial_conditions=True):
         E, UR = init_state()
 
     stored_t, stored_Um, stored_T = run_time_loop(E, UR, tau=tau, times_to_store=times_to_store)
-    # store values in csv files
-    # use pandas to save 2D arrays
+    # Store values in CSV files without adding a pandas dependency.
     os.makedirs(f"data/data_tau_{tau}", exist_ok=True)
-    import pandas as pd
-    # sorted_T is a 2D array where each row is a stored_T at a time step. 
-    # Create a csv file where each column is a time step and each row is the temperature profile (for positions) at that time step.
-    # make sure that this is saved correctly.
-
-    # make directory if not exists
     os.makedirs(f"1D Diffusion self similar in gold/data/data_tau_{tau}", exist_ok=True)
-    df_sorted_T = pd.DataFrame(stored_T)
-    df_sorted_T.to_csv(f"1D Diffusion self similar in gold/data/data_tau_{tau}/stored_T.csv", header=False, index=False)
-    df_sorted_Um = pd.DataFrame(stored_Um)
-    df_sorted_Um.to_csv(f"1D Diffusion self similar in gold/data/data_tau_{tau}/stored_Um.csv", header=False, index=False)
-    df_stored_t = pd.DataFrame(stored_t)
-    df_stored_t.to_csv(f"1D Diffusion self similar in gold/data/data_tau_{tau}/stored_time.csv", header=False, index=False)
+    np.savetxt(f"1D Diffusion self similar in gold/data/data_tau_{tau}/stored_T.csv", np.asarray(stored_T), delimiter=",")
+    np.savetxt(f"1D Diffusion self similar in gold/data/data_tau_{tau}/stored_Um.csv", np.asarray(stored_Um), delimiter=",")
+    np.savetxt(f"1D Diffusion self similar in gold/data/data_tau_{tau}/stored_time.csv", np.asarray(stored_t), delimiter=",")
 
     return {
         "tau": tau,
@@ -673,11 +663,10 @@ def run_case(*, tau, times_to_store, reset_initial_conditions=True):
     }
 
 def plot_front_positions_and_energies(tau, show_plots=True):
-    # read back the stored values from csv files using pandas
-    import pandas as pd
-    stored_T = pd.read_csv(f"1D Diffusion self similar in gold\data\data_tau_{tau}\stored_T.csv", header=None).to_numpy()
-    stored_Um = pd.read_csv(f"1D Diffusion self similar in gold\data\data_tau_{tau}\stored_Um.csv", header=None).to_numpy()
-    stored_t = pd.read_csv(f"1D Diffusion self similar in gold\data\data_tau_{tau}\stored_time.csv", header=None).to_numpy().flatten()
+    # Read back the stored values from CSV files using NumPy.
+    stored_T = np.loadtxt(f"1D Diffusion self similar in gold/data/data_tau_{tau}/stored_T.csv", delimiter=",")
+    stored_Um = np.loadtxt(f"1D Diffusion self similar in gold/data/data_tau_{tau}/stored_Um.csv", delimiter=",")
+    stored_t = np.loadtxt(f"1D Diffusion self similar in gold/data/data_tau_{tau}/stored_time.csv", delimiter=",").flatten()
     front_positions, half_T_bath_positions, total_energies = compute_front_half_and_energy(stored_Um, stored_T)
 
     # make subfolder if not exists for saving plots of tau
@@ -793,11 +782,10 @@ def compare_with_linear_results():
     t_final = t_final_sec
     dt = dt_sec 
 
-    import pandas as pd
     times_to_store = np.array([0.01, 0.1, 1.0, 10.0]) / c  # in s
     run_case(tau=tau, times_to_store=times_to_store, reset_initial_conditions=True)
-    stored_U = pd.read_csv(f"1D Diffusion self similar in gold\data\data_tau_{tau}\stored_Um.csv", header=None).to_numpy()
-    stored_t = pd.read_csv(f"1D Diffusion self similar in gold\data\data_tau_{tau}\stored_time.csv", header=None).to_numpy().flatten()
+    stored_U = np.loadtxt(f"1D Diffusion self similar in gold/data/data_tau_{tau}/stored_Um.csv", delimiter=",")
+    stored_t = np.loadtxt(f"1D Diffusion self similar in gold/data/data_tau_{tau}/stored_time.csv", delimiter=",").flatten()
 
     colors = plt.cm.viridis(np.linspace(0, 1, len(stored_t)))
     plt.figure(figsize=(10, 6))

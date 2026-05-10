@@ -9,6 +9,8 @@
 			"path": "C:/Users/TLP-001/Documents/GitHub/project3_docs"
 		}
 	],
-	"settings": {},
+	"settings": {
+		"powershell.cwd": "project3_code"
+	},
 	"name": "project3"
 }

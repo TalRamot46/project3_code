@@ -41,6 +41,7 @@ _REPO_PARENT = Path(__file__).resolve().parent.parent.parent.parent
 if str(_REPO_PARENT) not in sys.path:
     sys.path.insert(0, str(_REPO_PARENT))
 
+from project3_code.hydro_sim.verification.compare_shock_plots import HydroSimData
 from project3_code.rad_hydro_sim.output_paths import get_rad_hydro_npz_path
 from project3_code.rad_hydro_sim.plotting.gif import save_history_gif
 from project3_code.rad_hydro_sim.verification.verification_config import (
@@ -149,7 +150,7 @@ def _save_load_radiation_sim(
 def run_supersonic_solver_reference(
     case,
     n_times: int = 30
-    ) -> RadiationSimData | None:
+    ) -> RadiationSimData:
     """
     Run the supersonic (radiation self-similar) solver with parameters matching the RadHydroCase.
 
@@ -367,7 +368,7 @@ def _rad_hydro_case_to_shock_material(case: RadHydroCase) -> "Material":
 def run_shock_solver_hydro_reference(
     case_rh,
     times_sec: np.ndarray,
-    ) -> "SimulationData | None":
+    ) -> HydroSimData | None:
     """
     Run shock solver with P(t) = P0 * t^tau boundary conditions matching the RadHydroCase.
 
@@ -575,7 +576,7 @@ def run_hydro_only_comparison(
 
 def _pad_rad_hydro_data_to_min_frames(data, min_frames: int = 2, t_end_ns: float | None = None):
     """Duplicate frames so data has at least min_frames entries (for slider)."""
-    from project3_code.rad_hydro_sim.verification.hydro_data import RadHydroData
+    from project3_code.rad_hydro_sim.verification.hydro_data import RadHydroSimData
 
     n = len(data.times)
     if n >= min_frames or n == 0:
@@ -596,7 +597,7 @@ def _pad_rad_hydro_data_to_min_frames(data, min_frames: int = 2, t_end_ns: float
     new_E = E_list + [np.array(E_list[-1], copy=True) for _ in range(pad)] if E_list else []
     Tm_list = list(data.T_material or [])
     new_Tm = Tm_list + [np.array(Tm_list[-1], copy=True) for _ in range(pad)] if Tm_list else []
-    return RadHydroData(
+    return RadHydroSimData(
         times=new_times, m=new_m, x=new_x, rho=new_rho, p=new_p, u=new_u, e=new_e,
         T=new_T, E_rad=new_E if new_E else None,
         T_material=new_Tm,
@@ -630,7 +631,7 @@ def run_full_rad_hydro_comparison(
     from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
     from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
     from project3_code.rad_hydro_sim.verification.hydro_data import (
-        RadHydroData,
+        RadHydroSimData,
     )
     from project3_code.rad_hydro_sim.verification.shussman_comparison import (
         run_shussman_piecewise_reference,
@@ -674,7 +675,7 @@ def run_full_rad_hydro_comparison(
         T_hev = [t_arr / KELVIN_PER_HEV for t_arr in T_raw]
         Tm_raw = _to_list_of_arrays(sim_data.T_material) if sim_data.T_material else []
         Tm_hev = [t_arr / KELVIN_PER_HEV for t_arr in Tm_raw]
-        sim_data = RadHydroData(
+        sim_data = RadHydroSimData(
             times=np.asarray(sim_data.times, dtype=float),
             m=_to_list_of_arrays(sim_data.m),
             x=_to_list_of_arrays(sim_data.x),
@@ -694,12 +695,12 @@ def run_full_rad_hydro_comparison(
     time_ns = np.atleast_1d(times_sec * 1e9).ravel()
     T0_HeV = float(case.T0_Kelvin) / KELVIN_PER_HEV  # pyright: ignore[reportArgumentType]
 
-    shussman_ref: "RadHydroData | None" = None
+    shussman_ref: "RadHydroSimData | None" = None
     if not skip_shussman and reference_solver.use_shussman:
         print("Building Shussman piecewise reference (subsonic + shock)...")
         shussman_ref = run_shussman_piecewise_reference(case, times_ns=time_ns, T0_HeV=T0_HeV)
 
-    menahem_ref: "RadHydroData | None" = None
+    menahem_ref: "RadHydroSimData | None" = None
     if not skip_menahem and reference_solver.use_menahem:
         print("Building Menahem ablation reference (subsonic heat wave + piston shock)...")
         # Menahem expects seconds; reuse a coarse grid aligned with Shussman.

@@ -24,7 +24,7 @@ if str(_repo_parent) not in sys.path:
 
 
 @dataclass
-class RadHydroData:
+class RadHydroSimData:
     """
     Hydrodynamic fields from a rad_hydro run, for verification comparisons.
 

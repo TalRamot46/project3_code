@@ -11,10 +11,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator, ScalarFormatter
 
-from project3_code.rad_hydro_sim.plotting import mpl_style  # noqa: F401 - apply project style
+from ..plotting import mpl_style  # noqa: F401 - apply project style
 from matplotlib.widgets import Slider
 
-from project3_code.rad_hydro_sim.verification.radiation_data import RadiationSimData
+from .radiation_data import RadiationSimData
 
 
 def _interpolate_to_time(data: RadiationSimData, target_time: float) -> int:

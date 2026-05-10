@@ -21,13 +21,12 @@ from enum import Enum
 from datetime import datetime
 
 from project3_code.rad_hydro_sim.problems.presets_config import (
-    PRESET_CONSTANT_T_RADIATION,
+    PRESET_CONSTANT_T_RADIATION_ONLY,
     PRESET_CONSTANT_PRESSURE,
-    PRESET_POWER_LAW,
-    PRESET_FIG_7,
-    PRESET_FIG_8,
-    PRESET_FIG_9,
-    PRESET_FIG_10,
+    PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE,
+    PRESET_FIG_8_CONSTANT_TEMPERATURE,
+    PRESET_FIG_9_CONSTANT_FLUX,
+    PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE,
     PRESET_MATLAB,
     PRESET_MENAHEM_ABLATION_COMPARISON,
 )
@@ -64,9 +63,9 @@ class ReferenceSolver(str, Enum):
 # Preset names (physical case keys) and mode → preset mapping
 # ============================================================================
 
-RADIATION_ONLY_PRESET = PRESET_CONSTANT_T_RADIATION   # constant_temperature_drive
-HYDRO_ONLY_PRESET = PRESET_POWER_LAW                  # constant_pressure_drive
-FULL_RAD_HYDRO_PRESET = PRESET_FIG_8                  # fig_7_comparison
+RADIATION_ONLY_PRESET = PRESET_CONSTANT_T_RADIATION_ONLY   # constant_temperature_drive
+HYDRO_ONLY_PRESET = PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE                  # constant_pressure_drive
+FULL_RAD_HYDRO_PRESET = PRESET_FIG_8_CONSTANT_TEMPERATURE                  # fig_7_comparison
 
 # Map each verification mode to its preset name (SIMPLE_TEST_CASES key)
 MODE_TO_PRESET: dict[VerificationMode, str] = {

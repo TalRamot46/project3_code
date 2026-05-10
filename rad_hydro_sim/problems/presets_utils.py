@@ -14,7 +14,7 @@ from typing import Tuple
 
 from project3_code.hydro_sim.problems.simulation_config import SimulationConfig
 from project3_code.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
-from project3_code.rad_hydro_sim.problems.presets_config import PRESETS, FULL_RAD_HYDRO_PRESET_NAMES
+from project3_code.rad_hydro_sim.problems.presets_config import PRESETS
 # ============================================================================
 # Preset Access Functions
 # ============================================================================

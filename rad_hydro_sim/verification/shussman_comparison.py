@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import numpy as np
 
-from project3_code.rad_hydro_sim.verification.hydro_data import RadHydroData
+from project3_code.rad_hydro_sim.verification.hydro_data import RadHydroSimData
 from project3_code.rad_hydro_sim.simulation.radiation_step import KELVIN_PER_HEV
 
 if TYPE_CHECKING:
@@ -108,7 +108,7 @@ def build_piecewise_reference(
     m_max: Optional[float] = None,
     rho0: Optional[float] = None,
     T_initial_Kelvin: Optional[float] = None,
-) -> RadHydroData:
+) -> RadHydroSimData:
     """Piecewise Shussman: subsonic (density crossover) + shock [+ unperturbed tail].
 
     Exact translation of the MATLAB concatenation logic:
@@ -201,13 +201,13 @@ def build_piecewise_reference(
         e_list.append(e_k)
         T_list.append(T_k)
 
-    return RadHydroData(times=times, m=m_list, x=x_list, rho=rho_list, p=p_list, u=u_list, e=e_list, T=T_list, E_rad=E_list, label="Model (Shussman & Heizler, 2015)", color="green", linestyle="-.")
+    return RadHydroSimData(times=times, m=m_list, x=x_list, rho=rho_list, p=p_list, u=u_list, e=e_list, T=T_list, E_rad=E_list, label="Model (Shussman & Heizler, 2015)", color="green", linestyle="-.")
 
 def run_shussman_piecewise_reference(
     case,
     times_ns: np.ndarray,
     T0_HeV: float,
-) -> Optional[RadHydroData]:
+) -> Optional[RadHydroSimData]:
     """
     Build the piecewise Shussman reference (subsonic + shock [+ unperturbed tail]) for comparison with rad_hydro.
 
@@ -262,8 +262,8 @@ def run_shussman_piecewise_reference(
     return ref
 
 if __name__ == "__main__":
-    from project3_code.rad_hydro_sim.problems.presets_config import PRESET_FIG_8, PRESET_TEST_CASES
-    case_name = PRESET_FIG_8
+    from project3_code.rad_hydro_sim.problems.presets_config import PRESET_FIG_8_CONSTANT_TEMPERATURE, PRESET_TEST_CASES
+    case_name = PRESET_FIG_8_CONSTANT_TEMPERATURE
     case = PRESET_TEST_CASES[case_name]
     times_ns = np.array([0.1], dtype=float)
     T0_HeV = 1

@@ -27,7 +27,7 @@ _MENAHEM_SOLVERS_DIR = Path(__file__).resolve().parents[1] / "menahem_solvers"
 if str(_MENAHEM_SOLVERS_DIR) not in sys.path:
     sys.path.insert(0, str(_MENAHEM_SOLVERS_DIR))
 
-from project3_code.fits.menahem_reproduction import (
+from comparison.rt_menahem_vs_radhydro import (
     _ablation_kwargs_from_case,
     _build_mass_grid_uniform,
     _ns_amplitude_rescale,

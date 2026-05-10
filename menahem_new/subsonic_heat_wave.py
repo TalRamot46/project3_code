@@ -90,13 +90,13 @@ class SubsonicHeatWave():
         logger.info(f"gamma={self.gamma:g}")
         logger.info(f"ode_scheme={self.ode_scheme!r}")
         
-        assert self.beta > 0.
-        assert self.Tb > 0.
-        assert self.gamma > 1., f"must have gamma > 1"
+        assert self.beta > 0.0
+        assert self.Tb > 0.0
+        assert self.gamma > 1.0, f"must have gamma > 1"
         # assert self.tau > -2., f"must have tau > -2 for shock to propagate outwards"
         assert ode_scheme in {"dopri5", "dop853", "lsoda", "zvode", "vode"}
-        
-        self.r = gamma - 1.
+
+        self.r = gamma - 1.0
         self.rep = f"tau={self.tau:g} alpha={self.alpha:g} beta={self.beta:g} lamda={self.lambdap:g} mu={self.mu:g}"
 
         self.title = f"$ \\tau={self.tau:.4g}" \
@@ -263,14 +263,19 @@ class SubsonicHeatWave():
             return 0.
         return fac
 
-    def get_T_bath(self, *, radiation_energy_flux, time):
+    def calc_T_bath_from_dimensionless_boundary_flux(self, *, dimensionless_boundary_flux, time):
         """
         returns the temperature of the boundary at the given time
         """
+        aS = self.a+(self.q+1.)*self.a1+self.n*self.a3
+        bS = self.b+(self.q+1.)*self.b1+self.n*self.b3 + 1.
+        cS = self.c+(self.q+1.)*self.c1+self.n*self.c3
+        boundary_flux = dimensionless_boundary_flux * (self.A**aS) * (self.B**bS) * (time**cS)
+
         a = 4. * Units.sigma_sb / Units.clight
         c = Units.clight
         T_surface = self.Tb * (time**self.tau)
-        T_bath = (T_surface**4 + 2 / (a * c) * radiation_energy_flux)**(1./4.)
+        T_bath = (T_surface**4 + 2 / (a * c) * boundary_flux)**(1./4.)
         return T_bath
 
     def solve(self, *, mass, time):

@@ -17,7 +17,7 @@ from project3_code.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 from project3_code.rad_hydro_sim.simulation.radiation_step import KELVIN_PER_HEV
 
 if TYPE_CHECKING:
-    from project3_code.rad_hydro_sim.verification.hydro_data import RadHydroData
+    from project3_code.rad_hydro_sim.verification.hydro_data import RadHydroSimData
 
 
 def save_history_gif(
@@ -26,7 +26,7 @@ def save_history_gif(
     gif_path: str = "simulation.gif",
     fps: int = 20,
     stride: int = 1,
-    ref_data: Optional["RadHydroData"] = None,
+    ref_data: Optional["RadHydroSimData"] = None,
     subtitle: str | None = None,
 ):
     """

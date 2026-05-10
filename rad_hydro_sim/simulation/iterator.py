@@ -1,9 +1,12 @@
 import os
+from functools import lru_cache
 from typing import Any, Optional
+from dataclasses import replace
 
 import numpy as np
 from tqdm import tqdm
 
+from project3_code.menahem_new.subsonic_heat_wave import SubsonicHeatWave
 from project3_code.hydro_sim.core.eos import internal_energy_from_prho
 from project3_code.hydro_sim.core.geometry import planar
 from project3_code.hydro_sim.core.grid import cell_volumes, masses_from_initial_rho
@@ -65,6 +68,90 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
     )
     return state
 
+def initialize_bc(case: RadHydroCase) -> float:
+    bc_type = getattr(case, "bc_type", "Dirichlet")  # default to "Dirichlet" if not specified
+    if bc_type == "Marshak":
+        # Use the improved bath temperature calculation based on subsonic heat wave
+        T_bath = get_T_bath(case, time=0.0)
+        T_left = T_bath
+    else:
+        # Use the simple time-dependent boundary temperature
+        t_drive = 0.0 if case.T0_Kelvin is None else 1e-9
+        T0_left = case.T0_Kelvin if case.T0_Kelvin is not None else 0.0
+        T_left = T0_left * (t_drive/(10**-9))**case.tau if t_drive > 0 else 0.0
+    
+    return T_left
+
+def _build_mass_grid_uniform(case, omega: float, num_cells: int) -> np.ndarray:
+    """Build uniform Lagrangian mass grid."""
+    coordinate = np.array(list(sorted(set(
+        list(np.linspace(0., float(case.x_max), num_cells+1))
+    ))))
+    dx = coordinate[1:] - coordinate[:-1]
+    density = case.rho0 / (1.-omega) * (coordinate[1:]**(1.-omega) - coordinate[:-1]**(1.-omega))/(coordinate[1:] - coordinate[:-1])
+    mass_cells = density * dx
+    mass = np.cumsum(mass_cells)
+    mass = np.array([1e-30, 1e-7*mass[0]] + list(mass))
+    return mass
+
+
+def _subsonic_heat_wave_cache_key(case: RadHydroCase) -> tuple[float, float, float, float, float, float, float, float, float]:
+    return (
+        float(case.T0_Kelvin if case.T0_Kelvin is not None else 0.0),
+        float(case.tau),
+        float(case.g_Kelvin),
+        float(case.alpha),
+        float(case.lambda_),
+        float(case.f_Kelvin),
+        float(case.beta_Rosen),
+        float(case.mu),
+        float(case.r),
+    )
+
+
+@lru_cache(maxsize=None)
+def _get_subsonic_heat_wave_solver(cache_key: tuple[float, float, float, float, float, float, float, float, float]) -> SubsonicHeatWave:
+    Tb, tau, g, alpha, lambdap, f, beta, mu, r = cache_key
+    solver = SubsonicHeatWave(
+        Tb=Tb,
+        tau=tau,
+        g=g,
+        alpha=alpha,
+        lambdap=lambdap,
+        f=f,
+        beta=beta,
+        mu=mu,
+        gamma=r + 1.0,
+    )
+    solver.find_xsi_f()
+    return solver
+
+def get_T_bath(case, time: float) -> float:
+    """Compute bath temperature using only the SubsonicHeatWave dimensionless flux S.
+
+    This function creates a `SubsonicHeatWave` solver, finds the correct
+    self-similar front, evaluates the dimensionless profiles on a Lagrangian
+    mass grid, extracts the dimensionless boundary flux `S[0]` and converts
+    it to the physical bath temperature via
+    `calc_T_bath_from_dimensionless_boundary_flux`.
+    """
+    solver = _get_subsonic_heat_wave_solver(_subsonic_heat_wave_cache_key(case))
+ 
+    # build a smallLagrangian mass grid and evaluate the self-similar profiles
+    mass = _build_mass_grid_uniform(case, omega=0.0, num_cells=200)
+    t_eval = max(float(time), 1e-300)
+    xsi_vec = mass * solver.xsi_over_m(time=t_eval)
+
+    profiles = solver.get_self_similar_profiles(xsi_vec=xsi_vec)
+    S = profiles.get("S", None)
+    dimensionless_boundary_flux = float(S[0]) if (S is not None and len(S) > 0) else 0.0
+
+    T_bath = solver.calc_T_bath_from_dimensionless_boundary_flux(
+        dimensionless_boundary_flux=dimensionless_boundary_flux,
+        time=t_eval,
+    )
+    return float(T_bath)
+
 def simulate_rad_hydro(
     rad_hydro_case: RadHydroCase,
     simulation_config: SimulationConfig,
@@ -87,7 +174,10 @@ def simulate_rad_hydro(
     # Initialize problem
     state = initialize_problem(rad_hydro_case, simulation_config)
     state.a = compute_acceleration_nodes(state.x, state.p, state.q, state.m_cells, rad_hydro_case.geom, p_left=state.p[0], p_right=state.p[-1])
-    
+    T_left = initialize_bc(rad_hydro_case)
+    # Create a new case object with T_left set
+    rad_hydro_case = replace(rad_hydro_case, T_left=T_left)
+
     t_end = rad_hydro_case.t_sec_end
     
     # ---- history buffers ----
@@ -136,13 +226,14 @@ def simulate_rad_hydro(
     with tqdm(**pbar_kw) as pbar:
         while state.t < t_end:
             # Adaptive timestep
+            dt = 0.0
             if step > 2:
                 if rad_hydro_case.scenario == "hydro_only":
                     dt_cfl = compute_dt_cfl(state, rad_hydro_case.r+1, simulation_config.CFL)
                     if np.isnan(dt_cfl):
                         dt_cfl = min(0.05 * t_end, dt_prev * 1.1, t_end - state.t, 1e-12)
                     dt = min(dt_cfl, 0.05 * t_end, dt_prev * 1.1, t_end - state.t)
-                if rad_hydro_case.scenario == "radiation_only":
+                elif rad_hydro_case.scenario == "radiation_only":
                     dt_rel = update_dt_relchange(dt_prev, state.E_rad, E_rad_history[-1], state.T_rad, T_rad_history[-1])
                     dt = min(dt_rel, 0.05 * t_end, dt_prev * 1.1, t_end - state.t, 1e-12)
                 elif rad_hydro_case.scenario == "full_rad_hydro":
@@ -163,9 +254,15 @@ def simulate_rad_hydro(
             # Get boundary conditions for current state
             # bc_left, bc_right = _get_boundary_conditions(rad_hydro_case, simulation_config, state)
             
+            # Recalculate T_left for current time step for Marshak BC
+            if rad_hydro_case.bc_type == "Marshak":
+                T_left = get_T_bath(rad_hydro_case, time=state.t)
+                # Update the case with the new T_left
+                rad_hydro_case = replace(rad_hydro_case, T_left=T_left)
+            
             # Lagrangian step
             new_state = step_rad_hydro(
-                state, dt, rad_hydro_case, simulation_config
+                state, dt, rad_hydro_case, simulation_config, T_left
             )
             # Progress bar: use actual time advanced (step_rad_hydro may advance by more than dt in some code paths)
             pbar.update(new_state.t - state.t)

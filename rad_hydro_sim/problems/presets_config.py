@@ -16,19 +16,16 @@ from project3_code.hydro_sim.core.geometry import planar
 # ---------------------------------------------------------------------------
 # Preset name constants = SIMPLE_TEST_CASES keys (physical case names)
 # ---------------------------------------------------------------------------
-PRESET_POWER_LAW = "constant_pressure_drive"
+PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE = "constant_pressure_drive"
 PRESET_CONSTANT_PRESSURE = "power_law_pressure_drive"
-PRESET_CONSTANT_T_RADIATION = "constant_temperature_drive"
-PRESET_RAD_HYDRO_CONSTANT_T = "rad_hydro_constant_temperature_drive"
-PRESET_FIG_7 = "fig_7_comparison"
-PRESET_FIG_8 = "fig_8_comparison"
-PRESET_FIG_9 = "fig_9_comparison"
-PRESET_FIG_10 = "fig_10_comparison"
+PRESET_CONSTANT_T_RADIATION_ONLY = "constant_temperature_drive"
+PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE = "fig_7_comparison"
+PRESET_FIG_8_CONSTANT_TEMPERATURE = "fig_8_comparison"
+PRESET_FIG_9_CONSTANT_FLUX = "fig_9_comparison"
+PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE = "fig_10_comparison"
 PRESET_MATLAB = "matlab_comparison"
 PRESET_MALKA_HEIZLER = "malka_heizler_comparison"
 PRESET_MENAHEM_ABLATION_COMPARISON = "menahem_ablation_comparison"
-# Full rad-hydro presets (for grouping in list_presets)
-FULL_RAD_HYDRO_PRESET_NAMES = (PRESET_RAD_HYDRO_CONSTANT_T, PRESET_FIG_10)
 from project3_code.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 from project3_code.hydro_sim.problems.simulation_config import (
     SIMULATION_CONFIGS,
@@ -42,48 +39,6 @@ KELVIN_PRE_HEV = 1_160_500
 _power_law_tau = 0.45
 
 PRESET_TEST_CASES = {
-    PRESET_POWER_LAW: RadHydroCase(
-        # Rosen's opacity parameters
-        # Rosen's opacity parameters
-        g_Kelvin = 1.0/7200,
-        alpha = 1.5,
-        lambda_ = 0.2,
-
-        # Rosen's specific energy parameters
-        f_Kelvin = 3.4e13,
-        beta_Rosen = 1.6,
-        mu = 0.14,
-
-        # coupling factor
-        chi = 1000,
-
-        # Boundary conditions
-        T0_Kelvin = None,
-        P0_Barye = 2.71e12,
-        tau = _power_law_tau,
-
-        # initial conditions
-        rho0 = 19.32,
-        p0 = 1e-6,
-        u0 = 0.0,
-
-        T_initial_Kelvin = None,
-
-        # adiabatic index
-        r = 0.25, # r = \gamma_adiabatic - 1
-
-        # Initial conditions0
-
-        # grid parameters
-        x_min = 0.0,
-        x_max = 15e-3 / 19.32,
-        t_sec_end = 1e-9,
-
-        initial_condition="pressure, velocity, density",
-        scenario="hydro_only",
-        title=f"Power-law pressure drive (P0 = 2.71 MBar, τ=-0.45)",
-        geom=planar(),
-    ),
     PRESET_CONSTANT_PRESSURE: RadHydroCase(
         # Rosen's opacity parameters
         g_Kelvin = 1.0/7200,
@@ -125,7 +80,7 @@ PRESET_TEST_CASES = {
         title=f"Constant pressure drive (P0 = 1 MBar)",
         geom=planar(),
     ),
-    PRESET_CONSTANT_T_RADIATION: RadHydroCase(
+    PRESET_CONSTANT_T_RADIATION_ONLY: RadHydroCase(
         # Rosen's opacity parameters (g uses alpha=1.5, lambda_=0.2 for KELVIN and rho exponents)
         g_Kelvin = 1.0 / (7200 * KELVIN_PER_HEV**1.5),
         alpha = 1.5,
@@ -164,14 +119,15 @@ PRESET_TEST_CASES = {
         geom=planar(),
         bc_type="Marshak",
     ),
-    PRESET_RAD_HYDRO_CONSTANT_T: RadHydroCase(
+    PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE: RadHydroCase(
         # Rosen's opacity parameters
-        g_Kelvin = 1.0 / (7200.0 * (KELVIN_PRE_HEV**1.5) * (19.32**0.2)),
+        # Rosen's opacity parameters
+        g_Kelvin = 1.0/7200,
         alpha = 1.5,
         lambda_ = 0.2,
 
         # Rosen's specific energy parameters
-        f_Kelvin = 3.4e13 / ((KELVIN_PRE_HEV**1.6) * (19.32**0.14)),
+        f_Kelvin = 3.4e13,
         beta_Rosen = 1.6,
         mu = 0.14,
 
@@ -179,68 +135,33 @@ PRESET_TEST_CASES = {
         chi = 1000,
 
         # Boundary conditions
-        T0_Kelvin = 1,
-        P0_Barye = None,
-        tau = 0.0,
+        T0_Kelvin = None,
+        P0_Barye = 2.71e12,
+        tau = _power_law_tau,
 
         # initial conditions
         rho0 = 19.32,
-        p0 = None,
-        u0 = None,
-        T_initial_Kelvin = 300 / KELVIN_PER_HEV, # 300 K in Hev
+        p0 = 1e-6,
+        u0 = 0.0,
+
+        T_initial_Kelvin = None,
 
         # adiabatic index
         r = 0.25, # r = \gamma_adiabatic - 1
 
-        # grid parameters
-        x_min = 0,
-        x_max = 3e-4,
-        t_sec_end = 1.0e-9,
-
-        initial_condition="temperature, density",
-        scenario="full_rad_hydro",
-        title="Full rad-hydro constant T drive (Au, 300 K)",
-        geom=planar(),
-    ),
-    PRESET_FIG_7: RadHydroCase(
-        # Rosen's opacity parameters
-        g_Kelvin = 1.0 / (7200 * KELVIN_PER_HEV**1.5),
-        alpha = 1.5,
-        lambda_ = 0.2,
-
-        # Rosen's specific energy parameters
-        f_Kelvin = 3.4e13 / (KELVIN_PER_HEV**1.6),
-        beta_Rosen = 1.6,
-        mu = 0.14,
-
-        # coupling factor
-        chi = 1e3,
-
-        # Boundary conditions
-        T0_Kelvin = 1 * KELVIN_PER_HEV,
-        P0_Barye = None,
-        tau = 0.0,
-
-        # initial conditions
-        rho0 = 19.32,
-        p0 = None,
-        u0 = None,
-        T_initial_Kelvin = 300, # 300 K in Hev
-
-        # adiabatic index
-        r = 0.25, # r = \gamma_adiabatic - 1
+        # Initial conditions0
 
         # grid parameters
-        x_min = 0,
-        x_max = 15e-3 / 19.32, # m_max = 15 mg/cm^2
+        x_min = 0.0,
+        x_max = 15e-3 / 19.32,
         t_sec_end = 1e-9,
 
-        initial_condition="temperature, density",
-        scenario="full_rad_hydro",
-        title="Fig 7 comparison (T0=1 HeV, τ=0, t=1 ns, Shussman verification)",
+        initial_condition="pressure, velocity, density",
+        scenario="hydro_only",
+        title=f"Power-law pressure drive (P0 = 2.71 MBar, τ=-0.45)",
         geom=planar(),
     ),
-    PRESET_FIG_8: RadHydroCase(
+    PRESET_FIG_8_CONSTANT_TEMPERATURE: RadHydroCase(
         # Rosen's opacity parameters
         g_Kelvin = 1.0 / (7200 * KELVIN_PER_HEV**1.5),
         alpha = 1.5,
@@ -279,7 +200,7 @@ PRESET_TEST_CASES = {
         geom=planar(),
         times_for_png=np.array([0.05e-9, 0.1e-9, 0.15e-9], dtype=float),
     ),
-    PRESET_FIG_9: RadHydroCase(
+    PRESET_FIG_9_CONSTANT_FLUX: RadHydroCase(
         # Rosen's opacity parameters
         g_Kelvin = 1.0 / (7200 * KELVIN_PER_HEV**1.5),
         alpha = 1.5,
@@ -318,7 +239,7 @@ PRESET_TEST_CASES = {
         geom=planar(),
         times_for_png=np.array([0.05e-9, 0.1e-9, 0.15e-9], dtype=float),
     ),
-    PRESET_FIG_10: RadHydroCase(
+    PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE: RadHydroCase(
         # Rosen's opacity parameters
         g_Kelvin = 1.0 / (7200 * KELVIN_PER_HEV**1.5),
         alpha = 1.5,

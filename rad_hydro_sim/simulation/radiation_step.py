@@ -18,6 +18,9 @@ def arithmetic_mean(a: np.ndarray, b: np.ndarray) -> np.ndarray: return (a + b) 
 from project3_code.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 from project3_code.hydro_sim.core.state import RadHydroState
 
+# Global cache for SubsonicHeatWave solver instances (keyed by case repr)
+_subsonic_heat_wave_cache = {}
+
 def calculate_temperature_from_specific_energy(
     e_material: np.ndarray, rho: np.ndarray, f: float, gamma: float, mu: float
 ) -> np.ndarray:
@@ -308,6 +311,111 @@ def black_radiation_step(
     new_T = (new_e / a_Kelvin) ** (1 / 4)
     return new_e, new_T
 
+
+def _get_or_create_subsonic_heat_wave_solver(rad_hydro_case: RadHydroCase):
+    """
+    Lazily create and cache a SubsonicHeatWave solver for the given case.
+    This avoids expensive re-initialization across multiple radiation steps.
+    """
+    global _subsonic_heat_wave_cache
+    
+    # Create a unique key for this case based on its parameters
+    case_key = (
+        rad_hydro_case.T0_Kelvin,
+        rad_hydro_case.tau,
+        rad_hydro_case.g_Kelvin,
+        rad_hydro_case.alpha,
+        rad_hydro_case.lambda_,
+        rad_hydro_case.f_Kelvin,
+        rad_hydro_case.beta_Rosen,
+        rad_hydro_case.mu,
+        rad_hydro_case.r,
+    )
+    
+    if case_key not in _subsonic_heat_wave_cache:
+        from project3_code.menahem_new.subsonic_heat_wave import SubsonicHeatWave
+        
+        # Initialize the solver with case parameters
+        # Note: Tb is T0_Kelvin, and gamma = r + 1
+        solver = SubsonicHeatWave(
+            Tb=float(rad_hydro_case.T0_Kelvin),
+            tau=float(rad_hydro_case.tau),
+            g=float(rad_hydro_case.g_Kelvin),
+            alpha=float(rad_hydro_case.alpha),
+            lambdap=float(rad_hydro_case.lambda_),
+            f=float(rad_hydro_case.f_Kelvin),
+            beta=float(rad_hydro_case.beta_Rosen),
+            mu=float(rad_hydro_case.mu),
+            gamma=float(rad_hydro_case.r) + 1.0,
+        )
+        
+        # Find the self-similar front: this is an expensive operation
+        # that computes xsi_f and Pf via root finding.
+        solver.find_xsi_f()
+        
+        _subsonic_heat_wave_cache[case_key] = solver
+    
+    return _subsonic_heat_wave_cache[case_key]
+
+
+def get_T_bath(
+    state_star: RadHydroState,
+    rad_hydro_case: RadHydroCase,
+) -> float:
+    """
+    Calculate the bath temperature at the left boundary using the 
+    subsonic heat wave (1D self-similar radiation diffusion) solution.
+    
+    This function:
+    1. Creates/retrieves a cached SubsonicHeatWave solver for the given case
+    2. Evaluates the self-similar profiles at the left boundary (xsi=0 region)
+    3. Extracts the dimensionless boundary flux S[0]
+    4. Calculates and returns the true bath temperature T_bath
+    
+    Parameters:
+        state_star: Current hydro state with rho, m_cells, time
+        rad_hydro_case: Problem configuration
+        
+    Returns:
+        T_bath: Bath temperature in Kelvin
+    """
+    import logging
+    logger = logging.getLogger("get_T_bath")
+    
+    try:
+        # Get or create the SubsonicHeatWave solver
+        heat_solver = _get_or_create_subsonic_heat_wave_solver(rad_hydro_case)
+        
+        # Get current time and mass grid
+        t_sec = max(state_star.t, 1e-300)
+        m_cells = np.asarray(state_star.m_cells, dtype=float)
+        
+        # Evaluate self-similar profiles at current state
+        profiles = heat_solver.get_self_similar_profiles(xsi_vec=m_cells)
+        
+        # Extract the dimensionless boundary flux at the leftmost point
+        S = profiles["S"]
+        dimensionless_boundary_flux = S[0] if len(S) > 0 else 0.0
+        
+        # Calculate the actual bath temperature from the dimensionless flux
+        T_bath = heat_solver.calc_T_bath_from_dimensionless_boundary_flux(
+            dimensionless_boundary_flux=dimensionless_boundary_flux,
+            time=t_sec
+        )
+        
+        return float(T_bath)
+    
+    except Exception as e:
+        logger.warning(
+            f"Failed to compute T_bath from subsonic heat wave: {e}. "
+            f"Falling back to T_surface = T0 * t^tau."
+        )
+        # Fallback to the simple T_surface approximation
+        t_drive = max(state_star.t, 1e-9)
+        T0_left = rad_hydro_case.T0_Kelvin if rad_hydro_case.T0_Kelvin is not None else 0.0
+        T_left = T0_left * (t_drive / (10**-9)) ** rad_hydro_case.tau
+        return float(T_left)
+
 def solve_tridiagonal(
     a: np.ndarray, 
     b: np.ndarray, 
@@ -354,7 +462,9 @@ def solve_tridiagonal(
 def radiation_step(
     state_star: RadHydroState, 
     dt: float, 
-    rad_hydro_case: RadHydroCase
+
+    rad_hydro_case: RadHydroCase,
+    T_left: float | None = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Updates the material specific energy & radiation energy density based on the coupling between matter and radiation.
@@ -408,12 +518,12 @@ def radiation_step(
     # If Marshak BC requested, compute the left bath drive first and let
     # calculate_abcd_marshak apply the Marshak modifications to the system.
     bc_type = getattr(rad_hydro_case, "bc_type", "Marshak")
+    if T_left is None:
+        T_left = getattr(rad_hydro_case, "T_left", None)
+    E_left = a_Kelvin * T_left**4 if T_left is not None else 0.0
 
-    t_drive = max(state_star.t, dt)
-    T0_left = rad_hydro_case.T0_Kelvin if rad_hydro_case.T0_Kelvin is not None else 0.0
-    T_left = T0_left * (t_drive/(10**-9))**rad_hydro_case.tau
-    E_left = a_Kelvin * T_left**4
-
+    if bc_type == "Marshak" and T_left is None:
+        raise ValueError("T_left must be provided in rad_hydro_case when bc_type='Marshak'.")
     if bc_type == "Marshak":
         if mode == "gray corrected":
             a, b, c_coeff, d = calculate_abcd_marshak(

@@ -24,9 +24,6 @@ _MENAHEM_SOLVERS_DIR = Path(__file__).resolve().parents[1] / "menahem_solvers"
 if str(_MENAHEM_SOLVERS_DIR) not in sys.path:
     sys.path.insert(0, str(_MENAHEM_SOLVERS_DIR))
 
-from project3_code.menahem_solvers.piston_shock import PistonShock
-from project3_code.menahem_solvers.ablation_solver import AblationSolver
-
 from project3_code.rad_hydro_sim.output_paths import get_menahem_reproduction_figures_dir
 from project3_code.rad_hydro_sim.problems.presets_config import (
     PRESET_CONSTANT_PRESSURE,
@@ -34,6 +31,8 @@ from project3_code.rad_hydro_sim.problems.presets_config import (
 )
 from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
 from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
+from project3_code.menahem_new.piston_shock import PistonShock
+from project3_code.menahem_new.ablation_solver import AblationSolver
 
 S_PER_NS = 1e-9
 

@@ -68,19 +68,6 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
     )
     return state
 
-def initialize_bc(case: RadHydroCase) -> float:
-    bc_type = getattr(case, "bc_type", "Dirichlet")  # default to "Dirichlet" if not specified
-    if bc_type == "Marshak":
-        # Use the improved bath temperature calculation based on subsonic heat wave
-        T_bath = get_T_bath(case, time=0.0)
-        T_left = T_bath
-    else:
-        # Use the simple time-dependent boundary temperature
-        t_drive = 0.0 if case.T0_Kelvin is None else 1e-9
-        T0_left = case.T0_Kelvin if case.T0_Kelvin is not None else 0.0
-        T_left = T0_left * (t_drive/(10**-9))**case.tau if t_drive > 0 else 0.0
-    
-    return T_left
 
 def _build_mass_grid_uniform(case, omega: float, num_cells: int) -> np.ndarray:
     """Build uniform Lagrangian mass grid."""
@@ -174,10 +161,6 @@ def simulate_rad_hydro(
     # Initialize problem
     state = initialize_problem(rad_hydro_case, simulation_config)
     state.a = compute_acceleration_nodes(state.x, state.p, state.q, state.m_cells, rad_hydro_case.geom, p_left=state.p[0], p_right=state.p[-1])
-    T_left = initialize_bc(rad_hydro_case)
-    # Create a new case object with T_left set
-    rad_hydro_case = replace(rad_hydro_case, T_left=T_left)
-
     t_end = rad_hydro_case.t_sec_end
     
     # ---- history buffers ----
@@ -259,6 +242,8 @@ def simulate_rad_hydro(
                 T_left = get_T_bath(rad_hydro_case, time=state.t)
                 # Update the case with the new T_left
                 rad_hydro_case = replace(rad_hydro_case, T_left=T_left)
+            else:
+                T_left = rad_hydro_case.T0_Kelvin * (state.t/(10**-9))**rad_hydro_case.tau
             
             # Lagrangian step
             new_state = step_rad_hydro(

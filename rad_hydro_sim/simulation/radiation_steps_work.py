@@ -1,5 +1,5 @@
 # physical constants
-from _typeshed import _type_checker_internals
+from typing import Literal
 from _typeshed import _type_checker_internals
 c = 3e10  # speed of light [cm/s]
 a_Kelvin = 7.5646e-15  # Radiation constant in erg cm^-3 K^-4
@@ -8,6 +8,7 @@ Hev_to_erg =  100 * eV_to_erg  # electron energy in CGS [erg/Hev]
 k_B = 1.380649e-16  # Boltzmann constant in CGS [erg/K]
 KELVIN_PER_HEV = Hev_to_erg / k_B  # Conversion factor from keV to Kelvin
 a_Hev = a_Kelvin * KELVIN_PER_HEV**4  # Radiation constant in keV cm^-3 keV^-4
+AVERAGE : Literal["arithmetic", "harmonic"] = "arithmetic"
 
 import numpy as np
 from dataclasses import dataclass
@@ -21,6 +22,11 @@ def calculate_temperature_from_specific_energy(
 ) -> np.ndarray:
     return ((e_material / f) * rho**mu) ** (1/gamma)
      
+def calc_average(left: np.ndarray, right: np.ndarray) -> np.ndarray:
+    if AVERAGE == "harmonic":
+        return 2 * left * right / (left + right)
+    else:
+        return (left + right) / 2
 
 def calculate_beta_from_temperature_and_density(T: np.ndarray, rho: np.ndarray) -> np.ndarray:
     return 4*a_Kelvin / (f_Kelvin * gamma) * T**(4-gamma) * rho**(mu - 1)
@@ -33,6 +39,11 @@ def calculate_D_from_sigma(sigma: np.ndarray) -> np.ndarray:
 
 def calculate_A(beta: np.ndarray, sigma: np.ndarray, dt: float) -> np.ndarray:
     return chi * beta * sigma * dt * c
+
+def calculate_abcd_fixed(sigma: np.ndarray, D: np.ndarray, A: np.ndarray, m_cells: np.ndarray, rho: np.ndarray, E_rad
+                   : np.ndarray, T_star: np.ndarray, dt: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    global chi
+    rho_face_left = 
 
 
 

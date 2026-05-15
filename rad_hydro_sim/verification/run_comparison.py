@@ -1051,17 +1051,17 @@ def run_comparison(
 
 def main() -> None:
     """Entry point: select mode and which reference solver(s) to overlay."""
-    # MODE = VerificationMode.FULL_RAD_HYDRO
-    MODE = VerificationMode.RADIATION_ONLY
+    MODE = VerificationMode.FULL_RAD_HYDRO
+    # MODE = VerificationMode.RADIATION_ONLY
     # MODE = VerificationMode.HYDRO_ONLY
 
-    # REFERENCE_SOLVER = ReferenceSolver.BOTH
-    REFERENCE_SOLVER = ReferenceSolver.SHUSSMAN
+    REFERENCE_SOLVER = ReferenceSolver.BOTH
+    # REFERENCE_SOLVER = ReferenceSolver.SHUSSMAN
     # REFERENCE_SOLVER = ReferenceSolver.MENAHEM
 
     run_comparison(
         MODE,
-        skip_rad_hydro=True,
+        skip_rad_hydro=False,
         skip_diffusion=False,
         skip_supersonic=False,
         skip_hydro_sim=False,

@@ -65,7 +65,7 @@ class ReferenceSolver(str, Enum):
 
 RADIATION_ONLY_PRESET = PRESET_CONSTANT_T_RADIATION_ONLY   # constant_temperature_drive
 HYDRO_ONLY_PRESET = PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE                  # constant_pressure_drive
-FULL_RAD_HYDRO_PRESET = PRESET_FIG_8_CONSTANT_TEMPERATURE                  # fig_7_comparison
+FULL_RAD_HYDRO_PRESET = PRESET_FIG_8_CONSTANT_TEMPERATURE                  # fig_9_comparison
 
 # Map each verification mode to its preset name (SIMPLE_TEST_CASES key)
 MODE_TO_PRESET: dict[VerificationMode, str] = {

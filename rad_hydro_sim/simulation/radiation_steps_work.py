@@ -1,4 +1,6 @@
 # physical constants
+from _typeshed import _type_checker_internals
+from _typeshed import _type_checker_internals
 c = 3e10  # speed of light [cm/s]
 a_Kelvin = 7.5646e-15  # Radiation constant in erg cm^-3 K^-4
 eV_to_erg = 1.60218e-12  # electron energy in CGS [erg/eV]
@@ -31,6 +33,8 @@ def calculate_D_from_sigma(sigma: np.ndarray) -> np.ndarray:
 
 def calculate_A(beta: np.ndarray, sigma: np.ndarray, dt: float) -> np.ndarray:
     return chi * beta * sigma * dt * c
+
+
 
 def calculate_abcd(sigma: np.ndarray, D: np.ndarray, A: np.ndarray, m_cells: np.ndarray, rho: np.ndarray, E_rad
                    : np.ndarray, T_star: np.ndarray, dt: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -67,73 +71,115 @@ def calculate_abcd(sigma: np.ndarray, D: np.ndarray, A: np.ndarray, m_cells: np.
         )
     return a, b, c_coeff, d
 
-def solve_tridiagonal(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray, use_scipy: bool = True) -> np.ndarray:
-    """Solves the tridiagonal system Ax = d where A has sub-diagonal a, diagonal b, and super-diagonal c."""
+def calculate_abcd_Marshak(sigma: np.ndarray, D: np.ndarray, A: np.ndarray, m_cells: np.ndarray, rho: np.ndarray, E_rad: np.ndarray, T_star: np.ndarray, dt: float, T_bath: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Returns the coefficients a, b, c, d for the implicit update with Marshak boundary conditions."""
+    M = len(rho)
+    a = np.zeros(M)
+    b = np.zeros(M)
+    c_coeff = np.zeros(M)
+    d = np.zeros(M)
+
+    # Interior cells (1 to M-2)
+    D_face_left_interior = rho[:-2] * (D[:-2] + D[1:-1]) / 2 
+    D_face_right_interior = rho[2:] * (D[1:-1] + D[2:]) / 2 
+    F_interior = chi*c*sigma[1:-1]/(1 + A[1:-1])
+    coeff_interior = rho[1:-1] / (m_cells[1:-1]**2)
+
+    a[1:-1] = -coeff_interior * D_face_left_interior
+    c_coeff[1:-1] = -coeff_interior * D_face_right_interior
+    b[1:-1] = coeff_interior * (D_face_right_interior + D_face_left_interior) + 1/dt + F_interior
+    UR_star_interior = a_Kelvin * T_star[1:-1]**4
+    d[1:-1] = F_interior * UR_star_interior + (1/dt) * E_rad[1:-1]
+
+    sigma_sb = a_Kelvin * c / 4
+
+    # Boundary cell 0 (Left Marshak)
+    D_face_right_0 = rho[1] * (D[0] + D[1]) / 2 
+    coeff_0 = rho[0] / (m_cells[0]**2)
+    F_0 = chi*c*sigma[0]/(1 + A[0])
+    UR_star_0 = a_Kelvin * T_star[0]**4
+
+    c_coeff[0] = -coeff_0 * D_face_right_0
+    b[0] = 1/dt + coeff_0 * D_face_right_0 + F_0 + c * rho[0] / (2 * m_cells[0])
+    d[0] = E_rad[0]/dt + 2 * rho[0] * sigma_sb * T_bath**4 / m_cells[0] + F_0 * UR_star_0
+    a[0] = 0.0
+
+    # Boundary cell M-1 (Right Marshak)
+    D_face_left_M1 = rho[-2] * (D[-2] + D[-1]) / 2
+    coeff_M1 = rho[-1] / (m_cells[-1]**2)
+    F_M1 = chi*c*sigma[-1]/(1 + A[-1])
+    UR_star_M1 = a_Kelvin * T_star[-1]**4
+
+    a[-1] = -coeff_M1 * D_face_left_M1
+    b[-1] = 1/dt + coeff_M1 * D_face_left_M1 + F_M1 + c * rho[-1] / (2 * m_cells[-1])
+    d[-1] = E_rad[-1]/dt + F_M1 * UR_star_M1
+    c_coeff[-1] = 0.0
+
+    # check for nan values
+    if np.any(np.isnan(a)) or np.any(np.isnan(b)) or np.any(np.isnan(c_coeff)) or np.any(np.isnan(d)):
+        raise ValueError("NaN value encountered in Marshak coefficients")
+    if np.any(b <= 0):
+        raise ValueError("Non-positive diagonal encountered in Marshak coefficients")
+
+    return a, b, c_coeff, d
+
+def solve_tridiagonal(a: np.ndarray, b: np.ndarray, c: np.ndarray, d: np.ndarray, use_scipy: bool = True, bc_type: str = "dirichlet") -> np.ndarray:
+    """Solves the tridiagonal system Ax = d where A has sub-diagonal a, diagonal b, and super-diagonal c.
+    If bc_type is 'dirichlet', the returned array is padded with zeros at the boundaries (length N+2).
+    If bc_type is 'marshak', the returned array is the exact solution (length N).
+    """
+    n = len(b)
     if use_scipy:
         from scipy.linalg import solve_banded
-        # Create the banded matrix for solve_banded
-        # The matrix A has the form:
-        # [b[0], c[0], 0, ..., ..., 0]               [d[0]] # boundary condition already applied to d[1]
-        # [a[1], b[1], c[1], ..., ...,0]             [d[1]]
-        # [0, a[2], b[2], ..., ..., 0] 
-        # [0, ..., ..., ..., ..., ..., 0]      
-        # [0, ..., ..., a[N-4], b[N-4], c[N-4]]      [d[N-4]] 
-        # [0, ..., ..., 0, a[N-3], b[N-3]]]          [d[N-3]]
-
-        # The ab matrix for solve_banded should have shape (3, n-2) where n is the length of b (the number of unknowns)
-        # The first row of ab is the super-diagonal (c), the second row is the diagonal (b), and the third row is the sub-diagonal (a).
-        # [0, c[0], c[1], ..., c[N-4], 0]
-        # [b[0], b[1], b[2], ..., b[N-4], b[N-3]]
-        # [0, a[1], ..., a[N-4], a[N-3], 0]
-
-        N = len(b) + 2 # b_j is defined for j=2,...,n-1 so b[j]=b_{j+2} is defined for j=0,...,N-3, so len(b) = N-2, so N = len(b) + 2
-        ab = np.zeros((3, N - 2))  # 3 rows for sub-diagonal, diagonal, super-diagonal
-        ab[0, 1:] = c[:N-3]  # super-diagonal
-        ab[1, :] = b[:N-2]    # diagonal
-        ab[2, :-1] = a[1:N-2]  # sub-diagonal
-        E_rad_interior = solve_banded((1, 1), ab, d[:N-2])
-        E_rad = np.zeros(N) # E_rad_j is defined for j=1,...,N, so E_rad[j]=E_rad_{j+1} is defined for j=0,...,N-1, so len(E_rad) = N
-                            # and E_rad[0] and E_rad[N-1] will be set by boundary conditions by the MAIN radiation_step(), so the interior points are E_rad[1:N-1]
-        E_rad[1:N-1] = E_rad_interior
-        return E_rad
-    
-    else: # Implement Thomas algorithm for tridiagonal systems - REQUIRES CORRECTION OF INDEXING!
-        n = len(b)
-        c_prime = np.zeros(n-1)
+        ab = np.zeros((3, n))
+        ab[0, 1:] = c[:-1]  # super-diagonal
+        ab[1, :] = b        # diagonal
+        ab[2, :-1] = a[1:]  # sub-diagonal
+        x = solve_banded((1, 1), ab, d)
+    else:
+        # Thomas algorithm
+        c_prime = np.zeros(n)
         d_prime = np.zeros(n)
-
         c_prime[0] = c[0] / b[0]
         d_prime[0] = d[0] / b[0]
-
+        
         # Forward sweep
-        for i in range(1, n-1):
-            denom = b[i] - a[i-1] * c_prime[i-1]
-            c_prime[i] = c[i] / denom
-            d_prime[i] = (d[i] - a[i-1] * d_prime[i-1]) / denom
-
-        d_prime[n-1] = (d[n-1] - a[n-2] * d_prime[n-2]) / (b[n-1] - a[n-2] * c_prime[n-2])
-
+        for i in range(1, n):
+            denom = b[i] - a[i] * c_prime[i-1]
+            if i < n - 1:
+                c_prime[i] = c[i] / denom
+            d_prime[i] = (d[i] - a[i] * d_prime[i-1]) / denom
+            
         # Back substitution
         x = np.zeros(n)
         x[-1] = d_prime[-1]
         for i in range(n-2, -1, -1):
             x[i] = d_prime[i] - c_prime[i] * x[i+1]
 
+    if bc_type == "dirichlet":
+        E_rad = np.zeros(n + 2)
+        E_rad[1:-1] = x
+        return E_rad
+    elif bc_type == "marshak":
         return x
+    else:
+        raise ValueError(f"Unknown bc_type: {bc_type}")
         
 
-def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydroCase) -> RadHydroState:
+def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydroCase, bc_type: str = "dirichlet") -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Updates the material specific energy & radiation energy density based on the coupling between matter and radiation.
     
     Parameters:
-        e_star: Material specific energy in erg/g
-        rho: Material density in g/cm^3
+        state_star: RadHydroState
         dt: Time step in seconds
+        rad_hydro_case: RadHydroCase
+        bc_type: "dirichlet" or "marshak"
         
     Returns:
         new_e_material: Updated material specific energy in erg/g
-        e_rad: Radiation energy density in erg/cm^3
+        new_T: Updated temperature
+        new_E_rad: Radiation energy density in erg/cm^3
     """
     global alpha, gamma, mu, f_Kelvin, chi, lambda_, g_Kelvin
     alpha, gamma, mu, f_Kelvin, chi, lambda_, g_Kelvin = rad_hydro_case._get_params()
@@ -158,18 +204,22 @@ def radiation_step(state_star: RadHydroState, dt: float, rad_hydro_case: RadHydr
     t_drive = max(state_star.t, dt) # avoid t=0 for the power law drive
     T_left = rad_hydro_case.T0_Kelvin * (t_drive/(10**-9))**rad_hydro_case.tau
     E_left = a_Kelvin * T_left**4
-    # print("t", state_star.t, "T_left", T_left, "E_left", E_left)
-    d[0] -= a[0] * E_left
 
-    # solving the tridiagonal system for radiation energy density
-    new_E_rad = solve_tridiagonal(a, b, c_coeff, d)
-    new_E_rad[0] = E_left  # Left boundary condition: E_rad[0] = a_Kelvin * T_left^4 (consistent with the boundary condition for material energy)
-    new_E_rad[-1] = 0 # Right boundary condition: E_rad[-1] = 0 (vacuum)
+    if bc_type == "marshak":
+        a, b, c_coeff, d = calculate_abcd_Marshak(sigma, D, A, m_cells, rho, E_rad, T_star, dt, T_left)
+        new_E_rad = solve_tridiagonal(a, b, c_coeff, d, bc_type="marshak")
+    else:
+        a, b, c_coeff, d = calculate_abcd(sigma, D, A, m_cells, rho, E_rad, T_star, dt)
+        d[0] -= a[0] * E_left
+        new_E_rad = solve_tridiagonal(a, b, c_coeff, d, bc_type="dirichlet")
+        new_E_rad[0] = E_left  # Left boundary condition: E_rad[0] = a_Kelvin * T_left^4 (consistent with the boundary condition for material energy)
+        new_E_rad[-1] = 0 # Right boundary condition: E_rad[-1] = 0 (vacuum)
 
     # updating UR, T and material specific energy based on the new radiation energy density
     UR_star = a_Kelvin * T_star**4   # length N (same as A and new_E_rad)
-    UR_star[0]  = E_left          # left boundary consistent
-    UR_star[-1] = 1e-10             # right boundary vacuum
+    if bc_type == "dirichlet":
+        UR_star[0]  = E_left          # left boundary consistent
+        UR_star[-1] = 1e-10             # right boundary vacuum
     new_UR = (A / (1 + A)) * new_E_rad + (1 / (1 + A)) * UR_star
     new_Um = new_UR / gamma
 

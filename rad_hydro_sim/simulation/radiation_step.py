@@ -175,14 +175,21 @@ def calculate_abcd_marshak(
     coeff_scheme: str = "legacy",
     T_bath: float | None = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Return a,b,c,d but modify first/last diagonal & rhs according to Marshak BC.
+    """Build Marshak-modified tridiagonal coefficients from the base interior system.
 
-    This reuses `calculate_abcd` then applies the Marshak appendix corrections:
-      	ilde{b}_1 = b_1 + c * rho_1^* / (2 \Delta m_1)
-      	ilde{d}_1 = d_1 + (c * a * rho_1^* T_bath^4) / (2 \Delta m_1)
-      	ilde{b}_N = b_N + c * rho_N^* / (2 \Delta m_N)
+    The implementation follows the appendix relation between interior and boundary rows:
+        - first row: replace left diffusion contribution with Marshak cooling,
+        - first rhs: add bath drive term,
+        - last row: add vacuum leakage term.
 
-    Note: `T_bath` should be the bath temperature in Kelvin (used to compute a*T^4).
+    In coefficient form:
+        b1_tilde = b1 - L1 + C1
+        a1_tilde = 0
+        d1_tilde = d1 + C1 * E_bath
+        bN_tilde = bN + CN
+    where L1 = -a1 (left diffusion contribution from base stencil),
+    C1 = c*rho_1^*/(2*dm_1), CN = c*rho_N^*/(2*dm_N),
+    and E_bath = a*T_bath^4.
     """
     # Get base coefficients (interior system for Ncells-2 unknowns)
     a, b, c_coeff, d = calculate_abcd(
@@ -195,10 +202,9 @@ def calculate_abcd_marshak(
     c_coeff = c_coeff.copy()
     d = d.copy()
 
-    # Determine bath temperature (Kelvin) and corresponding boundary energy
+    # Determine bath temperature (Kelvin) and corresponding boundary energy.
     if T_bath is None:
         T_bath = float(T_material[0]) if len(T_material) > 0 else 0.0
-
     E_bath = a_Kelvin * (T_bath ** 4)
 
     # Number of interior unknowns returned by calculate_abcd
@@ -206,41 +212,23 @@ def calculate_abcd_marshak(
     if n_interior == 0:
         return a, b, c_coeff, d
 
-    # Compute consistent "star" densities used by Marshak formula.
-    # Use face-weighted averages for the left/right-most cell-star values when available.
-    def _face_avg(u: np.ndarray, left_index: int) -> float:
-        # average u[left_index] and u[left_index+1] when possible, else fallback to u[left_index]
-        if left_index + 1 < len(u):
-            return float(arithmetic_mean(np.asarray(u[left_index], dtype=float), np.asarray(u[left_index+1], dtype=float)))
-        return float(u[left_index])
+    # First/last interior cells in this code are indices 1 and -2 in full arrays.
+    rho_star_left = float(rho[1])
+    dm_left = float(m_cells[1])
+    rho_star_right = float(rho[-2])
+    dm_right = float(m_cells[-2])
 
-    # Left-most physical (cell 0) face-averaged density & mass cell
-    rho_star_left = _face_avg(rho, 0)
-    dm_left = float(m_cells[0])
+    # Marshak coefficient replacement for the first interior row.
+    # Base row has b1 = (L1 + R1 + 1/dt + F1), a1 = -L1.
+    # Appendix row is b1_tilde = (R1 + 1/dt + F1 + C1), so b1_tilde = b1 + a1 + C1.
+    cooling_left = c * rho_star_left / (2.0 * dm_left)
+    b[0] = b[0] + a[0] + cooling_left
+    a[0] = 0.0
+    d[0] += cooling_left * E_bath
 
-    # Right-most physical cell-star (use average of last two cells where possible)
-    rho_star_right = _face_avg(rho, max(0, len(rho) - 2))
-    dm_right = float(m_cells[-1])
-
-    # Marshak appendix corrections (tilde coefficients) as described in docs:
-    #  
-    #  	ilde{b}_1 = b_1 + c * rho_1^* / (2 \Delta m_1)
-    #  	ilde{d}_1 = d_1 + (c * a * rho_1^* T_bath^4) / (2 \Delta m_1)
-    #  	ilde{b}_N = b_N + c * rho_N^* / (2 \Delta m_N)
-    #
-    # Note: here b[0] corresponds to the first interior equation (adjacent to physical cell 0)
-    # and b[-1] corresponds to the last interior equation (adjacent to physical cell N-1).
-
-    # Left correction
-    try:
-        b[0] += c * rho_star_left / (2.0 * dm_left)
-        d[0] += (c * a_Kelvin * rho_star_left * E_bath / a_Kelvin) / (2.0 * dm_left)
-    except Exception:
-        # Defensive: if any indexing unexpected, raise a clear error
-        raise
-
-    # Right correction (leakage / vacuum like term)
-    b[-1] += c * rho_star_right / (2.0 * dm_right)
+    # Vacuum Marshak leakage at the right boundary modifies the last diagonal only.
+    cooling_right = c * rho_star_right / (2.0 * dm_right)
+    b[-1] += cooling_right
 
     # Basic sanity checks as before
     if np.any(np.isnan(a)) or np.any(np.isnan(b)) or np.any(np.isnan(c_coeff)) or np.any(np.isnan(d)):
@@ -458,201 +446,201 @@ def get_T_bath(
         T_left = T0_left * (t_drive / (10**-9)) ** rad_hydro_case.tau
         return float(T_left)
 
-def solve_tridiagonal(
-    a: np.ndarray, 
-    b: np.ndarray, 
-    c: np.ndarray, 
-    d: np.ndarray, 
-    use_scipy: bool = True
-) -> np.ndarray:
-    """Solves the tridiagonal system Ax = d where A has sub-diagonal a, diagonal b, and super-diagonal c."""
-    if use_scipy:
-        from scipy.linalg import solve_banded
-        N = len(b) + 2
-        ab = np.zeros((3, N - 2))
-        ab[0, 1:] = c[:N-3]  # super-diagonal
-        ab[1, :] = b[:N-2]    # diagonal
-        ab[2, :-1] = a[1:N-2]  # sub-diagonal
-        E_rad_interior = solve_banded((1, 1), ab, d[:N-2])
-        E_rad = np.zeros(N)
-        E_rad[1:N-1] = E_rad_interior
-        return E_rad
-    
-    else:
-        n = len(b)
-        c_prime = np.zeros(n-1)
-        d_prime = np.zeros(n)
-
-        c_prime[0] = c[0] / b[0]
-        d_prime[0] = d[0] / b[0]
-
-        for i in range(1, n-1):
-            denom = b[i] - a[i-1] * c_prime[i-1]
-            c_prime[i] = c[i] / denom
-            d_prime[i] = (d[i] - a[i-1] * d_prime[i-1]) / denom
-
-        d_prime[n-1] = (d[n-1] - a[n-2] * d_prime[n-2]) / (b[n-1] - a[n-2] * c_prime[n-2])
-
-        x = np.zeros(n)
-        x[-1] = d_prime[-1]
-        for i in range(n-2, -1, -1):
-            x[i] = d_prime[i] - c_prime[i] * x[i+1]
-
-        return x
-        
-
-def solve_tridiagonal_marshak(
-    a: np.ndarray,
-    b: np.ndarray,
-    c: np.ndarray,
-    d: np.ndarray,
-    E_left: float | None = None,
-    use_scipy: bool = True,
-) -> np.ndarray:
-    """Solve the Marshak-modified tridiagonal interior system and return full array.
-
-    Expects interior coefficient arrays `a,b,c,d` (length n_interior). Returns an
-    array of length N = n_interior + 2 with interior solution populated at
-    indices 1..N-2. If `E_left` is provided it will be placed at index 0.
-    Uses SciPy's `solve_banded` when `use_scipy=True`.
-    """
-    n_interior = len(b)
-    N = n_interior + 2
-
-    if n_interior == 0:
-        E = np.zeros(2)
-        if E_left is not None:
-            E[0] = E_left
-        return E
-
-    if use_scipy:
-        from scipy.linalg import solve_banded
-
-        ab = np.zeros((3, n_interior))
-        if n_interior >= 2:
-            ab[0, 1:] = c[: n_interior - 1]
-        ab[1, :] = b[:n_interior]
-        if n_interior >= 2:
-            ab[2, :-1] = a[1:n_interior]
-
-        E_interior = solve_banded((1, 1), ab, d[:n_interior])
-        E = np.zeros(N)
-        E[1:N-1] = E_interior
-        if E_left is not None:
-            E[0] = E_left
-        return E
-
-    # fallback to python solver for interior and assemble full array
-    E_interior = solve_tridiagonal(a, b, c, d, use_scipy=False)
-    E = np.zeros(N)
-    E[1:N-1] = E_interior
-    if E_left is not None:
-        E[0] = E_left
-    return E
-
-def radiation_step(
-    state_star: RadHydroState, 
-    dt: float, 
-
-    rad_hydro_case: RadHydroCase,
-    T_left: float | None = None,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Updates the material specific energy & radiation energy density based on the coupling between matter and radiation.
-    
-    Parameters:
-        state_star: Post-hydro state with e_material, rho, T_rad, E_rad
-        dt: Time step in seconds
-        rad_hydro_case: Problem configuration
-        
-    Returns:
-        new_T_material: Updated material temperature in K
-        new_e_material: Updated material specific energy in erg/g
-        new_T_rad: Updated radiation temperature in K
-        new_E_rad: Updated radiation energy density in erg/cm^3
-    """
-    global alpha, beta_Rosen, mu, f_Kelvin, chi, lambda_, g_Kelvin
-    alpha, beta_Rosen, mu, f_Kelvin, chi, lambda_, g_Kelvin = rad_hydro_case._get_params()
-    e_star, rho, m_cells, E_rad, T_rad_current = (
-        state_star.e_material,
-        state_star.rho,
-        state_star.m_cells,
-        state_star.E_rad,
-        state_star.T_rad,
-    )
-
-    mode = getattr(rad_hydro_case, "force_black", None)
-    coeff_scheme = getattr(rad_hydro_case, "radiation_coeff_scheme", "legacy")
-    valid_modes = (None, "gray corrected", "full black")
-    if mode not in valid_modes:
-        raise ValueError(
-            f"Invalid force_black mode '{mode}'. Expected one of {valid_modes}."
-        )
-    valid_coeff_schemes = ("legacy", "face_weighted")
-    if coeff_scheme not in valid_coeff_schemes:
-        raise ValueError(
-            f"Invalid radiation_coeff_scheme '{coeff_scheme}'. Expected one of {valid_coeff_schemes}."
-        )
-
-    if mode == "full black":
-        new_e, new_T = black_radiation_step(state_star, dt, rad_hydro_case)
-        return new_T, new_e, new_T, new_e
-
-    # Material temperature from e_star (match working: use T_material for beta and sigma)
-    T_material_star = calculate_temperature_from_specific_energy(e_star, rho, f_Kelvin, beta_Rosen, mu)
-    beta = calculate_beta_from_temperature_and_density(T_material_star, rho)
-    sigma = calculate_sigma_from_temperature_and_density(T_material_star, rho)
-    D = calculate_D_from_sigma(sigma)
-    A = calculate_A(beta, sigma, dt)
-
-    # Calculate tridiagonal system coefficients.
-    # If Marshak BC requested, compute the left bath drive first and let
-    # calculate_abcd_marshak apply the Marshak modifications to the system.
-    bc_type = getattr(rad_hydro_case, "bc_type", "Marshak")
-    if T_left is None:
-        T_left = getattr(rad_hydro_case, "T_left", None)
-    E_left = a_Kelvin * T_left**4 if T_left is not None else 0.0
-
-    if bc_type == "Marshak" and T_left is None:
-        raise ValueError("T_left must be provided in rad_hydro_case when bc_type='Marshak'.")
-    if bc_type == "Marshak":
-        if mode == "gray corrected":
-            a, b, c_coeff, d = calculate_abcd_marshak(
-                sigma, D, A, m_cells, rho, None, T_material_star, dt, coeff_scheme=coeff_scheme, T_bath=T_left
-            )
-        else:
-            a, b, c_coeff, d = calculate_abcd_marshak(
-                sigma, D, A, m_cells, rho, E_rad, T_material_star, dt, coeff_scheme=coeff_scheme, T_bath=T_left
-            )
-        # Marshak included the left-drive directly in d[0], do not subtract a[0]*E_left
-    else:
-        if mode == "gray corrected":
-            a, b, c_coeff, d = calculate_abcd(
-                sigma, D, A, m_cells, rho, None, T_material_star, dt, coeff_scheme=coeff_scheme
-            )
-        else:
-            a, b, c_coeff, d = calculate_abcd(
-                sigma, D, A, m_cells, rho, E_rad, T_material_star, dt, coeff_scheme=coeff_scheme
-            )
-        # classical Dirichlet-like handling: subtract left boundary contribution
-        d[0] -= a[0] * E_left
-
-    e_right_dirichlet = _apply_right_bc_to_system(b, c_coeff, d, rad_hydro_case)
-
-    # Solve for radiation energy density and temperature
-    if bc_type == "Marshak":
-        new_E_rad = solve_tridiagonal_marshak(a, b, c_coeff, d, E_left)
-    else:
-        new_E_rad = solve_tridiagonal(a, b, c_coeff, d)
-        # apply left BC to solution separately (Dirichlet).
-        new_E_rad[0] = E_left
-    _apply_right_bc_to_solution(new_E_rad, rad_hydro_case, e_right_dirichlet)
-    new_T_rad = (new_E_rad / a_Kelvin) ** (1 / 4)
-
-    # Solve for material energy density and temperature
-    UR_star = a_Kelvin * T_material_star**4
-    new_UR = (A / (1 + A)) * new_E_rad + (1 / (1 + A)) * UR_star
-    new_T_material = (new_UR / a_Kelvin) ** (1 / 4)
-    new_e_material = f_Kelvin * new_T_material**beta_Rosen * rho**(-mu)
-
-    return new_T_material, new_e_material, new_T_rad, new_E_rad
+def solve_tridiagonal(
+    a: np.ndarray, 
+    b: np.ndarray, 
+    c: np.ndarray, 
+    d: np.ndarray, 
+    use_scipy: bool = True
+) -> np.ndarray:
+    """Solves the tridiagonal system Ax = d where A has sub-diagonal a, diagonal b, and super-diagonal c."""
+    if use_scipy:
+        from scipy.linalg import solve_banded
+        N = len(b) + 2
+        ab = np.zeros((3, N - 2))
+        ab[0, 1:] = c[:N-3]  # super-diagonal
+        ab[1, :] = b[:N-2]    # diagonal
+        ab[2, :-1] = a[1:N-2]  # sub-diagonal
+        E_rad_interior = solve_banded((1, 1), ab, d[:N-2])
+        E_rad = np.zeros(N)
+        E_rad[1:N-1] = E_rad_interior
+        return E_rad
+    
+    else:
+        n = len(b)
+        c_prime = np.zeros(n-1)
+        d_prime = np.zeros(n)
+
+        c_prime[0] = c[0] / b[0]
+        d_prime[0] = d[0] / b[0]
+
+        for i in range(1, n-1):
+            denom = b[i] - a[i-1] * c_prime[i-1]
+            c_prime[i] = c[i] / denom
+            d_prime[i] = (d[i] - a[i-1] * d_prime[i-1]) / denom
+
+        d_prime[n-1] = (d[n-1] - a[n-2] * d_prime[n-2]) / (b[n-1] - a[n-2] * c_prime[n-2])
+
+        x = np.zeros(n)
+        x[-1] = d_prime[-1]
+        for i in range(n-2, -1, -1):
+            x[i] = d_prime[i] - c_prime[i] * x[i+1]
+
+        return x
+        
+
+def solve_tridiagonal_marshak(
+    a: np.ndarray,
+    b: np.ndarray,
+    c: np.ndarray,
+    d: np.ndarray,
+    E_left: float | None = None,
+    use_scipy: bool = True,
+) -> np.ndarray:
+    """Solve the Marshak-modified tridiagonal interior system and return full array.
+
+    Expects interior coefficient arrays `a,b,c,d` (length n_interior). Returns an
+    array of length N = n_interior + 2 with interior solution populated at
+    indices 1..N-2. If `E_left` is provided it will be placed at index 0.
+    Uses SciPy's `solve_banded` when `use_scipy=True`.
+    """
+    n_interior = len(b)
+    N = n_interior + 2
+
+    if n_interior == 0:
+        E = np.zeros(2)
+        if E_left is not None:
+            E[0] = E_left
+        return E
+
+    if use_scipy:
+        from scipy.linalg import solve_banded
+
+        ab = np.zeros((3, n_interior))
+        if n_interior >= 2:
+            ab[0, 1:] = c[: n_interior - 1]
+        ab[1, :] = b[:n_interior]
+        if n_interior >= 2:
+            ab[2, :-1] = a[1:n_interior]
+
+        E_interior = solve_banded((1, 1), ab, d[:n_interior])
+        E = np.zeros(N)
+        E[1:N-1] = E_interior
+        if E_left is not None:
+            E[0] = E_left
+        return E
+
+    # fallback to python solver for interior and assemble full array
+    E_interior = solve_tridiagonal(a, b, c, d, use_scipy=False)
+    E = np.zeros(N)
+    E[1:N-1] = E_interior
+    if E_left is not None:
+        E[0] = E_left
+    return E
+
+def radiation_step(
+    state_star: RadHydroState, 
+    dt: float, 
+
+    rad_hydro_case: RadHydroCase,
+    T_left: float | None = None,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Updates the material specific energy & radiation energy density based on the coupling between matter and radiation.
+    
+    Parameters:
+        state_star: Post-hydro state with e_material, rho, T_rad, E_rad
+        dt: Time step in seconds
+        rad_hydro_case: Problem configuration
+        
+    Returns:
+        new_T_material: Updated material temperature in K
+        new_e_material: Updated material specific energy in erg/g
+        new_T_rad: Updated radiation temperature in K
+        new_E_rad: Updated radiation energy density in erg/cm^3
+    """
+    global alpha, beta_Rosen, mu, f_Kelvin, chi, lambda_, g_Kelvin
+    alpha, beta_Rosen, mu, f_Kelvin, chi, lambda_, g_Kelvin = rad_hydro_case._get_params()
+    e_star, rho, m_cells, E_rad, T_rad_current = (
+        state_star.e_material,
+        state_star.rho,
+        state_star.m_cells,
+        state_star.E_rad,
+        state_star.T_rad,
+    )
+
+    mode = getattr(rad_hydro_case, "force_black", None)
+    coeff_scheme = getattr(rad_hydro_case, "radiation_coeff_scheme", "legacy")
+    valid_modes = (None, "gray corrected", "full black")
+    if mode not in valid_modes:
+        raise ValueError(
+            f"Invalid force_black mode '{mode}'. Expected one of {valid_modes}."
+        )
+    valid_coeff_schemes = ("legacy", "face_weighted")
+    if coeff_scheme not in valid_coeff_schemes:
+        raise ValueError(
+            f"Invalid radiation_coeff_scheme '{coeff_scheme}'. Expected one of {valid_coeff_schemes}."
+        )
+
+    if mode == "full black":
+        new_e, new_T = black_radiation_step(state_star, dt, rad_hydro_case)
+        return new_T, new_e, new_T, new_e
+
+    # Material temperature from e_star (match working: use T_material for beta and sigma)
+    T_material_star = calculate_temperature_from_specific_energy(e_star, rho, f_Kelvin, beta_Rosen, mu)
+    beta = calculate_beta_from_temperature_and_density(T_material_star, rho)
+    sigma = calculate_sigma_from_temperature_and_density(T_material_star, rho)
+    D = calculate_D_from_sigma(sigma)
+    A = calculate_A(beta, sigma, dt)
+
+    # Calculate tridiagonal system coefficients.
+    # If Marshak BC requested, compute the left bath drive first and let
+    # calculate_abcd_marshak apply the Marshak modifications to the system.
+    bc_type = getattr(rad_hydro_case, "bc_type", "Marshak")
+    if T_left is None:
+        T_left = getattr(rad_hydro_case, "T_left", None)
+    E_left = a_Kelvin * T_left**4 if T_left is not None else 0.0
+
+    if bc_type == "Marshak" and T_left is None:
+        raise ValueError("T_left must be provided in rad_hydro_case when bc_type='Marshak'.")
+    if bc_type == "Marshak":
+        if mode == "gray corrected":
+            a, b, c_coeff, d = calculate_abcd_marshak(
+                sigma, D, A, m_cells, rho, None, T_material_star, dt, coeff_scheme=coeff_scheme, T_bath=T_left
+            )
+        else:
+            a, b, c_coeff, d = calculate_abcd_marshak(
+                sigma, D, A, m_cells, rho, E_rad, T_material_star, dt, coeff_scheme=coeff_scheme, T_bath=T_left
+            )
+        # Marshak included the left-drive directly in d[0], do not subtract a[0]*E_left
+    else:
+        if mode == "gray corrected":
+            a, b, c_coeff, d = calculate_abcd(
+                sigma, D, A, m_cells, rho, None, T_material_star, dt, coeff_scheme=coeff_scheme
+            )
+        else:
+            a, b, c_coeff, d = calculate_abcd(
+                sigma, D, A, m_cells, rho, E_rad, T_material_star, dt, coeff_scheme=coeff_scheme
+            )
+        # classical Dirichlet-like handling: subtract left boundary contribution
+        d[0] -= a[0] * E_left
+
+    e_right_dirichlet = _apply_right_bc_to_system(b, c_coeff, d, rad_hydro_case)
+
+    # Solve for radiation energy density and temperature
+    if bc_type == "Marshak":
+        new_E_rad = solve_tridiagonal_marshak(a, b, c_coeff, d, E_left)
+    else:
+        new_E_rad = solve_tridiagonal(a, b, c_coeff, d)
+        # apply left BC to solution separately (Dirichlet).
+        new_E_rad[0] = E_left
+    _apply_right_bc_to_solution(new_E_rad, rad_hydro_case, e_right_dirichlet)
+    new_T_rad = (new_E_rad / a_Kelvin) ** (1 / 4)
+
+    # Solve for material energy density and temperature
+    UR_star = a_Kelvin * T_material_star**4
+    new_UR = (A / (1 + A)) * new_E_rad + (1 / (1 + A)) * UR_star
+    new_T_material = (new_UR / a_Kelvin) ** (1 / 4)
+    new_e_material = f_Kelvin * new_T_material**beta_Rosen * rho**(-mu)
+
+    return new_T_material, new_e_material, new_T_rad, new_E_rad

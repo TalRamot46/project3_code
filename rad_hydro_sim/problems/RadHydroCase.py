@@ -87,7 +87,7 @@ class RadHydroCase(ABC):
     # - "Marshak": Marshak (P1) boundary condition using a bath temperature drive
     # - "Dirichlet": classical Dirichlet style (fixed left face temperature)
     bc_type: Literal["Marshak", "Dirichlet"] = "Dirichlet"
-    T_left: float | None = None
+
 
     def _get_params(
         self,

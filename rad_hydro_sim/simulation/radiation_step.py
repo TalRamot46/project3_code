@@ -130,10 +130,10 @@ def calculate_abcd(
         coeff = rho[1:-1] / m_cells[1:-1] # this is not a mistake! It comes from
                                    # the first lagrangian derivative of the flux.
 
-        F = chi * c * sigma[1:-1] / (1 + A[1:-1])
+        B = chi * c * sigma[1:-1] / (1 + A[1:-1])
         a = -coeff * left_flux_coeff
         c_coeff = -coeff * right_flux_coeff
-        b = coeff * (left_flux_coeff + right_flux_coeff) + 1 / dt + F
+        b = coeff * (left_flux_coeff + right_flux_coeff) + 1 / dt + B
     else:
         raise ValueError(
             f"Invalid radiation coefficient scheme '{coeff_scheme}'. "
@@ -599,10 +599,10 @@ def radiation_step(
     # If Marshak BC requested, compute the left bath drive first and let
     # calculate_abcd_marshak apply the Marshak modifications to the system.
     bc_type = getattr(rad_hydro_case, "bc_type", "Marshak")
-    if T_left is None:
-        T_left = getattr(rad_hydro_case, "T_left", None)
-    E_left = a_Kelvin * T_left**4 if T_left is not None else 0.0
-
+    # if T_left is None:
+    #     T_left = getattr(rad_hydro_case, "T_left", None)
+    # E_left = a_Kelvin * T_left**4 if T_left is not None else 0.0
+    T_left = getattr(rad_hydro_case, "T0_Kelvin") * a_Kelvin
     if bc_type == "Marshak" and T_left is None:
         raise ValueError("T_left must be provided in rad_hydro_case when bc_type='Marshak'.")
     if bc_type == "Marshak":

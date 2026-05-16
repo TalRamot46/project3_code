@@ -1,5 +1,6 @@
 # physical constants
 from importlib import machinery
+from importlib import machinery
 c = 3e10  # speed of light [cm/s]
 a_Kelvin = 7.5646e-15  # Radiation constant in erg cm^-3 K^-4
 eV_to_erg = 1.60218e-12  # electron energy in CGS [erg/eV]
@@ -119,7 +120,7 @@ def calculate_abcd(
             rho_face = arithmetic_mean(rho[:-1], rho[1:])
             m_face = arithmetic_mean(m_cells[:-1], m_cells[1:])
 
-        flux_coeff = D_face / (rho_face * m_face)
+        flux_coeff = (D_face * rho_face) / m_face
         # adding an artificial value at the 0'th and N'th index
         # based on reflecting the value at the left- and right-most cell
         flux_coeff = np.concatenate(([flux_coeff[0]], flux_coeff, [flux_coeff[-1]]))
@@ -138,12 +139,6 @@ def calculate_abcd(
             "Expected 'legacy' or 'face_weighted'."
         )
 
-    UR_star = a_Kelvin * T_material[1:-1]**4
-    if E_rad is not None:
-        d = F * UR_star + (1/dt) * E_rad[1:-1]
-    else: # attempt to force black physics under LTE (T_m = T_rad)
-        E_rad = a_Kelvin * T_material**4
-        d = F * UR_star + (1/dt) * E_rad[1:-1]
 
     if np.any(np.isnan(a)) or np.any(np.isnan(b)) or np.any(np.isnan(c_coeff)) or np.any(np.isnan(d)):
         j = np.where(np.isnan(a))[0][0] if np.any(np.isnan(a)) else (np.where(np.isnan(b))[0][0] if np.any(np.isnan(b)) else (np.where(np.isnan(c_coeff))[0][0] if np.any(np.isnan(c_coeff)) else np.where(np.isnan(d))[0][0]))
@@ -169,11 +164,11 @@ def calculate_abcd_marshak(
     A: np.ndarray,
     m_cells: np.ndarray,
     rho: np.ndarray,
-    E_rad: np.ndarray | None,
+    E_rad: np.ndarray,
     T_material: np.ndarray,
     dt: float,
-    coeff_scheme: str = "legacy",
-    T_bath: float | None = None,
+    coeff_scheme: str,
+    T_bath: float,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Build Marshak-modified tridiagonal coefficients from the base interior system.
 
@@ -201,9 +196,6 @@ def calculate_abcd_marshak(
     b = b.copy()
     c_coeff = c_coeff.copy()
     d = d.copy()
-    # Determine bath temperature (Kelvin) and corresponding boundary energy.
-    if T_bath is None:
-        T_bath = float(T_material[0]) if len(T_material) > 0 else 0.0
     E_bath = a_Kelvin * (T_bath ** 4)
 
     # Number of interior unknowns returned by calculate_abcd
@@ -214,8 +206,6 @@ def calculate_abcd_marshak(
     # First/last interior cells in this code are indices 1 and -2 in full arrays.
     rho_star_left = float(rho[1])
     dm_left = float(m_cells[1])
-    rho_star_right = float(rho[-2])
-    dm_right = float(m_cells[-2])
 
     # Marshak coefficient replacement for the first interior row.
     # Base row has b1 = (L1 + R1 + 1/dt + F1), a1 = -L1.
@@ -225,9 +215,11 @@ def calculate_abcd_marshak(
     a[0] = 0.0
     d[0] += cooling_left * E_bath
 
-    # Vacuum Marshak leakage at the right boundary modifies the last diagonal only.
-    cooling_right = c * rho_star_right / (2.0 * dm_right)
-    b[-1] += cooling_right
+    # # Vacuum Marshak leakage at the right boundary modifies the last diagonal only.
+    # rho_star_right = float(rho[-2])
+    # dm_right = float(m_cells[-2])
+    # cooling_right = c * rho_star_right / (2.0 * dm_right)
+    # b[-1] += cooling_right
 
     # Basic sanity checks as before
     if np.any(np.isnan(a)) or np.any(np.isnan(b)) or np.any(np.isnan(c_coeff)) or np.any(np.isnan(d)):
@@ -455,15 +447,13 @@ def solve_tridiagonal(
     """Solves the tridiagonal system Ax = d where A has sub-diagonal a, diagonal b, and super-diagonal c."""
     if use_scipy:
         from scipy.linalg import solve_banded
-        N = len(b) + 2
-        ab = np.zeros((3, N - 2))
-        ab[0, 1:] = c[:N-3]  # super-diagonal
-        ab[1, :] = b[:N-2]    # diagonal
-        ab[2, :-1] = a[1:N-2]  # sub-diagonal
-        E_rad_interior = solve_banded((1, 1), ab, d[:N-2])
-        E_rad = np.zeros(N)
-        E_rad[1:N-1] = E_rad_interior
-        return E_rad
+        N = len(b)
+        ab = np.zeros((3, N))
+        ab[0, 1:] = c[:N-1]  # super-diagonal
+        ab[1, :] = b[:]    # diagonal
+        ab[2, :-1] = a[1:]  # sub-diagonal
+        E_rad = solve_banded((1, 1), ab, d[:])
+        return np.asarray(E_rad)
     
     else:
         n = len(b)
@@ -598,8 +588,7 @@ def radiation_step(
     bc_type = getattr(rad_hydro_case, "bc_type", "Marshak")
     # if T_left is None:
     #     T_left = getattr(rad_hydro_case, "T_left", None)
-    # E_left = a_Kelvin * T_left**4 if T_left is not None else 0.0
-    T_left = getattr(rad_hydro_case, "T0_Kelvin") * a_Kelvin
+    E_left = a_Kelvin * T_left**4 if T_left is not None else 0.0
     if bc_type == "Marshak" and T_left is None:
         raise ValueError("T_left must be provided in rad_hydro_case when bc_type='Marshak'.")
     if bc_type == "Marshak":
@@ -631,9 +620,7 @@ def radiation_step(
         new_E_rad = solve_tridiagonal_marshak(a, b, c_coeff, d, E_left)
     else:
         new_E_rad = solve_tridiagonal(a, b, c_coeff, d)
-        # apply left BC to solution separately (Dirichlet).
-        new_E_rad[0] = E_left
-    _apply_right_bc_to_solution(new_E_rad, rad_hydro_case, e_right_dirichlet)
+    # _apply_right_bc_to_solution(new_E_rad, rad_hydro_case, e_right_dirichlet)
     new_T_rad = (new_E_rad / a_Kelvin) ** (1 / 4)
 
     # Solve for material energy density and temperature

@@ -77,6 +77,7 @@ def get_e_star_from_hydro(
         T_material=state.T_material,
         T_rad=state.T_rad,
         E_rad=state.E_rad,
+        F_rad=state.F_rad,
     )
 
     return state_star

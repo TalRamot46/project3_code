@@ -184,7 +184,8 @@ def simulate_rad_hydro(
     state = initialize_problem(rad_hydro_case, simulation_config)
     state.a = compute_acceleration_nodes(state.x, state.p, state.q, state.m_cells, rad_hydro_case.geom, p_left=state.p[0], p_right=state.p[-1])
     t_end = rad_hydro_case.t_sec_end
-    solver, dimensionless_boundary_flux = get_dimensionless_boundary_flux(rad_hydro_case)
+    if rad_hydro_case.bc_type in ["Marshak", "Marshak_Menahem"]:
+        solver, dimensionless_boundary_flux = get_dimensionless_boundary_flux(rad_hydro_case)
     monitor_dir = get_rad_hydro_results_dir() / "monitor"
     monitor_dir.mkdir(parents=True, exist_ok=True)
     case_name = rad_hydro_case.title or rad_hydro_case.scenario or "rad_hydro_run"
@@ -279,6 +280,25 @@ def simulate_rad_hydro(
                 )
                 T_surface = solver.Tb * (state.t / 1e-9) ** solver.tau
                 rad_hydro_case = replace(rad_hydro_case, T_left=T_left)
+
+                F0_solver = solver.get_boundary_flux(dimensionless_boundary_flux=dimensionless_boundary_flux, time=state.t)
+                F0_sim = state.F_rad[0] if state.F_rad is not None and len(state.F_rad) > 0 else 0.0
+                marshak = check_marshak(state.E_rad, T_left, F0_solver, F0_sim)
+
+                monitor_writer.writerow([
+                    f"{state.t:.16e}",
+                    f"{T_left:.16e}",
+                    f"{T_surface:.16e}",
+                    f"{marshak['F0_solver']:.16e}",
+                    f"{marshak['F0_sim']:.16e}",
+                    f"{marshak['E_bath']:.16e}",
+                    f"{marshak['E_rad0']:.16e}",
+                    f"{marshak['residual_solver_pct']:.16e}",
+                    f"{marshak['residual_sim_pct']:.16e}",
+                ])
+                monitor_file.flush()
+
+
             else:
                 T_left = rad_hydro_case.T0_Kelvin * (state.t / (10**-9)) ** rad_hydro_case.tau
                 T_surface = T_left
@@ -296,23 +316,6 @@ def simulate_rad_hydro(
             if (step % simulation_config.store_every) == 0:
                 store_frame()
 
-
-            F0_solver = solver.get_boundary_flux(dimensionless_boundary_flux=dimensionless_boundary_flux, time=state.t)
-            F0_sim = state.F_rad[0] if state.F_rad is not None and len(state.F_rad) > 0 else 0.0
-            marshak = check_marshak(state.E_rad, T_left, F0_solver, F0_sim)
-
-            monitor_writer.writerow([
-                f"{state.t:.16e}",
-                f"{T_left:.16e}",
-                f"{T_surface:.16e}",
-                f"{marshak['F0_solver']:.16e}",
-                f"{marshak['F0_sim']:.16e}",
-                f"{marshak['E_bath']:.16e}",
-                f"{marshak['E_rad0']:.16e}",
-                f"{marshak['residual_solver_pct']:.16e}",
-                f"{marshak['residual_sim_pct']:.16e}",
-            ])
-            monitor_file.flush()
 
 
         if use_mp_progress:

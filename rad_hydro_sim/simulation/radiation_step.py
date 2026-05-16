@@ -104,8 +104,8 @@ def calculate_abcd(
     E_rad: np.ndarray | None,
     T_material: np.ndarray,
     dt: float,
-    bc_type: str = "Dirichlet",
-    T_left: float | None = None,
+    bc_type: str,
+    T_left: float,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Face-weighted coefficient builder (only supported scheme).
 
@@ -181,9 +181,8 @@ def calculate_abcd(
         E_left = a_Kelvin * (T_left ** 4)
         d[0] -= a[0] * E_left
     elif bc_type == "Dirichlet":
-        if T_left is not None:
-            E_left = a_Kelvin * (T_left ** 4)
-            d[0] -= a[0] * E_left
+        E_left = a_Kelvin * (T_left ** 4)
+        d[0] -= a[0] * E_left
     return a, b, c_coeff, d
 
 
@@ -400,6 +399,7 @@ def radiation_step(
 
     # Solve for radiation energy density and temperature
     new_E_rad = solve_tridiagonal(a, b, c_coeff, d)
+    new_E_rad[0] = a_Kelvin * (T_left ** 4) if T_left is not None else new_E_rad[0]
     new_T_rad = (new_E_rad / a_Kelvin) ** (1 / 4)
 
     # Solve for material energy density and temperature

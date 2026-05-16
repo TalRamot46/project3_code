@@ -36,7 +36,25 @@ def step_rad_hydro(
         bc_right = "outflow"
     
     if case.scenario == "hydro_only":
-        state_star = get_e_star_from_hydro(state, case.geom, case.r, config.sigma_visc, dt, bc_left, bc_right)
+        # Retry mechanism for stability: if hydro update fails due to
+        # negative/zero cell volumes, reduce dt and retry a few times.
+        retries = 5
+        # CFL-like safeguard: cap dt so nodes don't cross (limit displacement
+        # to at most half a cell width in a single step).
+        dx = np.min(np.diff(state.x)) if len(state.x) > 1 else 1.0
+        max_speed = max(np.max(np.abs(state.u)), 1e-12)
+        cfl_dt = 0.5 * dx / max_speed
+        attempt_dt = min(dt, float(cfl_dt))
+        while True:
+            try:
+                state_star = get_e_star_from_hydro(state, case.geom, case.r, config.sigma_visc, attempt_dt, bc_left, bc_right)
+                break
+            except RuntimeError as e:
+                if retries <= 0:
+                    raise
+                retries -= 1
+                attempt_dt *= 0.5
+        dt_used = attempt_dt
         new_e_material = state_star.e_material
         new_T_material = calculate_temperature_from_specific_energy(new_e_material, state_star.rho, case.f_Kelvin, case.beta_Rosen, case.mu)
         new_state = update_nodes_from_pressure(state_star, case, new_e_material, dt, bc_left, bc_right, t_old=state.t)
@@ -56,7 +74,21 @@ def step_rad_hydro(
             else:
                 raise
     elif case.scenario == "full_rad_hydro":
-        state_star = get_e_star_from_hydro(state, case.geom, case.r, config.sigma_visc, dt, bc_left, bc_right)
+        # Same retry guard for the hydro half-step to avoid node-crossing
+        retries = 5
+        dx = np.min(np.diff(state.x)) if len(state.x) > 1 else 1.0
+        max_speed = max(np.max(np.abs(state.u)), 1e-12)
+        cfl_dt = 0.5 * dx / max_speed
+        attempt_dt = min(dt, float(cfl_dt))
+        while True:
+            try:
+                state_star = get_e_star_from_hydro(state, case.geom, case.r, config.sigma_visc, attempt_dt, bc_left, bc_right)
+                break
+            except RuntimeError as e:
+                if retries <= 0:
+                    raise
+                retries -= 1
+                attempt_dt *= 0.5
         new_T_material, new_e_material, new_T_rad, new_E_rad = radiation_step(state_star, dt, case, T_left)
         new_state = update_nodes_from_pressure(state_star, case, new_e_material, dt, bc_left, bc_right, t_old=state.t)
         new_state.T_material = new_T_material

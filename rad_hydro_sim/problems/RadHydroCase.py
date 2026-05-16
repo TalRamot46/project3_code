@@ -64,24 +64,17 @@ class RadHydroCase(ABC):
     
     # Optional fields with defaults
     title: str = ""
-    # Right BC for radiation energy solve:
-    # - "Dirichlet": hard wall with fixed right temperature (uses T_initial_Kelvin)
-    # - "Neuman": trivial Neumann / "Vaccum" (zero gradient at right edge)
-    # - "free": unconstrained right edge in the solve; boundary is extrapolated after solve
-    right_BC: Literal["Dirichlet", "Neuman", "free"] = "Dirichlet"
-    # Kept for diffusion/reference compatibility and optional right Dirichlet value.
-    T_right_Kelvin: Optional[float] = 0.0
 
     # Geometry
     geom: Geometry = planar()  # Default to planar geometry
-    force_black: Literal["gray corrected", "full black"] | None = None
-    # Tridiagonal coefficient formulation for gray radiation solve:
-    # - "legacy": existing center-weighted discretization
-    # - "face_weighted": doc-aligned form using rho_face and center D_i terms
-    radiation_coeff_scheme: Literal["legacy", "face_weighted"] = "face_weighted"
+    force_black: Literal["gray", "black"] | None = None
     times_for_png: np.ndarray = field(
         default_factory=lambda: np.array([], dtype=float)
     )
+
+    # Left boundary bath temperature (used when `bc_type == "Marshak"`).
+    # Updated dynamically during simulation using `dataclasses.replace`.
+    T_left: float | None = None
 
     # Boundary condition type for the radiation solve at the left boundary.
     # - "Marshak": Marshak (P1) boundary condition using a bath temperature drive

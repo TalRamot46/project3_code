@@ -1,4 +1,5 @@
 # physical constants
+from importlib import machinery
 c = 3e10  # speed of light [cm/s]
 a_Kelvin = 7.5646e-15  # Radiation constant in erg cm^-3 K^-4
 eV_to_erg = 1.60218e-12  # electron energy in CGS [erg/eV]
@@ -84,7 +85,7 @@ def calculate_abcd(
     A: np.ndarray,
     m_cells: np.ndarray,
     rho: np.ndarray,
-    E_rad: np.ndarray | None,
+    E_rad: np.ndarray,
     T_material: np.ndarray,
     dt: float,
     coeff_scheme: str = "legacy",
@@ -94,6 +95,7 @@ def calculate_abcd(
 
     T_material is the material temperature, used for UR_star = a*T_material^4 (coupling drives E toward material equilibrium).
     """
+    global chi
     if coeff_scheme == "legacy":
         if HARMONIC_MEAN:
             D_face = harmonic_mean(D[:-1], D[1:])
@@ -117,23 +119,19 @@ def calculate_abcd(
             rho_face = arithmetic_mean(rho[:-1], rho[1:])
             m_face = arithmetic_mean(m_cells[:-1], m_cells[1:])
 
-        # length of rho_face_left|right, D_face_left|right, m_face_left|right is N-2 (N=N_cells)
-        rho_face_left = rho_face[:-1] # stands for rho_i
-        rho_face_right = rho_face[1:] # stands for rho_{i+1}
-        D_face_left = D_face[:-1] # stands for D_i
-        D_face_right = D_face[1:] # stands for D_{i+1}
-        m_face_left = m_face[:-1] # stands for m_i
-        m_face_right = m_face[1:] # stands for m_{i+1}
+        flux_coeff = D_face / (rho_face * m_face)
+        # adding an artificial value at the 0'th and N'th index
+        # based on reflecting the value at the left- and right-most cell
+        flux_coeff = np.concatenate(([flux_coeff[0]], flux_coeff, [flux_coeff[-1]]))
+        lagrangian_coeff = rho / m_cells
 
-        left_flux_coeff = (rho_face_left * D_face_left) / m_face_left
-        right_flux_coeff = (rho_face_right * D_face_right) / m_face_right
-        coeff = rho[1:-1] / m_cells[1:-1] # this is not a mistake! It comes from
-                                   # the first lagrangian derivative of the flux.
+        B = chi * c * sigma / (1 + A)
+        a = -lagrangian_coeff * flux_coeff[:-1]
+        b = lagrangian_coeff * (flux_coeff[:-1] + flux_coeff[1:]) + 1 / dt + B
+        c_coeff = -lagrangian_coeff * flux_coeff[1:]
 
-        B = chi * c * sigma[1:-1] / (1 + A[1:-1])
-        a = -coeff * left_flux_coeff
-        c_coeff = -coeff * right_flux_coeff
-        b = coeff * (left_flux_coeff + right_flux_coeff) + 1 / dt + B
+        UR_star = a_Kelvin * T_material**4
+        d = B * UR_star + (1/dt) * E_rad
     else:
         raise ValueError(
             f"Invalid radiation coefficient scheme '{coeff_scheme}'. "
@@ -203,7 +201,6 @@ def calculate_abcd_marshak(
     b = b.copy()
     c_coeff = c_coeff.copy()
     d = d.copy()
-
     # Determine bath temperature (Kelvin) and corresponding boundary energy.
     if T_bath is None:
         T_bath = float(T_material[0]) if len(T_material) > 0 else 0.0

@@ -131,9 +131,7 @@ def calculate_abcd(
     c_coeff = -lagrangian_coeff * flux_coeff[1:]
 
     UR_star = a_Kelvin * T_material**4
-    term_coupling = B * UR_star
-    term_E = (1 / dt) * E_rad if E_rad is not None else 0.0
-    d = term_coupling + term_E
+    d = B * UR_star + (1/dt) * E_rad
 
 
     # Always apply Marshak vacuum leakage on the right boundary
@@ -373,7 +371,7 @@ def radiation_step(
 
     if mode == "black":
         new_e, new_T = black_radiation_step(state_star, dt, rad_hydro_case)
-        return new_T, new_e, new_T, new_e
+        return new_T, new_e, new_T, new_e, np.zeros_like(new_e) # 5 outputs for consistency
 
     # Material temperature from e_star (match working: use T_material for beta and sigma)
     T_material_star = calculate_temperature_from_specific_energy(e_star, rho, f_Kelvin, beta_Rosen, mu)
@@ -399,7 +397,6 @@ def radiation_step(
 
     # Solve for radiation energy density and temperature
     new_E_rad = solve_tridiagonal(a, b, c_coeff, d)
-    new_E_rad[0] = a_Kelvin * (T_left ** 4) if T_left is not None else new_E_rad[0]
     new_T_rad = (new_E_rad / a_Kelvin) ** (1 / 4)
 
     # Solve for material energy density and temperature

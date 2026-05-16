@@ -1,3 +1,4 @@
+import csv
 import os
 from functools import lru_cache
 from typing import Any, Optional, Tuple
@@ -18,8 +19,10 @@ from project3_code.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 from project3_code.rad_hydro_sim.plotting.RadHydroHistory import RadHydroHistory
 from project3_code.rad_hydro_sim.simulation.radiation_step import (
     calculate_temperature_from_specific_energy,
-    a_Kelvin
+    a_Kelvin,
+    c as radiation_c,
 )
+from project3_code.rad_hydro_sim.output_paths import get_rad_hydro_results_dir
 from project3_code.hydro_sim.problems.simulation_config import SimulationConfig
 
 def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydroState:
@@ -38,6 +41,8 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
     E_rad= np.zeros_like(x_cells)
 
     if case.initial_condition == "temperature, density":
+        assert case.T_initial_Kelvin is not None
+        assert case.rho0 is not None
         T_material = np.full_like(x_cells, case.T_initial_Kelvin)
         e = case.f_Kelvin * T_material**case.beta_Rosen * case.rho0**(-case.mu)
         rho = np.full_like(x_cells, case.rho0)
@@ -130,8 +135,28 @@ def get_dimensionless_boundary_flux(case) -> Tuple[SubsonicHeatWave, float]:
 
     profiles = solver.get_self_similar_profiles(xsi_vec=xsi_vec)
     S = profiles.get("S", None)
-    dimensionless_boundary_flux = float(S[0]) if (S is not None and len(S) > 0) else 0.0
+    if S is None:
+        dimensionless_boundary_flux = 0.0
+    else:
+        S_arr = np.asarray(S)
+        dimensionless_boundary_flux = float(S_arr[0]) if S_arr.size > 0 else 0.0
     return solver, dimensionless_boundary_flux
+
+def check_marshak(E_rad: np.ndarray, T_bath: float, F0: float) -> dict[str, float]:
+    """Return Marshak boundary quantities for monitoring."""
+    E_bath = a_Kelvin * T_bath**4
+    E_rad0 = float(E_rad[0]) if len(E_rad) > 0 else np.nan
+    rhs = 0.5 * radiation_c * (E_bath - E_rad0)
+    residual = F0 - rhs
+    denom = max(abs(F0), abs(rhs), 1e-300)
+    residual_pct = 100.0 * abs(residual) / denom
+    return {
+        "F0": float(F0),
+        "E_bath": float(E_bath),
+        "E_rad0": E_rad0,
+        "residual_pct": float(residual_pct),
+    }
+
 
 def simulate_rad_hydro(
     rad_hydro_case: RadHydroCase,
@@ -156,6 +181,25 @@ def simulate_rad_hydro(
     state = initialize_problem(rad_hydro_case, simulation_config)
     state.a = compute_acceleration_nodes(state.x, state.p, state.q, state.m_cells, rad_hydro_case.geom, p_left=state.p[0], p_right=state.p[-1])
     t_end = rad_hydro_case.t_sec_end
+    solver, dimensionless_boundary_flux = get_dimensionless_boundary_flux(rad_hydro_case)
+    monitor_dir = get_rad_hydro_results_dir() / "monitor"
+    monitor_dir.mkdir(parents=True, exist_ok=True)
+    case_name = rad_hydro_case.title or rad_hydro_case.scenario or "rad_hydro_run"
+    safe_case_name = (
+        case_name.replace(" ", "_")
+        .replace("=", "")
+        .replace("(", "")
+        .replace(")", "")
+        .replace(",", "")
+        .replace(":", "")
+        .replace("$", "")
+        .replace("\\", "")
+        .replace("/", "_")
+    )
+    monitor_path = monitor_dir / f"{safe_case_name}_marshak_monitor.csv"
+    monitor_file = open(monitor_path, "w", newline="", encoding="utf-8")
+    monitor_writer = csv.writer(monitor_file)
+    monitor_writer.writerow(["time", "T_left", "T_surface", "F0", "E_bath", "E_rad0", "residual"])
     
     # ---- history buffers ----
     times = []
@@ -206,7 +250,7 @@ def simulate_rad_hydro(
             dt = 0.0
             if step > 2:
                 if rad_hydro_case.scenario == "hydro_only":
-                    dt_cfl = compute_dt_cfl(state, rad_hydro_case.r+1, simulation_config.CFL)
+                    dt_cfl = compute_dt_cfl(state, rad_hydro_case.r + 1, simulation_config.CFL)
                     if np.isnan(dt_cfl):
                         dt_cfl = min(0.05 * t_end, dt_prev * 1.1, t_end - state.t, 1e-12)
                     dt = min(dt_cfl, 0.05 * t_end, dt_prev * 1.1, t_end - state.t)
@@ -214,41 +258,51 @@ def simulate_rad_hydro(
                     dt_rel = update_dt_relchange(dt_prev, state.E_rad, E_rad_history[-1], state.T_rad, T_rad_history[-1])
                     dt = min(dt_rel, 0.05 * t_end, dt_prev * 1.1, t_end - state.t, 1e-12)
                 elif rad_hydro_case.scenario == "full_rad_hydro":
-                    dt_cfl = compute_dt_cfl(state, rad_hydro_case.r+1, simulation_config.CFL)
+                    dt_cfl = compute_dt_cfl(state, rad_hydro_case.r + 1, simulation_config.CFL)
                     dt_rel = update_dt_relchange(dt_prev, state.E_rad, E_rad_history[-1], state.T_rad, T_rad_history[-1])
                     dt = min(dt_cfl, dt_rel, 0.05 * t_end, dt_prev * 1.1, t_end - state.t)
-                    if step % 1000 == 0:
-                        pass
-
                     if np.isnan(dt):
                         dt = min(0.05 * t_end, dt_prev * 1.1, t_end - state.t, 1e-12)
             else:
                 # Small initial timestep for stability
                 dt = min(1e-13, 1e-6 * t_end, t_end - state.t)
-            # print(dt)
             dt_prev = dt   # pyright: ignore[reportPossiblyUnboundVariable]
 
-            # Get boundary conditions for current state
-            # bc_left, bc_right = _get_boundary_conditions(rad_hydro_case, simulation_config, state)
-            
             # Recalculate T_left for current time step for Marshak BC
             if rad_hydro_case.bc_type == "Marshak":
-                solver, dimensionless_boundary_flux = get_dimensionless_boundary_flux(rad_hydro_case)
                 T_left = solver.calc_T_bath_from_dimensionless_boundary_flux(
                     dimensionless_boundary_flux=dimensionless_boundary_flux,
                     time=state.t,
                 )
-
-                # Update the case with the new T_left
+                T_surface = solver.Tb * ((max(state.t, 1e-15) / 1e-9) ** solver.tau)
                 rad_hydro_case = replace(rad_hydro_case, T_left=T_left)
             else:
-                T_left = rad_hydro_case.T0_Kelvin * (state.t/(10**-9))**rad_hydro_case.tau
-            
-            # Lagrangian step
-            new_state = step_rad_hydro(
-                state, dt, rad_hydro_case, simulation_config, T_left
+                T_left = rad_hydro_case.T0_Kelvin * (state.t / (10**-9)) ** rad_hydro_case.tau
+                T_surface = T_left
+
+            F0 = solver.get_boundary_flux(dimensionless_boundary_flux=dimensionless_boundary_flux, time=state.t)
+            marshak = check_marshak(state.E_rad, T_left, F0)
+
+            monitor_writer.writerow([
+                f"{state.t:.16e}",
+                f"{T_left:.16e}",
+                f"{T_surface:.16e}",
+                f"{marshak['F0']:.16e}",
+                f"{marshak['E_bath']:.16e}",
+                f"{marshak['E_rad0']:.16e}",
+                f"{marshak['residual_pct']:.16e}",
+            ])
+            monitor_file.flush()
+
+            pbar.set_postfix(
+                F0=f"{marshak['F0']:.3e}",
+                E_bath=f"{marshak['E_bath']:.3e}",
+                E_rad0=f"{marshak['E_rad0']:.3e}",
+                resid_pct=f"{marshak['residual_pct']:.3e}%",
             )
-            # Progress bar: use actual time advanced (step_rad_hydro may advance by more than dt in some code paths)
+
+            # Lagrangian step
+            new_state = step_rad_hydro(state, dt, rad_hydro_case, simulation_config, T_left)
             pbar.update(new_state.t - state.t)
             state = new_state
             if use_mp_progress:
@@ -259,14 +313,10 @@ def simulate_rad_hydro(
             if (step % simulation_config.store_every) == 0:
                 store_frame()
 
-            # if state.t > 0.5e-9:
-            #     import matplotlib.pyplot as plt
-            #     plt.plot(state.m_cells, state.rho)
-            #     plt.plot(state.m_cells, state.q)
-            #     plt.show()
-
         if use_mp_progress:
             mp_progress[prog_slot] = 1.0
+
+    monitor_file.close()
 
     # Ensure last frame stored
     if times[-1] != state.t:

@@ -263,19 +263,26 @@ class SubsonicHeatWave():
             return 0.
         return fac
 
-    def calc_T_bath_from_dimensionless_boundary_flux(self, *, dimensionless_boundary_flux, time):
+    def get_boundary_flux(self, *, dimensionless_boundary_flux, time):
         """
-        returns the temperature of the boundary at the given time
+        returns the radiation energy flux at the system boundary at the given time
         """
         time = max(time, 1e-15) #avoid zero division
         aS = self.a+(self.q+1.)*self.a1+self.n*self.a3
         bS = self.b+(self.q+1.)*self.b1+self.n*self.b3 + 1.
         cS = self.c+(self.q+1.)*self.c1+self.n*self.c3
         boundary_flux = dimensionless_boundary_flux * (self.A**aS) * (self.B**bS) * (time**cS)
+        return boundary_flux
+
+    def calc_T_bath_from_dimensionless_boundary_flux(self, *, dimensionless_boundary_flux, time):
+        """
+        returns the temperature of the boundary at the given time
+        """
+        boundary_flux = self.get_boundary_flux(dimensionless_boundary_flux=dimensionless_boundary_flux, time=time)
 
         a = 4. * Units.sigma_sb / Units.clight
         c = Units.clight
-        T_surface = self.Tb * (time**self.tau)
+        T_surface = self.Tb * ((time/1e-9)**self.tau)
         T_bath = (T_surface**4 + 2 / (a * c) * boundary_flux)**(1./4.)
         return T_bath
 

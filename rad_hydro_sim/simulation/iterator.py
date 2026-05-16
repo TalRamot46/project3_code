@@ -142,19 +142,22 @@ def get_dimensionless_boundary_flux(case) -> Tuple[SubsonicHeatWave, float]:
         dimensionless_boundary_flux = float(S_arr[0]) if S_arr.size > 0 else 0.0
     return solver, dimensionless_boundary_flux
 
-def check_marshak(E_rad: np.ndarray, T_bath: float, F0: float) -> dict[str, float]:
+def check_marshak(E_rad: np.ndarray, T_bath: float, F0_solver: float, F0_sim: float) -> dict[str, float]:
     """Return Marshak boundary quantities for monitoring."""
     E_bath = a_Kelvin * T_bath**4
     E_rad0 = float(E_rad[0]) if len(E_rad) > 0 else np.nan
     rhs = 0.5 * radiation_c * (E_bath - E_rad0)
-    residual = F0 - rhs
-    denom = max(abs(F0), abs(rhs), 1e-300)
-    residual_pct = 100.0 * abs(residual) / denom
+    residual_solver = F0_solver - rhs
+    residual_sim = F0_sim - rhs
+    residual_solver_pct = 100.0 * abs(residual_solver) / max(abs(rhs), 1e-300)
+    residual_sim_pct = 100.0 * abs(residual_sim) / max(abs(rhs), 1e-300)
     return {
-        "F0": float(F0),
+        "F0_solver": float(F0_solver),
+        "F0_sim": float(F0_sim),
         "E_bath": float(E_bath),
         "E_rad0": E_rad0,
-        "residual_pct": float(residual_pct),
+        "residual_solver_pct": float(residual_solver_pct),
+        "residual_sim_pct": float(residual_sim_pct),
     }
 
 
@@ -199,7 +202,7 @@ def simulate_rad_hydro(
     monitor_path = monitor_dir / f"{safe_case_name}_marshak_monitor.csv"
     monitor_file = open(monitor_path, "w", newline="", encoding="utf-8")
     monitor_writer = csv.writer(monitor_file)
-    monitor_writer.writerow(["time", "T_left", "T_surface", "F0", "E_bath", "E_rad0", "residual"])
+    monitor_writer.writerow(["time", "T_left", "T_surface", "F0_solver", "F0_sim", "E_bath", "E_rad0", "residual_solver", "residual_sim"])
     
     # ---- history buffers ----
     times = []
@@ -269,37 +272,17 @@ def simulate_rad_hydro(
             dt_prev = dt   # pyright: ignore[reportPossiblyUnboundVariable]
 
             # Recalculate T_left for current time step for Marshak BC
-            if rad_hydro_case.bc_type == "Marshak":
+            if rad_hydro_case.bc_type in ["Marshak", "Marshak_Menahem"]:
                 T_left = solver.calc_T_bath_from_dimensionless_boundary_flux(
                     dimensionless_boundary_flux=dimensionless_boundary_flux,
                     time=state.t,
                 )
-                T_surface = solver.Tb * ((max(state.t, 1e-15) / 1e-9) ** solver.tau)
+                T_surface = solver.Tb * (state.t / 1e-9) ** solver.tau
                 rad_hydro_case = replace(rad_hydro_case, T_left=T_left)
             else:
                 T_left = rad_hydro_case.T0_Kelvin * (state.t / (10**-9)) ** rad_hydro_case.tau
                 T_surface = T_left
 
-            F0 = solver.get_boundary_flux(dimensionless_boundary_flux=dimensionless_boundary_flux, time=state.t)
-            marshak = check_marshak(state.E_rad, T_left, F0)
-
-            monitor_writer.writerow([
-                f"{state.t:.16e}",
-                f"{T_left:.16e}",
-                f"{T_surface:.16e}",
-                f"{marshak['F0']:.16e}",
-                f"{marshak['E_bath']:.16e}",
-                f"{marshak['E_rad0']:.16e}",
-                f"{marshak['residual_pct']:.16e}",
-            ])
-            monitor_file.flush()
-
-            pbar.set_postfix(
-                F0=f"{marshak['F0']:.3e}",
-                E_bath=f"{marshak['E_bath']:.3e}",
-                E_rad0=f"{marshak['E_rad0']:.3e}",
-                resid_pct=f"{marshak['residual_pct']:.3e}%",
-            )
 
             # Lagrangian step
             new_state = step_rad_hydro(state, dt, rad_hydro_case, simulation_config, T_left)
@@ -312,6 +295,25 @@ def simulate_rad_hydro(
             step += 1
             if (step % simulation_config.store_every) == 0:
                 store_frame()
+
+
+            F0_solver = solver.get_boundary_flux(dimensionless_boundary_flux=dimensionless_boundary_flux, time=state.t)
+            F0_sim = state.F_rad[0] if state.F_rad is not None and len(state.F_rad) > 0 else 0.0
+            marshak = check_marshak(state.E_rad, T_left, F0_solver, F0_sim)
+
+            monitor_writer.writerow([
+                f"{state.t:.16e}",
+                f"{T_left:.16e}",
+                f"{T_surface:.16e}",
+                f"{marshak['F0_solver']:.16e}",
+                f"{marshak['F0_sim']:.16e}",
+                f"{marshak['E_bath']:.16e}",
+                f"{marshak['E_rad0']:.16e}",
+                f"{marshak['residual_solver_pct']:.16e}",
+                f"{marshak['residual_sim_pct']:.16e}",
+            ])
+            monitor_file.flush()
+
 
         if use_mp_progress:
             mp_progress[prog_slot] = 1.0

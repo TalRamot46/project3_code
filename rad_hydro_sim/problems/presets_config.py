@@ -230,14 +230,14 @@ PRESET_TEST_CASES = {
         # grid parameters
         x_min = 0,
         x_max = 1.6e-3 / 19.32,
-        t_sec_end = 0.7e-10,
+        t_sec_end = 0.15e-9,
 
         initial_condition="temperature, density",
         scenario="full_rad_hydro",
         title=r"Fig 9 comparison ($T_0 = 1$ HeV, $\tau = 0.123$, $Au$, early times)",
         geom=planar(),
         times_for_png=np.array([0.05e-9, 0.1e-9, 0.15e-9], dtype=float),
-        bc_type="Marshak",
+        bc_type="Dirichlet",
     ),
     PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE: RadHydroCase(
         # Rosen's opacity parameters

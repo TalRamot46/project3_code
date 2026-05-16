@@ -80,6 +80,21 @@ def calculate_black_abcd(
 
     return a, b, c_coeff, d
 
+def calculate_flux(
+    D: np.ndarray,
+    m_cells: np.ndarray,
+    rho: np.ndarray,
+    E_rad: np.ndarray | None,
+):
+    if HARMONIC_MEAN:
+        D_face = harmonic_mean(D[:-1], D[1:])
+    else:
+        D_face = arithmetic_mean(D[:-1], D[1:])
+    rho_face = harmonic_mean(rho[:-1], rho[1:])
+    m_face = harmonic_mean(m_cells[:-1], m_cells[1:])
+    flux_coeff = (D_face * rho_face) / m_face # flux at i=1,...,N-1
+    return -flux_coeff * (E_rad[1:] - E_rad[:-1]) if E_rad is not None else np.zeros_like(rho) # flux at i=1,...,N-1
+
 def calculate_abcd(
     sigma: np.ndarray,
     D: np.ndarray,
@@ -101,12 +116,10 @@ def calculate_abcd(
     # Face-weighted implementation only
     if HARMONIC_MEAN:
         D_face = harmonic_mean(D[:-1], D[1:])
-        rho_face = harmonic_mean(rho[:-1], rho[1:])
-        m_face = harmonic_mean(m_cells[:-1], m_cells[1:])
     else:
         D_face = arithmetic_mean(D[:-1], D[1:])
-        rho_face = arithmetic_mean(rho[:-1], rho[1:])
-        m_face = arithmetic_mean(m_cells[:-1], m_cells[1:])
+    rho_face = arithmetic_mean(rho[:-1], rho[1:])
+    m_face = arithmetic_mean(m_cells[:-1], m_cells[1:])
 
     flux_coeff = (D_face * rho_face) / m_face
     flux_coeff = np.concatenate(([flux_coeff[0]], flux_coeff, [flux_coeff[-1]]))
@@ -122,21 +135,6 @@ def calculate_abcd(
     term_E = (1 / dt) * E_rad if E_rad is not None else 0.0
     d = term_coupling + term_E
 
-    # Check for non-finite contributions (Inf can arise from divisions by zero)
-    if not np.all(np.isfinite(UR_star)):
-        j = np.where(~np.isfinite(UR_star))[0][0]
-        raise ValueError(f"Non-finite UR_star at index {j}: UR_star={UR_star[j]}")
-    if not np.all(np.isfinite(B)):
-        j = np.where(~np.isfinite(B))[0][0]
-        raise ValueError(f"Non-finite coupling B at index {j}: B={B[j]}, sigma={sigma[j]}, A={A[j]}")
-    if E_rad is not None and not np.all(np.isfinite(E_rad)):
-        j = np.where(~np.isfinite(E_rad))[0][0]
-        raise ValueError(f"Non-finite E_rad at index {j}: E_rad={E_rad[j]}")
-    if not np.isfinite(dt) or dt <= 0:
-        raise ValueError(f"Bad dt passed to calculate_abcd: dt={dt}")
-    # Check for overflows in the constructed RHS `d` will be done
-    # after boundary modifications to catch any contributions from
-    # Marshak/Dirichlet boundary terms.
 
     # Always apply Marshak vacuum leakage on the right boundary
     # if len(b) >= 2:
@@ -154,8 +152,11 @@ def calculate_abcd(
             raise ValueError("T_left must be provided when bc_type='Marshak'.")
         E_bath = a_Kelvin * (T_left ** 4)
         if len(b) >= 2:
-            rho_star_left = float(rho[1])
-            dm_left = float(m_cells[1])
+            # The Marshak boundary acts on the leftmost cell. Using index 0 keeps
+            # the boundary coefficient consistent with the same control volume that
+            # receives the imposed bath energy.
+            rho_star_left = float(rho[0])
+            dm_left = float(m_cells[0])
             if not np.isfinite(dm_left) or dm_left <= 0.0:
                 cooling_left = 0.0
             else:
@@ -163,44 +164,26 @@ def calculate_abcd(
             b[0] = b[0] + a[0] + cooling_left
             a[0] = 0.0
             d[0] += cooling_left * E_bath
+    elif bc_type == "Marshak_Menahem":
+        if T_left is None:
+            raise ValueError("T_left must be provided when bc_type='Marshak_Menahem'.")
+        # diffusion constant is c/2 * \Delta x = c * \Delta m / (2 * rho)
+        D_face[0] = c * m_cells[0] / (2.0 * rho[0])
+        
+        flux_coeff_old = flux_coeff[0]
+        flux_coeff[0] = (D_face[0] * rho_face[0]) / m_face[0]
+        
+        # update a[0] and b[0]
+        a[0] = -lagrangian_coeff[0] * flux_coeff[0]
+        b[0] = b[0] - lagrangian_coeff[0] * flux_coeff_old + lagrangian_coeff[0] * flux_coeff[0]
+        
+        # apply Dirichlet condition
+        E_left = a_Kelvin * (T_left ** 4)
+        d[0] -= a[0] * E_left
     elif bc_type == "Dirichlet":
         if T_left is not None:
             E_left = a_Kelvin * (T_left ** 4)
             d[0] -= a[0] * E_left
-
-    # Final safety: replace any non-finite RHS entries introduced by
-    # boundary handling with large finite placeholders and warn.
-    if not np.all(np.isfinite(d)):
-        j = np.where(~np.isfinite(d))[0][0]
-        import warnings
-        # Choose a conservative finite cap based on existing energies to avoid
-        # injecting astronomically large values that destabilize subsequent
-        # temperature calculations.
-        if E_rad is not None and np.any(np.isfinite(E_rad)):
-            base = float(np.nanmax(np.abs(E_rad)))
-        else:
-            base = float(np.nanmax(a_Kelvin * (T_material ** 4))) if np.any(np.isfinite(T_material)) else 1.0
-        cap = max(base * 1e2, 1.0)
-        warnings.warn(f"Non-finite RHS 'd' at index {j} after boundary handling: d={d[j]}. Replacing with cap={cap}.")
-        # Replace: NaNs -> 0, +inf -> cap, -inf -> -cap
-        d = np.where(np.isnan(d), 0.0, d)
-        d = np.where(d == np.inf, cap, d)
-        d = np.where(d == -np.inf, -cap, d)
-        # Also sanitize any remaining non-finite via nan_to_num as fallback
-        d = np.nan_to_num(d, nan=0.0, posinf=cap, neginf=-cap)
-
-    if np.any(np.isnan(a)) or np.any(np.isnan(b)) or np.any(np.isnan(c_coeff)) or np.any(np.isnan(d)):
-        j = np.where(np.isnan(a))[0][0] if np.any(np.isnan(a)) else (np.where(np.isnan(b))[0][0] if np.any(np.isnan(b)) else (np.where(np.isnan(c_coeff))[0][0] if np.any(np.isnan(c_coeff)) else np.where(np.isnan(d))[0][0]))
-        raise ValueError(
-            f"NaN value encountered in coefficients at index {j}: a={a[j] if j < len(a) else 'NA'}, b={b[j]}, c={c_coeff[j] if j < len(c_coeff) else 'NA'}, d={d[j]}"
-        )
-
-    if np.any(b <= 0):
-        j = np.where(b <= 0)[0][0]
-        raise ValueError(
-            f"Non-positive diagonal at index {j}: b={b[j]}, a={a[j] if j < len(a) else 'NA'}, c={c_coeff[j] if j < len(c_coeff) else 'NA'}"
-        )
-
     return a, b, c_coeff, d
 
 
@@ -357,7 +340,7 @@ def radiation_step(
 
     rad_hydro_case: RadHydroCase,
     T_left: float | None = None,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Updates the material specific energy & radiation energy density based on the coupling between matter and radiation.
     
@@ -371,6 +354,7 @@ def radiation_step(
         new_e_material: Updated material specific energy in erg/g
         new_T_rad: Updated radiation temperature in K
         new_E_rad: Updated radiation energy density in erg/cm^3
+        new_F: Updated radiation flux in erg/cm^2/s
     """
     global alpha, beta_Rosen, mu, f_Kelvin, chi, lambda_, g_Kelvin
     alpha, beta_Rosen, mu, f_Kelvin, chi, lambda_, g_Kelvin = rad_hydro_case._get_params()
@@ -424,4 +408,6 @@ def radiation_step(
     new_T_material = (new_UR / a_Kelvin) ** (1 / 4)
     new_e_material = f_Kelvin * new_T_material**beta_Rosen * rho**(-mu)
 
-    return new_T_material, new_e_material, new_T_rad, new_E_rad
+    new_F = calculate_flux(D, m_cells, rho, new_E_rad)
+
+    return new_T_material, new_e_material, new_T_rad, new_E_rad, new_F

@@ -65,7 +65,7 @@ def step_rad_hydro(
         new_state.E_rad = new_E_rad
     elif case.scenario == "radiation_only":
         try:
-            new_T_material, new_e_material, new_T_rad, new_E_rad = radiation_step(state, dt, case, T_left)
+            new_T_material, new_e_material, new_T_rad, new_E_rad, new_F = radiation_step(state, dt, case, T_left)
             new_state = state._replace(T_material=new_T_material, e_material=new_e_material, T_rad=new_T_rad, E_rad=new_E_rad)
         except ValueError as e:
             if "infs or NaNs" in str(e):
@@ -89,11 +89,12 @@ def step_rad_hydro(
                     raise
                 retries -= 1
                 attempt_dt *= 0.5
-        new_T_material, new_e_material, new_T_rad, new_E_rad = radiation_step(state_star, dt, case, T_left)
+        new_T_material, new_e_material, new_T_rad, new_E_rad, new_F_rad = radiation_step(state_star, dt, case, T_left)
         new_state = update_nodes_from_pressure(state_star, case, new_e_material, dt, bc_left, bc_right, t_old=state.t)
         new_state.T_material = new_T_material
         new_state.T_rad = new_T_rad
         new_state.E_rad = new_E_rad
+        new_state.F_rad = new_F_rad
     else:
         raise ValueError(f"Unknown scenario: {case.scenario}")
     new_state.t += dt

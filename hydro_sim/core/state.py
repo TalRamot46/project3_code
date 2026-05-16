@@ -19,6 +19,7 @@ class HydroState:
 class RadHydroState(HydroState):
     T_rad: np.ndarray      # cells  (radiation temperature, K)
     E_rad: np.ndarray  # cells  (radiation energy density, erg/cm^3)
+    F_rad: np.ndarray = None  # nodes  (radiation flux, erg/cm^2/s)
 
     def _replace(self, **changes):
         """Utility method to create a new instance with some fields updated."""

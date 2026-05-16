@@ -1,6 +1,6 @@
 import os
 from functools import lru_cache
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 from dataclasses import replace
 
 import numpy as np
@@ -113,8 +113,8 @@ def _get_subsonic_heat_wave_solver(cache_key: tuple[float, float, float, float, 
     solver.find_xsi_f()
     return solver
 
-def get_T_bath(case, time: float) -> float:
-    """Compute bath temperature using only the SubsonicHeatWave dimensionless flux S.
+def get_dimensionless_boundary_flux(case) -> Tuple[SubsonicHeatWave, float]:
+    """Compute dimensionless boundary flux using only the SubsonicHeatWave dimensionless flux S.
 
     This function creates a `SubsonicHeatWave` solver, finds the correct
     self-similar front, evaluates the dimensionless profiles on a Lagrangian
@@ -126,18 +126,12 @@ def get_T_bath(case, time: float) -> float:
  
     # build a smallLagrangian mass grid and evaluate the self-similar profiles
     mass = _build_mass_grid_uniform(case, omega=0.0, num_cells=200)
-    t_eval = max(float(time), 1e-300)
-    xsi_vec = mass * solver.xsi_over_m(time=t_eval)
+    xsi_vec = mass * solver.xsi_over_m(time=1e-9)  # time doesn't matter since it's dimensionless
 
     profiles = solver.get_self_similar_profiles(xsi_vec=xsi_vec)
     S = profiles.get("S", None)
     dimensionless_boundary_flux = float(S[0]) if (S is not None and len(S) > 0) else 0.0
-
-    T_bath = solver.calc_T_bath_from_dimensionless_boundary_flux(
-        dimensionless_boundary_flux=dimensionless_boundary_flux,
-        time=t_eval,
-    )
-    return float(T_bath)
+    return solver, dimensionless_boundary_flux
 
 def simulate_rad_hydro(
     rad_hydro_case: RadHydroCase,
@@ -239,7 +233,12 @@ def simulate_rad_hydro(
             
             # Recalculate T_left for current time step for Marshak BC
             if rad_hydro_case.bc_type == "Marshak":
-                T_left = get_T_bath(rad_hydro_case, time=state.t)
+                solver, dimensionless_boundary_flux = get_dimensionless_boundary_flux(rad_hydro_case)
+                T_left = solver.calc_T_bath_from_dimensionless_boundary_flux(
+                    dimensionless_boundary_flux=dimensionless_boundary_flux,
+                    time=state.t,
+                )
+
                 # Update the case with the new T_left
                 rad_hydro_case = replace(rad_hydro_case, T_left=T_left)
             else:

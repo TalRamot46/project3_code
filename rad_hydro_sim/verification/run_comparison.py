@@ -973,7 +973,7 @@ def main() -> None:
         skip_supersonic=False,
         skip_hydro_sim=False,
         skip_shock_solver=False,
-        skip_shussman=False,
+        skip_shussman=True,
         skip_menahem=False,
         compare_force_black_cases=False,
         show_plot=True,

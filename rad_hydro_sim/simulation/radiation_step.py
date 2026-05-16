@@ -139,14 +139,14 @@ def calculate_abcd(
     # Marshak/Dirichlet boundary terms.
 
     # Always apply Marshak vacuum leakage on the right boundary
-    if len(b) >= 2:
-        rho_star_right = float(rho[-2])
-        dm_right = float(m_cells[-2])
-        if not np.isfinite(dm_right) or dm_right <= 0.0:
-            cooling_right = 0.0
-        else:
-            cooling_right = c * rho_star_right / (2.0 * dm_right)
-        b[-1] += cooling_right
+    # if len(b) >= 2:
+    #     rho_star_right = float(rho[-2])
+    #     dm_right = float(m_cells[-2])
+    #     if not np.isfinite(dm_right) or dm_right <= 0.0:
+    #         cooling_right = 0.0
+    #     else:
+    #         cooling_right = c * rho_star_right / (2.0 * dm_right)
+    #     b[-1] += cooling_right
 
     # Left boundary handling
     if bc_type == "Marshak":

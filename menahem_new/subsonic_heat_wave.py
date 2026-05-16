@@ -267,6 +267,7 @@ class SubsonicHeatWave():
         """
         returns the temperature of the boundary at the given time
         """
+        time = max(time, 1e-15) #avoid zero division
         aS = self.a+(self.q+1.)*self.a1+self.n*self.a3
         bS = self.b+(self.q+1.)*self.b1+self.n*self.b3 + 1.
         cS = self.c+(self.q+1.)*self.c1+self.n*self.c3

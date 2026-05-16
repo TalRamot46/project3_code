@@ -29,7 +29,7 @@ from project3_code.rad_hydro_sim.output_paths import get_menahem_reproduction_fi
 from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
 from project3_code.rad_hydro_sim.simulation.iterator import (
     simulate_rad_hydro,
-    get_T_bath,
+    get_dimensionless_boundary_flux,
 )
 from project3_code.rad_hydro_sim.verification.run_comparison import run_supersonic_solver_reference
 from project3_code.rad_hydro_sim.verification.run_diffusion_1d import run_diffusion_1d
@@ -91,7 +91,7 @@ def main() -> None:
     # 2. Radiation-only rad_hydro (Marshak BC). Ensure Marshak so rad_hydro
     #    will use the subsonic-derived T_bath internally; also compute and
     #    print the T_bath we would obtain from menahem's solver for reference.
-    t_bath = get_T_bath(case, time=eval_time)
+    t_bath = get_dimensionless_boundary_flux(case, time=eval_time)
     print(f"Computed T_bath from SubsonicHeatWave (for Marshak drive): {t_bath:.6e} K")
     x_cells, state, meta, history = simulate_rad_hydro(
         rad_hydro_case=case,

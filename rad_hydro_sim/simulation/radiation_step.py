@@ -90,8 +90,8 @@ def calculate_flux(
         D_face = harmonic_mean(D[:-1], D[1:])
     else:
         D_face = arithmetic_mean(D[:-1], D[1:])
-    rho_face = harmonic_mean(rho[:-1], rho[1:])
-    m_face = harmonic_mean(m_cells[:-1], m_cells[1:])
+    rho_face = arithmetic_mean(rho[:-1], rho[1:])
+    m_face = arithmetic_mean(m_cells[:-1], m_cells[1:])
     flux_coeff = (D_face * rho_face) / m_face # flux at i=1,...,N-1
     return -flux_coeff * (E_rad[1:] - E_rad[:-1]) if E_rad is not None else np.zeros_like(rho) # flux at i=1,...,N-1
 

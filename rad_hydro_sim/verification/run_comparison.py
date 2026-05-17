@@ -90,11 +90,12 @@ def _verification_suptitle(case: RadHydroCase, subtitle: str) -> str:
     """Preset title first, then verification context (slider / PNG / GIF)."""
     preset = (getattr(case, "title", None) or "").strip()
     sub = subtitle.strip()
+    bc = getattr(case, "bc_type", None)
     if not preset:
         return sub
     if not sub:
         return preset
-    return f"{preset}\n{sub}"
+    return f"{preset}\n{sub}\t{f'({bc} BC)' if bc else ''}"
 
 
 # =============================================================================
@@ -299,7 +300,7 @@ def run_radiation_only_comparison(
     extras_tag = ""
     if extra_refs:
         extras_tag = " + " + " + ".join(e.label for e in extra_refs)
-    sub_rad = "Radiation-only: Rad-Hydro vs 1D Diffusion" + extras_tag
+    sub_rad = "Radiation-only: Rad-Hydro vs 1D Diffusion" + extras_tag 
     title = _verification_suptitle(case, sub_rad)
 
     print("\nPlotting radiation comparison (T, E_rad vs x)...")

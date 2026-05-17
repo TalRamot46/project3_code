@@ -74,7 +74,7 @@ def step_rad_hydro(
             else:
                 raise
     elif case.scenario == "full_rad_hydro":
-        state_star = get_e_star_from_hydro(state, case.geom, case.r, config.sigma_visc, attempt_dt, bc_left, bc_right)
+        state_star = get_e_star_from_hydro(state, case.geom, case.r, config.sigma_visc, dt, bc_left, bc_right)
         new_T_material, new_e_material, new_T_rad, new_E_rad, new_F_rad = radiation_step(state_star, dt, case, T_left)
         new_state = update_nodes_from_pressure(state_star, case, new_e_material, dt, bc_left, bc_right, t_old=state.t)
         new_state.T_material = new_T_material

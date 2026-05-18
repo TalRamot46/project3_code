@@ -189,7 +189,7 @@ def simulate_rad_hydro(
     monitor_path = monitor_dir / f"{safe_case_name}_marshak_monitor.csv"
     monitor_file = open(monitor_path, "w", newline="", encoding="utf-8")
     monitor_writer = csv.writer(monitor_file)
-    monitor_writer.writerow(["time", "T_left", "T_surface", "F0_solver", "F0_sim", "E_bath", "E_rad0", "residual_solver", "residual_sim", "106 LHS"])
+    monitor_writer.writerow(["time", "T_left", "T_surface", "F0_solver", "F0_sim", "E_bath", "E_rad0", "residual_solver", "residual_sim", "106 LHS", "boundary_flux1", "boundary_flux2", "A", "aS", "bS", "cS", "A_power_aS", "B_power_bS", "time_power_cS", "dimensionless_boundary_flux", "LHS"])
     
     # ---- history buffers ----
     times = []
@@ -260,7 +260,7 @@ def simulate_rad_hydro(
 
             # Recalculate T_left for current time step for Marshak BC
             if rad_hydro_case.bc_type in ["Marshak", "Marshak_Menahem"]:
-                T_left = solver.calc_T_bath_from_dimensionless_boundary_flux(
+                T_left, boundary_flux1, boundary_flux2, A, aS, bS, cS, A_power_aS, B_power_bS, time_power_cS, dimensionless_boundary_flux1 = solver.calc_T_bath_from_dimensionless_boundary_flux(
                     dimensionless_boundary_flux=dimensionless_boundary_flux,
                     time=state.t,
                 )
@@ -269,7 +269,7 @@ def simulate_rad_hydro(
                 T_surface = (state.E_rad[0] / a_Kelvin) ** 0.25 
                 rad_hydro_case = replace(rad_hydro_case, T_left=T_left)
 
-                F0_solver = solver.get_boundary_flux(dimensionless_boundary_flux=dimensionless_boundary_flux, time=state.t)
+                F0_solver, _, _, _, _, _= solver.get_boundary_flux(dimensionless_boundary_flux=dimensionless_boundary_flux, time=state.t)
                 F0_sim = state.F_rad[1] if state.F_rad is not None and len(state.F_rad) > 0 else 0.0
 
 
@@ -293,6 +293,16 @@ def simulate_rad_hydro(
                 f"{marshak['E_rad0']:.16e}",
                 f"{marshak['residual_solver_pct']:.16e}",
                 f"{marshak['residual_sim_pct']:.16e}",
+                f"{boundary_flux1:.16e}",
+                f"{boundary_flux2:.16e}",
+                f"{A:.16e}",
+                f"{aS:.16e}",
+                f"{bS:.16e}",
+                f"{cS:.16e}",
+                f"{A_power_aS:.16e}",
+                f"{B_power_bS:.16e}",
+                f"{time_power_cS:.16e}",
+                f"{dimensionless_boundary_flux1:.16e}",
                 f"{LHS:.16e}",
             ])
             monitor_file.flush()

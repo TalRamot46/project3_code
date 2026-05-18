@@ -1,19 +1,5 @@
 %manager.m:
 function [m0,mw,e0,ew,P0,Pw,V0,Vw,u0,uw,xsi,z,Ptilda,utilda,B,t,x] = manager(mat,tau)
-%manager(mat,tau) provides a self similar solution, provided a material and a temporal
-%power law tau.
-%m=mO*TA(mw(2))*tA(mw(3)), in g/cmA2
-%e = eO*TA(ew(2))*tA(ew(3)), in J/cmAZ
-%the same for P in MBar
-%xsi - is the self similar front coordinate.
-%z - is the dimensionless energy.
-%B - is the parameter defined in the article.
-%t - is the coordinate xi
-%x ~ x(:,l) is the self similar volume and x(:,2) is the volume derivative
-%X - x(:,3) is the self similar pressure and X(:,4) is the pressure derivative
-% x ~ X( ,5) is the self similar velocity. the temprature is calculated
-% via: (X(:,3).*(x(:,l).???(1-mat.mu))).A(l/mat.beta))
-
 %Solve the power laws
 %xsi goes like:
 tempW=4+2*mat.lambda-4*mat.mu;

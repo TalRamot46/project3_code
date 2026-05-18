@@ -271,26 +271,27 @@ class SubsonicHeatWave():
         aS = self.a+(self.q+1.)*self.a1+self.n*self.a3
         bS = self.b+(self.q+1.)*self.b1+self.n*self.b3 + 1.
         cS = self.c+(self.q+1.)*self.c1+self.n*self.c3
-        boundary_flux = dimensionless_boundary_flux * (self.A**aS) * (self.B**bS) * (time**cS)  # / (Units.hev_kelvin)**aS
-        return boundary_flux
+        cS = 0
+        boundary_flux1 = dimensionless_boundary_flux * (self.A**aS) * (self.B**bS) * (time**cS)  # / (Units.hev_kelvin)**aS
+        a = self.A  
+        b = self.B
+        return boundary_flux1, self.A, aS, bS, cS, dimensionless_boundary_flux
+
 
     def calc_T_bath_from_dimensionless_boundary_flux(self, *, dimensionless_boundary_flux, time):
         """
         returns the temperature of the boundary at the given time
         """
-        boundary_flux1 = self.get_boundary_flux(dimensionless_boundary_flux=dimensionless_boundary_flux, time=time)
-        # boundary_flux = 0.42e20
-        boundary_flux2 = 0.59e20 * 0.59 * ((time+1e-20)/1e-9)**(0.59-1)
-        # add a value to global "data.csv" under the column name "boundary_flux" 
-        df = pd.read_csv(r"results\rad_hydro_sim\monitor\data.csv")
-        # append the new value to the column, and save the csv file
-        df = df.append({"time": time, "boundary_flux_": boundary_flux}, ignore_index=True)
+        boundary_flux1, A, aS, bS, cS, dimensionless_boundary_flux = self.get_boundary_flux(dimensionless_boundary_flux=dimensionless_boundary_flux, time=time)
+        boundary_flux2 = 0.42e20
+        # boundary_flux2 = 0.59e20 * 0.59 * ((time+1e-20)/1e-9)**(0.59-1)
+
 
         a = 4. * Units.sigma_sb / Units.clight
         c = Units.clight
         T_surface = self.Tb * ((time/1e-9)**self.tau)
-        T_bath = (T_surface**4 + 2 / (a * c) * boundary_flux2)**(1./4.)
-        return T_bath
+        T_bath = (T_surface**4 + 2 / (a * c) * boundary_flux1)**(1./4.)
+        return T_bath, boundary_flux1, boundary_flux2, A, aS, bS, cS, self.A**aS, self.B**bS, (time**cS), dimensionless_boundary_flux
 
     def solve(self, *, mass, time):
         """

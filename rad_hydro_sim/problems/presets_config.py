@@ -237,7 +237,7 @@ PRESET_TEST_CASES = {
         title=r"Fig 9 comparison ($T_0 = 1$ HeV, $\tau = 0.123$, $Au$, early times)",
         geom=planar(),
         times_for_png=np.array([0.05e-9, 0.1e-9, 0.15e-9], dtype=float),
-        bc_type="Marshak_Menahem"
+        bc_type="Marshak"
     ),
     PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE: RadHydroCase(
         # Rosen's opacity parameters

@@ -85,7 +85,9 @@ def calculate_flux(
     m_cells: np.ndarray,
     rho: np.ndarray,
     E_rad: np.ndarray | None,
+    E_bath: float,
 ):
+    # calculation of flux at i=1,...,N-1
     if HARMONIC_MEAN:
         D_face = harmonic_mean(D[:-1], D[1:])
     else:
@@ -93,7 +95,19 @@ def calculate_flux(
     rho_face = arithmetic_mean(rho[:-1], rho[1:])
     m_face = arithmetic_mean(m_cells[:-1], m_cells[1:])
     flux_coeff = (D_face * rho_face) / m_face # flux at i=1,...,N-1
-    return -flux_coeff * (E_rad[1:] - E_rad[:-1]) if E_rad is not None else np.zeros_like(rho) # flux at i=1,...,N-1
+    flux = -flux_coeff * (E_rad[1:] - E_rad[:-1]) if E_rad is not None else np.zeros_like(rho) # flux at i=1,...,N-1
+
+    # calculation of flux at i=0 (between ghost cell to the first cell)
+    T_bath = E_bath ** (1/4.)
+    rho_bath = rho[0]
+    m_bath = m_cells[0]
+    sigma_bath = calculate_sigma_from_temperature_and_density(T_bath, rho[0])
+    D_bath = calculate_D_from_sigma(sigma_bath)
+    
+    boundary_flux_coeff = (D_bath * rho_bath) / m_bath
+    boundary_flux = -boundary_flux_coeff* (E_rad[0] - E_bath)
+    extended_flux = np.concatenate(([boundary_flux], flux))
+    return extended_flux
 
 def calculate_abcd(
     sigma: np.ndarray,
@@ -121,9 +135,10 @@ def calculate_abcd(
     rho_face = arithmetic_mean(rho[:-1], rho[1:])
     m_face = arithmetic_mean(m_cells[:-1], m_cells[1:])
 
-    flux_coeff = (D_face * rho_face) / m_face
+    flux_coeff = (D_face * rho_face) / m_face # defined at i=1,...,N-1
     flux_coeff = np.concatenate(([flux_coeff[0]], flux_coeff, [flux_coeff[-1]]))
-    lagrangian_coeff = rho / m_cells
+                                              # defined at i=0,1...N-1,N
+    lagrangian_coeff = rho / m_cells # defined at j=1,...,N
 
     B = chi * c * sigma / (1 + A)
     a = -lagrangian_coeff * flux_coeff[:-1]
@@ -173,7 +188,8 @@ def calculate_abcd(
         
         # update a[0] and b[0]
         a[0] = -lagrangian_coeff[0] * flux_coeff[0]
-        b[0] = b[0] - lagrangian_coeff[0] * flux_coeff_old + lagrangian_coeff[0] * flux_coeff[0]
+        b[0] = b[0] - lagrangian_coeff[0] * flux_coeff_old + \
+             lagrangian_coeff[0] * flux_coeff[0]
         
         # apply Dirichlet condition
         E_left = a_Kelvin * (T_left ** 4)
@@ -405,6 +421,11 @@ def radiation_step(
     new_T_material = (new_UR / a_Kelvin) ** (1 / 4)
     new_e_material = f_Kelvin * new_T_material**beta_Rosen * rho**(-mu)
 
-    new_F = calculate_flux(D, m_cells, rho, new_E_rad)
-
-    return new_T_material, new_e_material, new_T_rad, new_E_rad, new_F
+    new_F = calculate_flux(D, m_cells, rho, new_E_rad, E_bath=a_Kelvin * (T_left ** 4) if T_left is not None else 0.0)
+    # important! The flux here is in i=0,...,N-1 convention, where the first entry is the flux at the left boundary, and we don't include the flux at the right boundary (we don't have a ghost cell on the right in this case).
+    
+    delta_m1 = arithmetic_mean(m_cells[0], m_cells[1])
+    LHS =  delta_m1/rho[0]*((new_E_rad[0] - E_rad[0]) / dt + rho[0]/delta_m1 * new_F[1] - \
+        chi*c*sigma[0] / (1 + A[0]) (UR_star[0] - new_E_rad[0]))
+    
+    return new_T_material, new_e_material, new_T_rad, new_E_rad, new_F, LHS

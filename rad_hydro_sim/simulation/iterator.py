@@ -278,11 +278,12 @@ def simulate_rad_hydro(
                     dimensionless_boundary_flux=dimensionless_boundary_flux,
                     time=state.t,
                 )
+                T_left = rad_hydro_case.T0_Kelvin
                 T_surface = solver.Tb * (state.t / 1e-9) ** solver.tau
                 rad_hydro_case = replace(rad_hydro_case, T_left=T_left)
 
                 F0_solver = solver.get_boundary_flux(dimensionless_boundary_flux=dimensionless_boundary_flux, time=state.t)
-                F0_sim = state.F_rad[0] if state.F_rad is not None and len(state.F_rad) > 0 else 0.0
+                F0_sim = state.F_rad[1] if state.F_rad is not None and len(state.F_rad) > 0 else 0.0
                 marshak = check_marshak(state.E_rad, T_left, F0_solver, F0_sim)
 
                 monitor_writer.writerow([

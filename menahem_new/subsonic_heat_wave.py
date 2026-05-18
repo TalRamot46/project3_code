@@ -390,6 +390,12 @@ class SubsonicHeatWave():
         
         T = self.get_T(V=V, P=P)
         S = -P**(self.n-1.) * V**(self.q) * (V*Pp + self.k*P*Vp)
+        # plt.plot(xsi_vec, S, label="S (self similar)", linestyle="dashed")
+        # plt.plot(xsi_vec, T, label="T (self similar)", linestyle="dotted")
+        # plt.legend()
+        # plt.xlabel("xsi")
+        # plt.ylabel("self similar profiles")
+        # plt.show()
 
         return dict(
             V=V, 

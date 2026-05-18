@@ -8,6 +8,7 @@ from project3_code.rad_hydro_sim.simulation.radiation_step import radiation_step
 from project3_code.hydro_sim.problems.simulation_config import SimulationConfig
 from project3_code.hydro_sim.core.state import RadHydroState
 import numpy as np
+from typing import Tuple
 
 S_PER_NS = 1e-9
 
@@ -17,7 +18,7 @@ def step_rad_hydro(
     case: RadHydroCase, 
     config: SimulationConfig,
     T_left: float,
-) -> RadHydroState:
+) -> Tuple[RadHydroState, np.ndarray]:
     """
     Pseudo-code for Lagrangian step with radiation-hydro coupling:
     1. Perform half-step velocity update using current acceleration.
@@ -75,7 +76,7 @@ def step_rad_hydro(
                 raise
     elif case.scenario == "full_rad_hydro":
         state_star = get_e_star_from_hydro(state, case.geom, case.r, config.sigma_visc, dt, bc_left, bc_right)
-        new_T_material, new_e_material, new_T_rad, new_E_rad, new_F_rad = radiation_step(state_star, dt, case, T_left)
+        new_T_material, new_e_material, new_T_rad, new_E_rad, new_F_rad, LHS = radiation_step(state_star, dt, case, T_left)
         new_state = update_nodes_from_pressure(state_star, case, new_e_material, dt, bc_left, bc_right, t_old=state.t)
         new_state.T_material = new_T_material
         new_state.T_rad = new_T_rad
@@ -84,4 +85,4 @@ def step_rad_hydro(
     else:
         raise ValueError(f"Unknown scenario: {case.scenario}")
     new_state.t += dt
-    return new_state
+    return new_state, LHS

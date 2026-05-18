@@ -74,19 +74,6 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
     return state
 
 
-def _build_mass_grid_uniform(case, omega: float, num_cells: int) -> np.ndarray:
-    """Build uniform Lagrangian mass grid."""
-    coordinate = np.array(list(sorted(set(
-        list(np.linspace(0., float(case.x_max), num_cells+1))
-    ))))
-    dx = coordinate[1:] - coordinate[:-1]
-    density = case.rho0 / (1.-omega) * (coordinate[1:]**(1.-omega) - coordinate[:-1]**(1.-omega))/(coordinate[1:] - coordinate[:-1])
-    mass_cells = density * dx
-    mass = np.cumsum(mass_cells)
-    mass = np.array([1e-30, 1e-7*mass[0]] + list(mass))
-    return mass
-
-
 def _subsonic_heat_wave_cache_key(case: RadHydroCase) -> tuple[float, float, float, float, float, float, float, float, float]:
     return (
         float(case.T0_Kelvin if case.T0_Kelvin is not None else 0.0),
@@ -128,13 +115,14 @@ def get_dimensionless_boundary_flux(case) -> Tuple[SubsonicHeatWave, float]:
     `calc_T_bath_from_dimensionless_boundary_flux`.
     """
     solver = _get_subsonic_heat_wave_solver(_subsonic_heat_wave_cache_key(case))
- 
-    # build a smallLagrangian mass grid and evaluate the self-similar profiles
-    mass = _build_mass_grid_uniform(case, omega=0.0, num_cells=200)
-    xsi_vec = mass * solver.xsi_over_m(time=1e-9)  # time doesn't matter since it's dimensionless
+    assert solver.xsi_f != None
+    assert solver.Pf != None
 
-    profiles = solver.get_self_similar_profiles(xsi_vec=xsi_vec)
-    S = profiles.get("S", None)
+    xsi_vec = solver.get_xsi_grid(xsi_f=solver.xsi_f, fac=20.)
+    # xsi_vec = np.linspace(solver.xsi_f/1000000000., solver.xsi_f, 10000)
+    
+    result= solver.get_self_similar_profiles(xsi_vec=xsi_vec)
+    V, P, U, S = result["V"], result["P"], result["U"], result["S"]
     if S is None:
         dimensionless_boundary_flux = 0.0
     else:
@@ -203,7 +191,7 @@ def simulate_rad_hydro(
     monitor_path = monitor_dir / f"{safe_case_name}_marshak_monitor.csv"
     monitor_file = open(monitor_path, "w", newline="", encoding="utf-8")
     monitor_writer = csv.writer(monitor_file)
-    monitor_writer.writerow(["time", "T_left", "T_surface", "F0_solver", "F0_sim", "E_bath", "E_rad0", "residual_solver", "residual_sim"])
+    monitor_writer.writerow(["time", "T_left", "T_surface", "F0_solver", "F0_sim", "E_bath", "E_rad0", "residual_solver", "residual_sim", "106 LHS"])
     
     # ---- history buffers ----
     times = []
@@ -278,26 +266,13 @@ def simulate_rad_hydro(
                     dimensionless_boundary_flux=dimensionless_boundary_flux,
                     time=state.t,
                 )
-                T_left = rad_hydro_case.T0_Kelvin
-                T_surface = solver.Tb * (state.t / 1e-9) ** solver.tau
+                # T_left = rad_hydro_case.T0_Kelvin
+                # T_surface = solver.Tb * (state.t / 1e-9) ** solver.tau
+                T_surface = (state.E_rad[0] / a_Kelvin) ** 0.25 
                 rad_hydro_case = replace(rad_hydro_case, T_left=T_left)
 
                 F0_solver = solver.get_boundary_flux(dimensionless_boundary_flux=dimensionless_boundary_flux, time=state.t)
                 F0_sim = state.F_rad[1] if state.F_rad is not None and len(state.F_rad) > 0 else 0.0
-                marshak = check_marshak(state.E_rad, T_left, F0_solver, F0_sim)
-
-                monitor_writer.writerow([
-                    f"{state.t:.16e}",
-                    f"{T_left:.16e}",
-                    f"{T_surface:.16e}",
-                    f"{marshak['F0_solver']:.16e}",
-                    f"{marshak['F0_sim']:.16e}",
-                    f"{marshak['E_bath']:.16e}",
-                    f"{marshak['E_rad0']:.16e}",
-                    f"{marshak['residual_solver_pct']:.16e}",
-                    f"{marshak['residual_sim_pct']:.16e}",
-                ])
-                monitor_file.flush()
 
 
             else:
@@ -306,7 +281,24 @@ def simulate_rad_hydro(
 
 
             # Lagrangian step
-            new_state = step_rad_hydro(state, dt, rad_hydro_case, simulation_config, T_left)
+            new_state, LHS = step_rad_hydro(state, dt, rad_hydro_case, simulation_config, T_left)
+
+            marshak = check_marshak(state.E_rad, T_left, F0_solver, F0_sim)
+
+            monitor_writer.writerow([
+                f"{state.t:.16e}",
+                f"{T_left:.16e}",
+                f"{T_surface:.16e}",
+                f"{marshak['F0_solver']:.16e}",
+                f"{marshak['F0_sim']:.16e}",
+                f"{marshak['E_bath']:.16e}",
+                f"{marshak['E_rad0']:.16e}",
+                f"{marshak['residual_solver_pct']:.16e}",
+                f"{marshak['residual_sim_pct']:.16e}",
+                f"{LHS:.16e}",
+            ])
+            monitor_file.flush()
+
             pbar.update(new_state.t - state.t)
             state = new_state
             if use_mp_progress:

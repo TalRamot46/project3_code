@@ -353,7 +353,7 @@ def radiation_step(
 
     rad_hydro_case: RadHydroCase,
     T_left: float | None = None,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Updates the material specific energy & radiation energy density based on the coupling between matter and radiation.
     
@@ -426,6 +426,6 @@ def radiation_step(
     
     delta_m1 = arithmetic_mean(m_cells[0], m_cells[1])
     LHS =  delta_m1/rho[0]*((new_E_rad[0] - E_rad[0]) / dt + rho[0]/delta_m1 * new_F[1] - \
-        chi*c*sigma[0] / (1 + A[0]) (UR_star[0] - new_E_rad[0]))
+        chi*c*sigma[0] / (1 + A[0]) * (UR_star[0] - new_E_rad[0]))
     
     return new_T_material, new_e_material, new_T_rad, new_E_rad, new_F, LHS

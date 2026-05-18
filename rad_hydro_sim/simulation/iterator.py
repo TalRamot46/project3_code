@@ -118,9 +118,7 @@ def get_dimensionless_boundary_flux(case) -> Tuple[SubsonicHeatWave, float]:
     assert solver.xsi_f != None
     assert solver.Pf != None
 
-    xsi_vec = solver.get_xsi_grid(xsi_f=solver.xsi_f, fac=20.)
-    # xsi_vec = np.linspace(solver.xsi_f/1000000000., solver.xsi_f, 10000)
-    
+    xsi_vec = solver.get_xsi_grid(xsi_f=solver.xsi_f, fac=20.)    
     result= solver.get_self_similar_profiles(xsi_vec=xsi_vec)
     V, P, U, S = result["V"], result["P"], result["U"], result["S"]
     if S is None:

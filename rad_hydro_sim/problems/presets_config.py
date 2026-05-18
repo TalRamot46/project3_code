@@ -217,7 +217,7 @@ PRESET_TEST_CASES = {
         # Boundary conditions
         T0_Kelvin = 1* KELVIN_PER_HEV,
         P0_Barye = None,
-        tau = 0.123,
+        tau = 0.122957198444,
 
         # initial conditions
         rho0 = 19.32,

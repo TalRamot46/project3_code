@@ -271,7 +271,6 @@ def run_menahem_shock_reference(
         linestyle=linestyle,
     )
 
-
 def run_menahem_piecewise_reference(
     case,
     times_sec: np.ndarray,

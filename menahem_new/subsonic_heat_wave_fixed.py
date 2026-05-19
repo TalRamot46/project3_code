@@ -90,13 +90,13 @@ class SubsonicHeatWave():
         logger.info(f"gamma={self.gamma:g}")
         logger.info(f"ode_scheme={self.ode_scheme!r}")
         
-        assert self.beta > 0.0
-        assert self.Tb > 0.0
-        assert self.gamma > 1.0, f"must have gamma > 1"
+        assert self.beta > 0.
+        assert self.Tb > 0.
+        assert self.gamma > 1., f"must have gamma > 1"
         # assert self.tau > -2., f"must have tau > -2 for shock to propagate outwards"
         assert ode_scheme in {"dopri5", "dop853", "lsoda", "zvode", "vode"}
-
-        self.r = gamma - 1.0
+        
+        self.r = gamma - 1.
         self.rep = f"tau={self.tau:g} alpha={self.alpha:g} beta={self.beta:g} lamda={self.lambdap:g} mu={self.mu:g}"
 
         self.title = f"$ \\tau={self.tau:.4g}" \
@@ -149,11 +149,16 @@ class SubsonicHeatWave():
         self.b3 *= -2.*denom
         self.c3 *= -2.*denom
 
+        # S (radiation flux) powers
+        self.aS = self.a + (self.q + 1.)*self.a1 + self.n*self.a3
+        self.bS = self.b + (self.q + 1.)*self.b1 + self.n*self.b3 + 1.
+        self.cS = self.c + (self.q + 1.)*self.c1 + self.n*self.c3
+
         assert self.n > 0.
 
         self.ode_solver = scipy.integrate.ode(self.fode).set_integrator(ode_scheme)
         
-        for key in {"xsi_f", "Pf", "V0", "Vp0", "P0", "Pp0", "U0", "T0", "xsi_min"}:
+        for key in {"xsi_f", "Pf", "V0", "Vp0", "P0", "Pp0", "U0", "T0", "S0", "bath_B", "bath_power", "xsi_min"}:
             setattr(self, key, None)
 
         logger.info(f"ablated mass temporal power {-self.c:g}")
@@ -179,6 +184,10 @@ class SubsonicHeatWave():
 
     def get_T(self, P, V):
          return (P*V**(1.-self.mu))**(1./self.beta)
+
+    def get_S(self, *, V, Vp, P, Pp):
+        """Dimensionless self-similar radiation energy flux."""
+        return -P**(self.n-1.) * V**(self.q) * (V*Pp + self.k*P*Vp)
 
     def get_xsi_grid(self, *, xsi_f, fac=1.):
         """
@@ -219,6 +228,14 @@ class SubsonicHeatWave():
         at the given time
         """
         return self.boundary_position(time=time) * (self.c2+1.) / time
+
+    def Tbath(self, *, time):
+        """Bath temperature for the Marshak boundary condition."""
+        assert self.bath_B is not None, "call find_xsi_f() before Tbath()"
+        assert self.bath_power is not None, "call find_xsi_f() before Tbath()"
+        time_arr = np.asarray(time)
+        assert np.all(time_arr > 0.), "time must be positive"
+        return self.Tb * time_arr**self.tau * (1. + self.bath_B*time_arr**self.bath_power)**0.25
 
     def ablated_mass(self, *, time):
         """
@@ -263,35 +280,6 @@ class SubsonicHeatWave():
             return 0.
         return fac
 
-    def get_boundary_flux(self, *, dimensionless_boundary_flux, time):
-        """
-        returns the radiation energy flux at the system boundary at the given time
-        """
-        time = max(time, 1e-15) #avoid zero division
-        aS = self.a+(self.q+1.)*self.a1+self.n*self.a3
-        bS = self.b+(self.q+1.)*self.b1+self.n*self.b3 + 1.
-        cS = self.c+(self.q+1.)*self.c1+self.n*self.c3
-        boundary_flux1 = dimensionless_boundary_flux * (self.A**aS) * (self.B**bS) * ((time+1e-20)**cS)  # / (Units.hev_kelvin)**aS
-        a = self.A
-        b = self.B
-        return boundary_flux1, self.A, aS, bS, cS, dimensionless_boundary_flux
-
-
-    def calc_T_bath_from_dimensionless_boundary_flux(self, *, dimensionless_boundary_flux, time):
-        """
-        returns the temperature of the boundary at the given time
-        """
-        boundary_flux1, A, aS, bS, cS, dimensionless_boundary_flux = self.get_boundary_flux(dimensionless_boundary_flux=dimensionless_boundary_flux, time=time)
-        boundary_flux2 = 0.42e20 # tau = 0.123
-        # boundary_flux2 = 0.59e20 * 0.59 * ((time+1e-20)/1e-9)**(0.59-1) # tau = 0
-
-
-        a = 4. * Units.sigma_sb / Units.clight
-        c = Units.clight
-        T_surface = self.Tb * ((time+1e-20)/1e-9)**self.tau
-        T_bath = (T_surface**4 + 2 / (a * c) * boundary_flux1)**(1./4.)
-        return T_bath, boundary_flux1, boundary_flux2, A, aS, bS, cS, self.A**aS, self.B**bS, ((time+1e-20)**cS), dimensionless_boundary_flux
-
     def solve(self, *, mass, time):
         """
         calculates the hydrodynamic profiles on the given
@@ -325,10 +313,7 @@ class SubsonicHeatWave():
         p = P * (self.A**self.a3) * (self.B**self.b3) * (time**self.c3)
         
         # radiation energy flux
-        aS = self.a+(self.q+1.)*self.a1+self.n*self.a3
-        bS = self.b+(self.q+1.)*self.b1+self.n*self.b3 + 1.
-        cS = self.c+(self.q+1.)*self.c1+self.n*self.c3
-        radiation_energy_flux = S * (self.A**aS) * (self.B**bS) * (time**cS)
+        radiation_energy_flux = S * (self.A**self.aS) * (self.B**self.bS) * (time**self.cS)
         
         return dict(
             boundary_position=boundary_position, 
@@ -395,13 +380,7 @@ class SubsonicHeatWave():
                 break
         
         T = self.get_T(V=V, P=P)
-        S = -P**(self.n-1.) * V**(self.q) * (V*Pp + self.k*P*Vp)
-        # plt.plot(xsi_vec, S, label="S (self similar)", linestyle="dashed")
-        # plt.plot(xsi_vec, T, label="T (self similar)", linestyle="dotted")
-        # plt.legend()
-        # plt.xlabel("xsi")
-        # plt.ylabel("self similar profiles")
-        # plt.show()
+        S = self.get_S(V=V, Vp=Vp, P=P, Pp=Pp)
 
         return dict(
             V=V, 
@@ -617,6 +596,15 @@ class SubsonicHeatWave():
         
         logger.info(f"{self.rep}: at ablation front: Pf={self.Pf:g}")
         logger.info(f"{self.rep}: at the origin: R0={1./self.V0:g} V0={self.V0} P0={self.P0:g} U0={self.U0} T0={self.T0}")
+
+        self.S0 = self.get_S(V=self.V0, Vp=self.Vp0, P=self.P0, Pp=self.Pp0)
+
+        F0_surface = self.S0 * (self.A**self.aS) * (self.B**self.bS)
+        self.bath_power = self.cS - 4.*self.tau
+        self.bath_B = 2.*F0_surface / (Units.arad * Units.clight * self.Tb**4)
+
+        logger.info(f"{self.rep}: at the origin: S0={self.S0:g}")
+        logger.info(f"{self.rep}: bath drive: bath_B={self.bath_B:g} bath_power={self.bath_power:g}")
 
         # sainity checks
         fatal = False
@@ -886,6 +874,34 @@ class SubsonicHeatWave():
         # err = abs(self.V_integral_total/V_integral_total_simps-1.)
         # logger.info(f"{self.rep}: V_integral_total error vs simpson={err:g}")
         # assert err < 1e-3, err
+    def get_boundary_flux(self, *, dimensionless_boundary_flux, time):
+        """
+        returns the radiation energy flux at the system boundary at the given time
+        """
+        time = max(time, 1e-15) #avoid zero division
+        aS = self.a+(self.q+1.)*self.a1+self.n*self.a3
+        bS = self.b+(self.q+1.)*self.b1+self.n*self.b3 + 1.
+        cS = self.c+(self.q+1.)*self.c1+self.n*self.c3
+        boundary_flux1 = dimensionless_boundary_flux * (self.A**aS) * (self.B**bS) * ((time+1e-20)**cS)  # / (Units.hev_kelvin)**aS
+        a = self.A
+        b = self.B
+        return boundary_flux1, self.A, aS, bS, cS, dimensionless_boundary_flux
+
+
+    def calc_T_bath_from_dimensionless_boundary_flux(self, *, dimensionless_boundary_flux, time):
+        """
+        returns the temperature of the boundary at the given time
+        """
+        boundary_flux1, A, aS, bS, cS, dimensionless_boundary_flux = self.get_boundary_flux(dimensionless_boundary_flux=dimensionless_boundary_flux, time=time)
+        boundary_flux2 = 0.42e20 # tau = 0.123
+        # boundary_flux2 = 0.59e20 * 0.59 * ((time+1e-20)/1e-9)**(0.59-1) # tau = 0
+
+
+        a = 4. * Units.sigma_sb / Units.clight
+        c = Units.clight
+        T_surface = self.Tb * ((time+1e-20)/1e-9)**self.tau
+        T_bath = (T_surface**4 + 2 / (a * c) * boundary_flux2)**(1./4.)
+        return T_bath, boundary_flux1, boundary_flux2, A, aS, bS, cS, self.A**aS, self.B**bS, ((time+1e-20)**cS), dimensionless_boundary_flux
 
     def test_etot_integral(self):
         assert self.xsi_f != None
@@ -898,10 +914,10 @@ class SubsonicHeatWave():
         V, U, P, S = result["V"], result["U"], result["P"], result["S"]
 
         integrand = P*V/self.r+0.5*U*U
-        etot_integral_total_simps = scipy.integrate.simpson(y=integrand, x=xsi_vec)
+        etot_integral_total_simps = scipy.integrate.simps(y=integrand, x=xsi_vec)
         
         logger.info(f"{self.rep}: etot_integral_total simps={etot_integral_total_simps}")
-        logger.info(f"{self.rep}: etot_integral_total trapz={np.trapezoid(y=integrand, x=xsi_vec)}")
+        logger.info(f"{self.rep}: etot_integral_total trapz={np.trapz(y=integrand, x=xsi_vec)}")
 
         # # cum plot
         etot_integral_cum_trapz = scipy.integrate.cumtrapz(y=integrand, x=xsi_vec)

@@ -7,7 +7,7 @@ from dataclasses import replace
 import numpy as np
 from tqdm import tqdm
 
-from project3_code.menahem_new.subsonic_heat_wave import SubsonicHeatWave
+from project3_code.menahem_new.subsonic_heat_wave_fixed import SubsonicHeatWave
 from project3_code.hydro_sim.core.eos import internal_energy_from_prho
 from project3_code.hydro_sim.core.geometry import planar
 from project3_code.hydro_sim.core.grid import cell_volumes, masses_from_initial_rho
@@ -92,7 +92,7 @@ def _subsonic_heat_wave_cache_key(case: RadHydroCase) -> tuple[float, float, flo
 def _get_subsonic_heat_wave_solver(cache_key: tuple[float, float, float, float, float, float, float, float, float]) -> SubsonicHeatWave:
     Tb, tau, g, alpha, lambdap, f, beta, mu, r = cache_key
     solver = SubsonicHeatWave(
-        Tb=Tb,
+        Tb=Tb * (1./1e-9)**tau,
         tau=tau,
         g=g,
         alpha=alpha,
@@ -189,7 +189,7 @@ def simulate_rad_hydro(
     monitor_path = monitor_dir / f"{safe_case_name}_marshak_monitor.csv"
     monitor_file = open(monitor_path, "w", newline="", encoding="utf-8")
     monitor_writer = csv.writer(monitor_file)
-    monitor_writer.writerow(["time", "T_left", "T_surface", "F0_solver", "F0_sim", "E_bath", "E_rad0", "residual_solver", "residual_sim", "106 LHS", "boundary_flux1", "boundary_flux2", "A", "aS", "bS", "cS", "A_power_aS", "B_power_bS", "time_power_cS", "dimensionless_boundary_flux", "LHS"])
+    monitor_writer.writerow(["time", "T_bath_ramot", "T_bath_menahem", "T_surface"])
     
     # ---- history buffers ----
     times = []
@@ -260,17 +260,18 @@ def simulate_rad_hydro(
 
             # Recalculate T_left for current time step for Marshak BC
             if rad_hydro_case.bc_type in ["Marshak", "Marshak_Menahem"]:
-                T_left, boundary_flux1, boundary_flux2, A, aS, bS, cS, A_power_aS, B_power_bS, time_power_cS, dimensionless_boundary_flux1 = solver.calc_T_bath_from_dimensionless_boundary_flux(
+                T_bath_ramot, boundary_flux1, boundary_flux2, A, aS, bS, cS, A_power_aS, B_power_bS, time_power_cS, dimensionless_boundary_flux1 = solver.calc_T_bath_from_dimensionless_boundary_flux(
                     dimensionless_boundary_flux=dimensionless_boundary_flux,
                     time=state.t,
                 )
-                # T_left = rad_hydro_case.T0_Kelvin
-                # T_surface = solver.Tb * (state.t / 1e-9) ** solver.tau
+                # T_surface_old = solver.Tb * (state.t / 1e-9) ** solver.tau
+                T_bath_menahem = solver.Tbath(time=state.t+1e-20)
                 T_surface = (state.E_rad[0] / a_Kelvin) ** 0.25 
+                T_left=T_bath_menahem
                 rad_hydro_case = replace(rad_hydro_case, T_left=T_left)
 
-                F0_solver, _, _, _, _, _= solver.get_boundary_flux(dimensionless_boundary_flux=dimensionless_boundary_flux, time=state.t)
-                F0_sim = state.F_rad[1] if state.F_rad is not None and len(state.F_rad) > 0 else 0.0
+                # F0_solver, _, _, _, _, _= solver.get_boundary_flux(dimensionless_boundary_flux=dimensionless_boundary_flux, time=state.t)
+                # F0_sim = state.F_rad[1] if state.F_rad is not None and len(state.F_rad) > 0 else 0.0
 
 
             else:
@@ -281,29 +282,37 @@ def simulate_rad_hydro(
             # Lagrangian step
             new_state, LHS = step_rad_hydro(state, dt, rad_hydro_case, simulation_config, T_left)
 
-            marshak = check_marshak(state.E_rad, T_left, F0_solver, F0_sim)
+            # marshak = check_marshak(state.E_rad, T_left, F0_solver, F0_sim)
+
+            # monitor_writer.writerow([
+            #     f"{state.t:.16e}",
+            #     f"{T_left:.16e}",
+            #     f"{T_surface:.16e}",
+            #     f"{marshak['F0_solver']:.16e}",
+            #     f"{marshak['F0_sim']:.16e}",
+            #     f"{marshak['E_bath']:.16e}",
+            #     f"{marshak['E_rad0']:.16e}",
+            #     f"{marshak['residual_solver_pct']:.16e}",
+            #     f"{marshak['residual_sim_pct']:.16e}",
+            #     f"{boundary_flux1:.16e}",
+            #     f"{boundary_flux2:.16e}",
+            #     f"{A:.16e}",
+            #     f"{aS:.16e}",
+            #     f"{bS:.16e}",
+            #     f"{cS:.16e}",
+            #     f"{A_power_aS:.16e}",
+            #     f"{B_power_bS:.16e}",
+            #     f"{time_power_cS:.16e}",
+            #     f"{dimensionless_boundary_flux1:.16e}",
+            #     f"{LHS:.16e}",
+            # ])
+            # monitor_file.flush()
 
             monitor_writer.writerow([
                 f"{state.t:.16e}",
-                f"{T_left:.16e}",
+                f"{T_bath_ramot:.16e}",
+                f"{T_bath_menahem:.16e}",
                 f"{T_surface:.16e}",
-                f"{marshak['F0_solver']:.16e}",
-                f"{marshak['F0_sim']:.16e}",
-                f"{marshak['E_bath']:.16e}",
-                f"{marshak['E_rad0']:.16e}",
-                f"{marshak['residual_solver_pct']:.16e}",
-                f"{marshak['residual_sim_pct']:.16e}",
-                f"{boundary_flux1:.16e}",
-                f"{boundary_flux2:.16e}",
-                f"{A:.16e}",
-                f"{aS:.16e}",
-                f"{bS:.16e}",
-                f"{cS:.16e}",
-                f"{A_power_aS:.16e}",
-                f"{B_power_bS:.16e}",
-                f"{time_power_cS:.16e}",
-                f"{dimensionless_boundary_flux1:.16e}",
-                f"{LHS:.16e}",
             ])
             monitor_file.flush()
 

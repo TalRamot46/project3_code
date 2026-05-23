@@ -65,7 +65,7 @@ from project3_code.rad_hydro_sim.simulation.radiation_step import KELVIN_PER_HEV
 from project3_code.hydro_sim.plotting.hydro_plots import _create_7panel_vertical_figure
 
 from ablation_solver import AblationSolver
-from subsonic_heat_wave_fixed import SubsonicHeatWave
+from subsonic_heat_wave import SubsonicHeatWave
 
 
 # =============================================================================
@@ -753,6 +753,189 @@ def save_custom_evolution_gif(
     print(f"Saved custom GIF to {gif_path}")
 
 
+def save_custom_euler_evolution_gif(
+    history,
+    case,
+    shussman_ref,
+    menahem_ref,
+    gif_path: str,
+    fps: int = 12,
+    stride: int = 1,
+    subtitle: str | None = None,
+):
+    """Generate animated 3-way GIF in shifted Eulerian coordinates with front predictions."""
+    from matplotlib.animation import FuncAnimation, PillowWriter
+    from ablation_solver import AblationSolver
+    
+    p_scale, u_scale, e_scale = 1e12, 1e5, 1e9
+    has_T_material = hasattr(history, "T_material") and history.T_material is not None
+    
+    fig, axes = _create_7panel_vertical_figure()
+    k0 = 0
+    
+    # Grid construction for fronts
+    n_cells = len(history.rho[0])
+    mass_grid = _build_mass_grid(case, num_cells=n_cells)
+    ablation_solver = AblationSolver(**_ablation_kwargs_from_case(case))
+    
+    # 1) Simulation lines (blue solid)
+    # Shift simulation cell coordinates so boundary is at x=0
+    shift_sim = history.x[k0, 0] - history.m[k0, 0] / (2.0 * history.rho[k0, 0])
+    xk0 = history.x[k0] - shift_sim
+    
+    sim_lines = []
+    sim_lines.append(axes[0].plot(xk0, history.rho[k0], lw=2, label="simulation", color="blue")[0])
+    sim_lines.append(axes[1].plot(xk0, history.p[k0] / p_scale, lw=2, label="simulation", color="blue")[0])
+    sim_lines.append(axes[2].plot(xk0, history.u[k0] / u_scale, lw=2, label="simulation", color="blue")[0])
+    sim_lines.append(axes[3].plot(xk0, history.e[k0] / e_scale, lw=2, label="simulation", color="blue")[0])
+    sim_lines.append(axes[4].plot(xk0, history.T_material[k0] if has_T_material else history.T[k0], lw=2, label="simulation", color="blue")[0])
+    sim_lines.append(axes[5].plot(xk0, history.T[k0], lw=2, label="simulation", color="blue")[0])
+    sim_lines.append(axes[6].plot(xk0, history.E_rad[k0], lw=2, label="simulation", color="blue")[0]               )
+    
+    # 2) Shussman reference lines (green dashed)
+    sh_lines = []
+    sh_lines.append(axes[0].plot([], [], lw=1.5, color="green", linestyle="--", label="Shussman")[0])
+    sh_lines.append(axes[1].plot([], [], lw=1.5, color="green", linestyle="--", label="Shussman")[0])
+    sh_lines.append(axes[2].plot([], [], lw=1.5, color="green", linestyle="--", label="Shussman")[0])
+    sh_lines.append(axes[3].plot([], [], lw=1.5, color="green", linestyle="--", label="Shussman")[0])
+    sh_lines.append(axes[4].plot([], [], lw=1.5, color="green", linestyle="--", label="Shussman")[0])
+    sh_lines.append(axes[5].plot([], [], lw=1.5, color="green", linestyle="--", label="Shussman")[0])
+    sh_lines.append(axes[6].plot([], [], lw=1.5, color="green", linestyle="--", label="Shussman")[0])
+    
+    # 3) Menahem reference lines (red dashed)
+    men_lines = []
+    men_lines.append(axes[0].plot([], [], lw=1.5, color="red", linestyle="--", label="Menahem")[0])
+    men_lines.append(axes[1].plot([], [], lw=1.5, color="red", linestyle="--", label="Menahem")[0])
+    men_lines.append(axes[2].plot([], [], lw=1.5, color="red", linestyle="--", label="Menahem")[0])
+    men_lines.append(axes[3].plot([], [], lw=1.5, color="red", linestyle="--", label="Menahem")[0])
+    men_lines.append(axes[4].plot([], [], lw=1.5, color="red", linestyle="--", label="Menahem")[0])
+    men_lines.append(axes[5].plot([], [], lw=1.5, color="red", linestyle="--", label="Menahem")[0])
+    men_lines.append(axes[6].plot([], [], lw=1.5, color="red", linestyle="--", label="Menahem")[0])
+    
+    # 4) Front vertical lines
+    bnd_vlines = []
+    abl_vlines = []
+    sh_vlines = []
+    for i, ax in enumerate(axes):
+        lbl_bnd = "Boundary Front" if i == 0 else None
+        lbl_abl = "Ablation Front" if i == 0 else None
+        lbl_sh = "Shock Front" if i == 0 else None
+        bnd_vlines.append(ax.axvline(0.0, color="black", linestyle="-", alpha=0.5, label=lbl_bnd))
+        abl_vlines.append(ax.axvline(0.0, color="purple", linestyle="--", alpha=0.7, label=lbl_abl))
+        sh_vlines.append(ax.axvline(0.0, color="red", linestyle="--", alpha=0.7, label=lbl_sh))
+        
+    for ax in axes:
+        ax.legend(loc="upper right", fontsize=8)
+        
+    x_euler = r"Eulerian coordinate $x$ [cm] (shifted)"
+    axes[0].set_ylabel(r"$\rho$ [g/cm³]")
+    axes[1].set_ylabel(r"$P$ [MBar]")
+    axes[2].set_ylabel(r"$u$ [km/s]")
+    axes[3].set_ylabel(r"$e_{\mathrm{mat}}$ [$10^9$ erg/g]")
+    axes[4].set_ylabel(r"$T_{\mathrm{mat}}$ [K]")
+    axes[5].set_ylabel(r"$T_{\mathrm{rad}}$ [K]")
+    axes[6].set_ylabel(r"$E_{\mathrm{rad}}$ [erg/cm³]")
+    for ax in axes:
+        ax.set_xlabel(x_euler)
+        ax.tick_params(axis="x", labelbottom=True)
+        ax.grid(True, alpha=0.3)
+        
+    title = fig.suptitle("", fontweight="medium")
+    frame_ids = np.arange(0, len(history.t), stride)
+    
+    def init():
+        return sim_lines + sh_lines + men_lines + bnd_vlines + abl_vlines + sh_vlines
+        
+    def update(frame_idx):
+        k = int(frame_ids[frame_idx])
+        t = history.t[k]
+        
+        # Shift simulation cell coordinates so boundary is at x=0
+        shift_sim = history.x[k, 0] - history.m[k, 0] / (2.0 * history.rho[k, 0])
+        xk = history.x[k] - shift_sim
+        
+        sim_lines[0].set_data(xk, history.rho[k])
+        sim_lines[1].set_data(xk, history.p[k] / p_scale)
+        sim_lines[2].set_data(xk, history.u[k] / u_scale)
+        sim_lines[3].set_data(xk, history.e[k] / e_scale)
+        sim_lines[4].set_data(xk, history.T_material[k] if has_T_material else history.T[k])
+        sim_lines[5].set_data(xk, history.T[k])
+        sim_lines[6].set_data(xk, history.E_rad[k])
+        
+        if shussman_ref is not None:
+            sh_idx = int(np.argmin(np.abs(shussman_ref.times - t)))
+            xr = shussman_ref.x[sh_idx]
+            sh_lines[0].set_data(xr, shussman_ref.rho[sh_idx])
+            sh_lines[1].set_data(xr, shussman_ref.p[sh_idx] / p_scale)
+            sh_lines[2].set_data(xr, shussman_ref.u[sh_idx] / u_scale)
+            sh_lines[3].set_data(xr, shussman_ref.e[sh_idx] / e_scale)
+            T_sh_K = (shussman_ref.T[sh_idx] * KELVIN_PER_HEV) if (shussman_ref.T and sh_idx < len(shussman_ref.T)) else np.array([])
+            sh_lines[4].set_data(xr, T_sh_K)
+            sh_lines[5].set_data(xr, T_sh_K)
+            E_sh = shussman_ref.E_rad[sh_idx] if (shussman_ref.E_rad and sh_idx < len(shussman_ref.E_rad)) else np.array([])
+            sh_lines[6].set_data(xr, E_sh)
+            
+        if menahem_ref is not None:
+            men_idx = int(np.argmin(np.abs(menahem_ref.times - t)))
+            xm = menahem_ref.x[men_idx]
+            men_lines[0].set_data(xm, menahem_ref.rho[men_idx])
+            men_lines[1].set_data(xm, menahem_ref.p[men_idx] / p_scale)
+            men_lines[2].set_data(xm, menahem_ref.u[men_idx] / u_scale)
+            men_lines[3].set_data(xm, menahem_ref.e[men_idx] / e_scale)
+            T_men_rad_K = (menahem_ref.T[men_idx] * KELVIN_PER_HEV) if (menahem_ref.T and men_idx < len(menahem_ref.T)) else np.array([])
+            if hasattr(menahem_ref, "T_material") and menahem_ref.T_material:
+                T_men_mat_K = (menahem_ref.T_material[men_idx] * KELVIN_PER_HEV)
+            else:
+                T_men_mat_K = T_men_rad_K
+            men_lines[4].set_data(xm, T_men_mat_K)
+            men_lines[5].set_data(xm, T_men_rad_K)
+            E_men = menahem_ref.E_rad[men_idx] if (menahem_ref.E_rad and men_idx < len(menahem_ref.E_rad)) else np.array([])
+            men_lines[6].set_data(xm, E_men)
+            
+        # 4) Front predictions via AblationSolver
+        try:
+            sol = ablation_solver.solve(mass=mass_grid, time=max(float(t), 1e-18))
+            x_bnd = 0.00
+            x_abl = sol["heat_position"] - sol["boundary_position"]
+            x_shock = sol["shock_position"] - sol["boundary_position"]
+        except Exception:
+            x_bnd = 0.0
+            x_abl = np.nan
+            x_shock = np.nan
+            
+        for i, ax in enumerate(axes):
+            bnd_vlines[i].set_xdata([x_bnd, x_bnd])
+            abl_vlines[i].set_xdata([x_abl, x_abl])
+            sh_vlines[i].set_xdata([x_shock, x_shock])
+            
+        case_title = case.title if hasattr(case, "title") and case.title else "Simulation"
+        header = f"{case_title}\n{subtitle}" if subtitle else case_title
+        if case.T0_Kelvin is not None and case.tau is not None:
+            title.set_text(
+                f"{header}\n"
+                f"$T(0,t)=T_0 t^{{\\tau}},\\; T_0={case.T0_Kelvin},\\; \\tau={case.tau},\\; t={t:.3e}$ s"
+            )
+        elif getattr(case, "P0", None) is not None and getattr(case, "tau", None) is not None:
+            title.set_text(
+                f"{header}\n"
+                f"$P(0,t)=P_0 t^{{\\tau}},\\; P_0={case.P0_Barye},\\; \\tau={case.tau},\\; t={t:.3e}$ s"
+            )
+        else:
+            title.set_text(f"{header}\n$t={t:.3e}$ s")
+            
+        for ax in axes:
+            ax.relim()
+            ax.autoscale_view()
+        return sim_lines + sh_lines + men_lines + bnd_vlines + abl_vlines + sh_vlines
+        
+    anim = FuncAnimation(fig, update, frames=len(frame_ids), init_func=init, blit=False)
+    
+    Path(gif_path).parent.mkdir(parents=True, exist_ok=True)
+    anim.save(gif_path, writer=PillowWriter(fps=fps))
+    plt.close(fig)
+    print(f"Saved custom Eulerian GIF to {gif_path}")
+
+
 # =============================================================================
 # Main Orchestration Loop
 # =============================================================================
@@ -770,8 +953,9 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
     rh_dir = out_dir / "rad_hydro"
     ss_dir = out_dir / "self_similar"
     ev_dir = out_dir / "evolution"
+    ev_euler_dir = out_dir / "evolution with euler predictions"
     
-    for d in [xt_dir, mh_dir, rh_dir, ss_dir, ev_dir]:
+    for d in [xt_dir, mh_dir, rh_dir, ss_dir, ev_dir, ev_euler_dir]:
         d.mkdir(parents=True, exist_ok=True)
         
     xt_path = str(xt_dir / f"{case_label}_xt.png")
@@ -780,6 +964,7 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
     self_similar_path = str(ss_dir / f"{case_label}_self_similar.png")
     standalone_path = str(ss_dir / f"{case_label}_velocity_fits_standalone.png")
     gif_path = str(ev_dir / f"{case_label}_evolution.gif")
+    gif_euler_path = str(ev_euler_dir / f"{case_label}_euler_evolution.gif")
     
     # 1) Initialize case and set grid size N=400
     case, config = get_preset(preset_name)
@@ -823,6 +1008,19 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
         fps=12,
         stride=max(1, len(history.t) // 60),
         subtitle="Simulation vs Shussman vs Menahem reference",
+    )
+    
+    # 10) Generate Eulerian evolution GIF with predictions
+    print(f"Saving animated custom Eulerian GIF with front predictions to {gif_euler_path}...")
+    save_custom_euler_evolution_gif(
+        history=history,
+        case=case,
+        shussman_ref=shussman_ref,
+        menahem_ref=menahem_ref,
+        gif_path=gif_euler_path,
+        fps=12,
+        stride=max(1, len(history.t) // 60),
+        subtitle="Simulation vs Shussman vs Menahem reference (Eulerian coordinates)",
     )
     print(f"Preset {preset_name} processed successfully.")
 

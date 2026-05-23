@@ -652,7 +652,7 @@ class SubsonicHeatWave():
         plt.ylabel("$F_{{\\xi_{{s}}}}(P_{{f}})$", fontsize=12)
         plt.xlabel("$P_{{f}}$", fontsize=12)
         plt.autoscale(enable=True, axis='both', tight=True)
-        plt.show()
+        # plt.show()
         
         # plot profiles
         Pf_vec = np.linspace(Pf_root*0.5, Pf_root*1.5, 15)
@@ -669,7 +669,7 @@ class SubsonicHeatWave():
         plt.xlabel("$\\xi$", fontsize=12)
         plt.ylabel("$P(\\xi)$", fontsize=12)
         plt.autoscale(enable=True, axis='both', tight=True)
-        plt.show()
+        # plt.show()
         
         return self
 
@@ -736,7 +736,7 @@ class SubsonicHeatWave():
         plt.grid()
         plt.autoscale(enable=True, axis='both', tight=True)
         
-        plt.show()
+        # plt.show() 
 
         for xsi_f, Pf in zip(xsi_f_vec, Pf_vec):
             xsi_vec = self.get_xsi_grid(xsi_f=xsi_f)
@@ -766,7 +766,7 @@ class SubsonicHeatWave():
         plt.ylabel("$T(\\xi)$", fontsize=12)
         plt.autoscale(enable=True, axis='both', tight=True)
         
-        plt.show()
+        # plt.show()
 
         return self
 
@@ -815,7 +815,7 @@ class SubsonicHeatWave():
         etot_integral_simpson = scipy.integrate.simpson(y=integrand_tot, x=xsi_vec)
         
         logger.info(f"{self.rep}: ekin_integral simpson={ekin_integral_simpson}")
-        logger.info(f"{self.rep}: ekin_integral trapz={np.trapz(y=integrand_kin, x=xsi_vec)}")
+        logger.info(f"{self.rep}: ekin_integral trapz={np.trapezoid(y=integrand_kin, x=xsi_vec)}")
 
         logger.info(f"{self.rep}: ein_integral simpson={ein_integral_simpson}")
         logger.info(f"{self.rep}: ein_integral trapz={np.trapz(y=integrand_in, x=xsi_vec)}")
@@ -925,7 +925,7 @@ class SubsonicHeatWave():
         plt.plot(xsi_vec, e_term,"r", label="E*xsi")
         plt.legend()
         plt.grid()
-        plt.show()
+        # plt.show()
 
         return self
 
@@ -966,7 +966,7 @@ class SubsonicHeatWave():
         # plt.autoscale(enable=True, axis='both', tight=True)
         plt.xlim([0.,xsi_f])
         plt.ylim([0.,1.])
-        plt.show()
+        # plt.show()
 
 
         V_integral = [self.get_V_integral(xsi=xsi, V=Vi, U=Ui, xsi0=xsi_vec[0], V0=V[0], U0=U[0]) for xsi, Vi, Ui in zip(xsi_vec, V, U)]
@@ -1038,7 +1038,7 @@ def test_xsi_f():
     plt.autoscale(enable=True, axis='both', tight=True)
     plt.savefig("xsif_tau.png", bbox_inches='tight')
     plt.savefig("xsif_tau.pdf", bbox_inches='tight')
-    plt.show()
+    # plt.show()
 
 def test_ablated_mass():
 
@@ -1098,7 +1098,7 @@ def test_ablated_mass():
     plt.ylabel("ablated mass [g]", fontsize=12)
     plt.xlabel("time [sec]", fontsize=12)
     plt.title(solver.title, fontsize=12)
-    plt.show()
+    # plt.show()
 
     plt.plot(times, x_boundary)
     plt.grid()
@@ -1109,7 +1109,7 @@ def test_ablated_mass():
     plt.xlabel("time [sec]", fontsize=12)
     plt.ylabel("$-x_{{boundary}}$ [cm]", fontsize=12)
     plt.title(solver.title, fontsize=12)
-    plt.show()
+    # plt.show()
 
 def test_profiles():
     time_rise = Units.nsec

@@ -845,7 +845,7 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
 
 
 def main():
-    # Process constant drive piston shock (tau=0) and power-law drive piston shock (tau=0.45)
+    # Process constant drive piston shock (tau=0) and power-law drive piston shock (tau=-0.45)
     run_preset_workflow(
         PRESET_CONSTANT_PRESSURE,
         "constant_pressure_drive",
@@ -854,7 +854,7 @@ def main():
     run_preset_workflow(
         PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE,
         "power_law_pressure_drive",
-        "Power-Law Pressure Drive (tau=0.45)"
+        "Power-Law Pressure Drive (tau=-0.45)"
     )
     print("\nAll custom simulations, PistonShock comparisons, plotting, fitting, and exports completed successfully!")
 

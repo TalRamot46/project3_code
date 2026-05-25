@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 import sys
+import pickle
 from pathlib import Path
 from dataclasses import replace
 import numpy as np
@@ -125,7 +126,7 @@ def _get_equally_spaced_elements(times: np.ndarray, n: int) -> np.ndarray:
 # Plotting functions
 # =============================================================================
 
-def plot_xt_trajectories(history, case, xt_path, case_title):
+def plot_xt_trajectories(history, case, xt_path, case_title, ablation_solver=None):
     """Plot cell boundaries x(t) and diagnosed fronts (Simulation vs Analytic)."""
     print(f"Generating space-time (xt) plot for {case_title}...")
     times = np.asarray(history.t, dtype=float)
@@ -133,7 +134,8 @@ def plot_xt_trajectories(history, case, xt_path, case_title):
     n_cells = x_sim.shape[1] - 1
     
     # 1) Menahem AblationSolver analytic solution
-    ablation_solver = AblationSolver(**_ablation_kwargs_from_case(case))
+    if ablation_solver is None:
+        ablation_solver = AblationSolver(**_ablation_kwargs_from_case(case))
     mass_grid = _build_mass_grid(case, num_cells=n_cells)
     
     times_model = _get_equally_spaced_elements(times, 200)
@@ -164,11 +166,27 @@ def plot_xt_trajectories(history, case, xt_path, case_title):
         if ishock >= 1:
             x_shock_sim[k - 1] = float(x_sim[k, ishock])
             
+    # Apply linear regression correction for small times (t < 0.002 ns)
+    later_times = np.array([])
+    later_x = np.array([])
+    for k in range(1, times.size):
+        t_ns = times[k] * 1e9
+        if t_ns >= 0.002 and not np.isnan(x_shock_sim[k - 1]):
+            later_times = np.append(later_times, times[k])
+            later_x = np.append(later_x, x_shock_sim[k - 1])
+            
+    if len(later_times) >= 2:
+        slope, intercept = np.polyfit(np.log(later_times+1e-20), np.log(later_x), 1)
+        for k in range(1, times.size):
+            t_ns = times[k] * 1e9
+            if t_ns < 0.002:
+                x_shock_sim[k - 1] = np.exp(slope * np.log(times[k] + 1e-20) + intercept)
+            
     # 3) Setup figure
     fig, ax = plt.subplots(figsize=(9.5, 6.5))
     
     # Plot mass trajectories - thin background grid so they don't cover the fronts
-    NUM_PRESENTED_CELLS = 10
+    NUM_PRESENTED_CELLS = 50
     chosen_cell_indices = _get_equally_spaced_elements(np.arange(n_cells), NUM_PRESENTED_CELLS)
     
     matched_sim_coordinates = np.zeros_like(x_sim, dtype=float)
@@ -178,8 +196,8 @@ def plot_xt_trajectories(history, case, xt_path, case_title):
     for j in chosen_cell_indices:
         lbl_sim = "Simulation Cells" if not legend_added else None
         lbl_men = "Analytic Cells" if not legend_added else None
-        ax.plot(times * 1e9, matched_sim_coordinates[:, j + 1], color="lightgrey", lw=0.4, alpha=0.4, label=lbl_sim)
-        ax.plot(times_model * 1e9, position_times[j + 2], color="orange", lw=0.4, alpha=0.3, label=lbl_men)
+        ax.plot(times * 1e9, matched_sim_coordinates[:, j + 1], color="black", lw=0.4, alpha=0.8, label=lbl_sim)
+        ax.plot(times_model * 1e9, position_times[j + 2], color="blue", lw=0.4, alpha=0.7, label=lbl_men)
         legend_added = True
         
     # Plot bold fronts
@@ -187,14 +205,15 @@ def plot_xt_trajectories(history, case, xt_path, case_title):
     ax.plot(times_model * 1e9, shock_position, lw=2.0, ls="--", c="darkred", label="Shock (Menahem)")
     ax.plot(times_model * 1e9, piston_position, lw=2.0, ls="--", c="green", label="Piston (Menahem)")
     ax.plot(times_model * 1e9, heat_position, lw=2.0, ls="--", c="purple", label="Heat Wave (Menahem)")
-    ax.plot(times_model * 1e9, boundary_position, lw=2.0, ls="--", c="black", label="Boundary (Menahem)")
+    # ax.plot(times_model * 1e9, boundary_position, lw=2.0, ls="--", c="black", label="Boundary (Menahem)")
     
     ax.set_xlabel(r"$t$ [ns]", fontsize=12)
     ax.set_ylabel(r"$x$ [cm]", fontsize=12)
     ax.set_title(f"Space-Time (xt) Trajectories and Fronts\n{case_title}", fontsize=13, fontweight='bold')
     ax.grid(True, alpha=0.25)
-    ax.legend(loc="lower left", fontsize=9.5)
-    ax.set_xlim(times.min() * 1e9, times.max() * 1e9)
+    ax.legend(loc="lower right", fontsize=9.5)
+    # ax.set_xlim(times.min() * 1e9, times.max() * 1e9)
+    ax.set_ylim(0, 0.00016)
     
     fig.tight_layout()
     fig.savefig(xt_path, dpi=200)
@@ -386,8 +405,8 @@ def plot_and_fit_self_similar(case, self_similar_path, standalone_path, case_tit
     def power_law_front(y, c, d):
         return c * (1.0 - y)**d
         
-    def power_law_origin(y, c, d):
-        return c * y**d
+    def power_law_origin(y, a, b, c, d):
+        return a * (y)**(c) + b*y**(c+d)
         
     # Extra fitting options for Velocity (U) to find the most clever fit
     def fit_u_1(y, c, d):
@@ -415,7 +434,7 @@ def plot_and_fit_self_similar(case, self_similar_path, standalone_path, case_tit
         
     # Perform curve fitting for T, P, S
     popt_T, _ = curve_fit(power_law_front, y_valid, T_valid, p0=[1.0, 0.5])
-    popt_P, _ = curve_fit(power_law_origin, y_valid, P_valid, p0=[P_valid[-1], 1.5])
+    popt_P, _ = curve_fit(power_law_origin, y_valid, P_valid, p0=[0.355, 0.5, 0.04, 2.3])
     popt_S, _ = curve_fit(power_law_front, y_valid, S_valid, p0=[S_valid[0], 0.5])
     
     T_fit = power_law_front(y_valid, *popt_T)
@@ -513,7 +532,7 @@ def plot_and_fit_self_similar(case, self_similar_path, standalone_path, case_tit
     
     # Panel (0,1): P
     axes[0, 1].plot(y_valid, P_valid, 'b-', label='Numerical', lw=2)
-    axes[0, 1].plot(y_valid, P_fit, 'r--', label=f'Fit: P = {popt_P[0]:.3f}*y^{{{popt_P[1]:.3f}}}\n(R² = {r2_P:.4f})', lw=1.5)
+    axes[0, 1].plot(y_valid, P_fit, 'r--', label=f'Fit: P = {popt_P[0]:.3f}*y^{{{popt_P[2]:.3f}}} + {popt_P[1]:.3f}*y^{popt_P[2]+popt_P[3]:.3f}\n(R² = {r2_P:.4f})', lw=1.5)
     axes[0, 1].set_ylabel(r"$P(y)$ [dimensionless]", fontsize=12)
     axes[0, 1].legend(loc='best', fontsize=9.0)
     
@@ -762,10 +781,10 @@ def save_custom_euler_evolution_gif(
     fps: int = 12,
     stride: int = 1,
     subtitle: str | None = None,
+    ablation_solver=None,
 ):
     """Generate animated 3-way GIF in shifted Eulerian coordinates with front predictions."""
     from matplotlib.animation import FuncAnimation, PillowWriter
-    from ablation_solver import AblationSolver
     
     p_scale, u_scale, e_scale = 1e12, 1e5, 1e9
     has_T_material = hasattr(history, "T_material") and history.T_material is not None
@@ -776,7 +795,9 @@ def save_custom_euler_evolution_gif(
     # Grid construction for fronts
     n_cells = len(history.rho[0])
     mass_grid = _build_mass_grid(case, num_cells=n_cells)
-    ablation_solver = AblationSolver(**_ablation_kwargs_from_case(case))
+    if ablation_solver is None:
+        from ablation_solver import AblationSolver
+        ablation_solver = AblationSolver(**_ablation_kwargs_from_case(case))
     
     # 1) Simulation lines (blue solid)
     # Shift simulation cell coordinates so boundary is at x=0
@@ -940,12 +961,82 @@ def save_custom_euler_evolution_gif(
 # Main Orchestration Loop
 # =============================================================================
 
-def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
-    """Run full verification comparison pipeline for a given preset."""
-    print("=" * 80)
-    print(f"PROCESSING PRESET: {preset_name} -> {case_label}")
-    print("=" * 80)
+def run_simulation_and_references(preset_name: str, case_label: str):
+    """Run full simulation and build reference solvers, or load from pickle cache."""
+    import pickle
     
+    cache_dir = Path("results/ictt/cache")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = cache_dir / f"{case_label}_cache.pkl"
+    
+    # 1) Initialize case and set grid size N=400
+    case, config = get_preset(preset_name)
+    config = replace(config, N=400)
+    
+    if cache_path.exists():
+        print(f"Loading cached simulation and reference data from {cache_path}...")
+        try:
+            with open(cache_path, "rb") as f:
+                data = pickle.load(f)
+            # Unpack cached objects
+            history = data["history"]
+            shussman_ref = data["shussman_ref"]
+            menahem_ref = data["menahem_ref"]
+            ablation_solver = data["ablation_solver"]
+            print("Cache loaded successfully.")
+            return case, history, shussman_ref, menahem_ref, ablation_solver
+        except Exception as e:
+            print(f"Failed to load cache: {e}. Re-running simulation...")
+            
+    # 2) Run radiation-hydrodynamics simulation
+    print(f"Running simulation...")
+    _, _, _, history = simulate_rad_hydro(rad_hydro_case=case, simulation_config=config)
+    
+    # 3) Build Shussman piecewise reference (seconds / nanoseconds coordinate transformation)
+    print(f"Building Shussman piecewise reference...")
+    eval_times_sec = np.linspace(1e-12, case.t_sec_end, 50)
+    eval_times_ns = eval_times_sec * 1e9
+    T0_HeV = float(case.T0_Kelvin) / KELVIN_PER_HEV
+    shussman_ref = run_shussman_piecewise_reference(case, times_ns=eval_times_ns, T0_HeV=T0_HeV)
+    
+    # 4) Build Menahem ablation piecewise reference
+    print(f"Building Menahem piecewise reference...")
+    menahem_ref = run_menahem_piecewise_reference(case, times_sec=eval_times_sec)
+    
+    # 5) Instantiate AblationSolver to reuse and cache
+    print(f"Instantiating AblationSolver reference...")
+    ablation_solver = AblationSolver(**_ablation_kwargs_from_case(case))
+    
+    # Cache everything
+    cache_data = {
+        "case": case,
+        "history": history,
+        "shussman_ref": shussman_ref,
+        "menahem_ref": menahem_ref,
+        "ablation_solver": ablation_solver,
+    }
+    
+    print(f"Saving simulation and reference data cache to {cache_path}...")
+    try:
+        with open(cache_path, "wb") as f:
+            pickle.dump(cache_data, f, protocol=pickle.HIGHEST_PROTOCOL)
+        print("Cache saved successfully.")
+    except Exception as e:
+        print(f"Failed to save cache: {e}")
+        
+    return case, history, shussman_ref, menahem_ref, ablation_solver
+
+
+def generate_verification_plots(
+    history,
+    case,
+    shussman_ref,
+    menahem_ref,
+    ablation_solver,
+    case_label: str,
+    case_title: str,
+):
+    """Generate all verification comparisons, plotting, fitting, and exports."""
     # Create results output directory structure
     out_dir = Path("results/ictt")
     xt_dir = out_dir / "xt"
@@ -966,38 +1057,19 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
     gif_path = str(ev_dir / f"{case_label}_evolution.gif")
     gif_euler_path = str(ev_euler_dir / f"{case_label}_euler_evolution.gif")
     
-    # 1) Initialize case and set grid size N=400
-    case, config = get_preset(preset_name)
-    config = replace(config, N=400)
+    # 1) Generate space-time trajectories and fronts plot (reusing ablation_solver)
+    plot_xt_trajectories(history, case, xt_path, case_title, ablation_solver=ablation_solver)
     
-    # 2) Run radiation-hydrodynamics simulation
-    print(f"Running simulation...")
-    _, _, _, history = simulate_rad_hydro(rad_hydro_case=case, simulation_config=config)
-    
-    # 3) Build Shussman piecewise reference (seconds / nanoseconds coordinate transformation)
-    print(f"Building Shussman piecewise reference...")
-    eval_times_sec = np.linspace(1e-12, case.t_sec_end, 50)
-    eval_times_ns = eval_times_sec * 1e9
-    T0_HeV = float(case.T0_Kelvin) / KELVIN_PER_HEV
-    shussman_ref = run_shussman_piecewise_reference(case, times_ns=eval_times_ns, T0_HeV=T0_HeV)
-    
-    # 4) Build Menahem ablation piecewise reference
-    print(f"Building Menahem piecewise reference...")
-    menahem_ref = run_menahem_piecewise_reference(case, times_sec=eval_times_sec)
-    
-    # 5) Generate trajectories and fronts space-time (xt) plot
-    plot_xt_trajectories(history, case, xt_path, case_title)
-    
-    # 6) Plot material hydrodynamics profiles
+    # 2) Plot material hydrodynamics profiles
     plot_material_hydro_profiles(history, shussman_ref, menahem_ref, material_hydro_path, case_title)
     
-    # 7) Plot radiation-hydrodynamics profiles
+    # 3) Plot radiation-hydrodynamics profiles
     plot_rad_hydro_profiles(history, shussman_ref, menahem_ref, rad_hydro_path, case_title)
     
-    # 8) Solve, fit, and plot similarity profiles
+    # 4) Solve, fit, and plot similarity profiles
     plot_and_fit_self_similar(case, self_similar_path, standalone_path, case_title)
     
-    # 9) Generate evolution GIF
+    # 5) Generate evolution GIF
     print(f"Saving animated custom 3-way evolution GIF to {gif_path}...")
     save_custom_evolution_gif(
         history=history,
@@ -1010,7 +1082,7 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
         subtitle="Simulation vs Shussman vs Menahem reference",
     )
     
-    # 10) Generate Eulerian evolution GIF with predictions
+    # 6) Generate Eulerian evolution GIF with predictions (reusing ablation_solver)
     print(f"Saving animated custom Eulerian GIF with front predictions to {gif_euler_path}...")
     save_custom_euler_evolution_gif(
         history=history,
@@ -1021,6 +1093,43 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
         fps=12,
         stride=max(1, len(history.t) // 60),
         subtitle="Simulation vs Shussman vs Menahem reference (Eulerian coordinates)",
+        ablation_solver=ablation_solver,
+    )
+
+
+def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
+    """Run full verification comparison pipeline for a given preset."""
+    print("=" * 80)
+    print(f"PROCESSING PRESET: {preset_name} -> {case_label}")
+    print("=" * 80)
+    
+    # call run_simulation_and_references only if cache file doesn't exist
+    cache_path = Path("results/ictt/cache") / f"{case_label}_cache.pkl"
+    if not cache_path.exists():
+        print("Pickle file doesn't exist, running simulation...")
+        case, history, shussman_ref, menahem_ref, ablation_solver = run_simulation_and_references(
+            preset_name, case_label
+        )
+    else:
+        print("Pickle file exists, loading simulation...")
+        with open(cache_path, "rb") as f:
+            data = pickle.load(f)
+        case = data.get("case")
+        if case is None:
+            case, _ = get_preset(preset_name)
+        history = data["history"]
+        shussman_ref = data["shussman_ref"]
+        menahem_ref = data["menahem_ref"]
+        ablation_solver = data["ablation_solver"]
+    
+    generate_verification_plots(
+        history=history,
+        case=case,
+        shussman_ref=shussman_ref,
+        menahem_ref=menahem_ref,
+        ablation_solver=ablation_solver,
+        case_label=case_label,
+        case_title=case_title,
     )
     print(f"Preset {preset_name} processed successfully.")
 

@@ -970,7 +970,7 @@ class SubsonicHeatWave():
 
 
         V_integral = [self.get_V_integral(xsi=xsi, V=Vi, U=Ui, xsi0=xsi_vec[0], V0=V[0], U0=U[0]) for xsi, Vi, Ui in zip(xsi_vec, V, U)]
-        V_integral_cum = scipy.integrate.cumtrapz(y=V, x=xsi_vec)
+        V_integral_cum = scipy.integrate.cumulative_trapezoid(y=V, x=xsi_vec)
         V_integral2 = [(Ui -U[0] - self.c * xsi * Vi)/ (self.c2+1.) for xsi, Vi, Ui in zip(xsi_vec, V, U)]
         plt.plot(xsi_vec, V*xsi_vec, ls="--", label=f"$\\xi V(\\xi)$")
         plt.plot(xsi_vec, V_integral, ls="--", label=f"$\\int V(\\xi)$")

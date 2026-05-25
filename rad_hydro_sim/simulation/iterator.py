@@ -236,6 +236,8 @@ def simulate_rad_hydro(
             pbar_kw["desc"] = tqdm_desc
     with tqdm(**pbar_kw) as pbar:
         while state.t < t_end:
+            T_bath_ramot = 0.0
+            T_bath_menahem = 0.0
             # Adaptive timestep
             dt = 0.0
             if step > 2:
@@ -275,7 +277,7 @@ def simulate_rad_hydro(
 
 
             else:
-                T_left = rad_hydro_case.T0_Kelvin * (state.t / (10**-9)) ** rad_hydro_case.tau
+                T_left = (rad_hydro_case.T0_Kelvin if rad_hydro_case.T0_Kelvin is not None else 0.0) * (state.t / (10**-9)) ** rad_hydro_case.tau
                 T_surface = T_left
 
 

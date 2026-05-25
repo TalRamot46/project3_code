@@ -64,14 +64,16 @@ def step_rad_hydro(
         new_state.T_material = new_T_material
         new_state.T_rad = new_T_rad
         new_state.E_rad = new_E_rad
+        LHS = np.zeros_like(state_star.rho)
     elif case.scenario == "radiation_only":
         try:
-            new_T_material, new_e_material, new_T_rad, new_E_rad, new_F = radiation_step(state, dt, case, T_left)
+            new_T_material, new_e_material, new_T_rad, new_E_rad, new_F, LHS = radiation_step(state, dt, case, T_left)
             new_state = state._replace(T_material=new_T_material, e_material=new_e_material, T_rad=new_T_rad, E_rad=new_E_rad)
         except ValueError as e:
             if "infs or NaNs" in str(e):
                 # If the radiation solver fails due to NaNs/Infs, keep the state unchanged
                 new_state = state._replace()
+                LHS = np.zeros_like(state.rho)
             else:
                 raise
     elif case.scenario == "full_rad_hydro":

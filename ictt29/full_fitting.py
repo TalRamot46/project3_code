@@ -81,8 +81,29 @@ def evaluate_piecewise_fits(mass_grid: np.ndarray, t_sec: float) -> dict:
             # Subsonic Ablation Regime
             y = m / m_f
             
-            # Density rho [g/cm^3]
-            rho_val = 0.173930 * (t_ns ** -0.520833) * ((1.0 - y) ** -0.491367)
+            # Temperature T [Kelvin]
+            T_val_hev = 1.011087 * ((1.0 - y) ** 0.241582)
+            T[i] = T_val_hev * KELVIN_PER_HEV
+            
+            # Density rho [g/cm^3] calculated from Dimensionless EOS
+            # rho = (r * T^beta / P)^(1 / (mu - 1))
+            r_val = 0.25
+            beta_val = 1.6
+            mu_val = 0.14
+            # P here should be the dimensionless P, and T should be dimensionless T
+            # Actually, we can use dimensional values if we use the full EOS, but the dimensionless formula is simpler.
+            # Using dimensional variables: p = r * rho * T * (f * rho^-mu)^(-1/beta) -> rho = ((r * f * T^beta) / p)^(1/(mu - 1))
+            # Or just evaluate the dimensionless one first:
+            T_tilde = 1.011087 * ((1.0 - y) ** 0.241582)
+            P_tilde = 0.35486 * y**0.87677 + 0.02905 * y**20.94836
+            # Ensure P_tilde > 0 to avoid division by zero at y=0
+            if P_tilde <= 0: P_tilde = 1e-15
+            rho_tilde = ((r_val * T_tilde**beta_val) / P_tilde) ** (1.0 / (mu_val - 1.0))
+            
+            # Convert dimensionless rho to dimensional rho
+            # rho(m,t) = rho_tilde * A_val^(115/96) * B_val^(25/48) * t^(-25/48)
+            # The CGS conversion factor for rho_tilde is exactly what we had: pre_rho = 0.174190 / 0.216463 = 0.80471027
+            rho_val = (0.174190 / 0.216463) * rho_tilde * (t_ns ** -0.520833)
             rho[i] = rho_val
             
             # Pressure p [Barye] (1 MBar = 1e12 Barye)
@@ -90,13 +111,12 @@ def evaluate_piecewise_fits(mass_grid: np.ndarray, t_sec: float) -> dict:
             p[i] = p_val_mbar * 1e12
             
             # Velocity u [cm/s] (1 km/s = 1e5 cm/s)
-            # Using the highly accurate Rational Fractional Fit
-            u_val_kms = -289.838 * (t_ns ** 0.036458) * (1.0 - y**0.2340) / (1.0 + 0.7524 * y)
+            # Using the Rational Fit for exact document consistency
+            u_val_kms = -191.294 * (t_ns ** 0.036458) * (1.0 - y) / (1.0 + 4.78201 * y)
             u[i] = u_val_kms * 1e5
             
             # Temperature T [Kelvin]
-            T_val_hev = 1.011087 * ((1.0 - y) ** 0.241582)
-            T[i] = T_val_hev * KELVIN_PER_HEV
+            # (already evaluated above for EOS calculation)
             
         elif m < m_s:
             # Shock compressed Regime

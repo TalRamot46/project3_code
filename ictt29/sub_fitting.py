@@ -389,17 +389,19 @@ def plot_and_fit_self_similar(case, self_similar_path, standalone_path, case_tit
     P_val = profiles["P"]
     T_val = profiles["T"]
     U_val = profiles["U"]
-    S_val = profiles["S"]
+    V_val = profiles["V"]
+    rho_val = 1.0 / V_val
     
     # Slice to avoid the numerical boundary layer near y=0 where shooting solver terminates
     # Also avoids y=0 to prevent division by zero in singular terms (y^-b)
-    valid_idx = (y_grid > 0.005) & np.isfinite(T_val) & np.isfinite(P_val) & np.isfinite(U_val) & np.isfinite(S_val)
+    valid_idx = (y_grid > 0.005) & np.isfinite(T_val) & np.isfinite(P_val) & np.isfinite(U_val) & np.isfinite(rho_val)
     
     y_valid = y_grid[valid_idx]
     T_valid = T_val[valid_idx]
     P_valid = P_val[valid_idx]
     U_valid = U_val[valid_idx]
-    S_valid = S_val[valid_idx]
+    rho_valid = rho_val[valid_idx]
+    V_valid = V_val[valid_idx]
     
     # Power-law fitting formulas
     def power_law_front(y, c, d):
@@ -407,6 +409,9 @@ def plot_and_fit_self_similar(case, self_similar_path, standalone_path, case_tit
         
     def power_law_origin(y, a, b, c, d):
         return a * (y)**(c) + b*y**(c+d)
+
+    def smith_approximation(y, R):
+        return ((1-y)*(1+R*y))**(10/39)
         
     # Extra fitting options for Velocity (U) to find the most clever fit
     def fit_u_1(y, c, d):
@@ -432,24 +437,38 @@ def plot_and_fit_self_similar(case, self_similar_path, standalone_path, case_tit
         # 3-parameter singular power law with exponential attenuation: c * (1-y) * exp(-a*y) * y^-b
         return c * (1.0 - y) * np.exp(-a * y) * (y**(-b))
         
-    # Perform curve fitting for T, P, S
-    popt_T, _ = curve_fit(power_law_front, y_valid, T_valid, p0=[1.0, 0.5])
+    # Perform curve fitting for T, P
+    # define mask over T, take only xi/xi_f < 0.99
+    mask = y_valid < 0.99
+    y_valid_masked = y_valid[mask]
+    T_valid_masked = T_valid[mask]
+    
+    popt_T, _ = curve_fit(smith_approximation, y_valid_masked, T_valid_masked, p0=[0.5])
     popt_P, _ = curve_fit(power_law_origin, y_valid, P_valid, p0=[0.355, 0.5, 0.04, 2.3])
-    popt_S, _ = curve_fit(power_law_front, y_valid, S_valid, p0=[S_valid[0], 0.5])
     
-    T_fit = power_law_front(y_valid, *popt_T)
+    T_fit_masked = smith_approximation(y_valid_masked, *popt_T)
+    T_fit = smith_approximation(y_valid, *popt_T)
     P_fit = power_law_origin(y_valid, *popt_P)
-    S_fit = power_law_front(y_valid, *popt_S)
     
+    # Calculate rho_fit from EOS
+    r_val = 0.25
+    beta_val = 1.6
+    mu_val = 0.14
+    # reduce P_fit to the mask of T_fit
+    P_fit_masked = P_fit[mask]
+    rho_fit_masked = ((r_val * T_fit_masked**beta_val) / P_fit_masked) ** (1.0 / (mu_val - 1.0))
+    rho_fit = ((r_val * T_fit**beta_val) / P_fit) ** (1.0 / (mu_val - 1.0))
+    rho_valid_masked = rho_valid[mask]
+
     def compute_r2(y_true, y_pred):
         ss_res = np.sum((y_true - y_pred)**2)
         ss_tot = np.sum((y_true - np.mean(y_true))**2)
         return 1.0 - ss_res / (ss_tot + 1e-30)
-        
-    r2_T = compute_r2(T_valid, T_fit)
-    r2_P = compute_r2(P_valid, P_fit)
-    r2_S = compute_r2(S_valid, S_fit)
     
+    r2_T = compute_r2(T_valid_masked, T_fit_masked)
+    r2_P = compute_r2(P_valid, P_fit)
+    r2_rho_masked = compute_r2(rho_valid_masked, rho_fit_masked)
+    r2_rho = compute_r2(rho_valid, rho_fit)
     # Fit the 8 velocity options with exception handling
     fits_u = {}
     
@@ -525,8 +544,9 @@ def plot_and_fit_self_similar(case, self_similar_path, standalone_path, case_tit
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
     
     # Panel (0,0): T
-    axes[0, 0].plot(y_valid, T_valid, 'b-', label='Numerical', lw=2)
-    axes[0, 0].plot(y_valid, T_fit, 'r--', label=f'Fit: T = {popt_T[0]:.3f}*(1-y)^{{{popt_T[1]:.3f}}}\n(R² = {r2_T:.4f})', lw=1.5)
+    axes[0, 0].plot(y_valid_masked, T_valid_masked, 'b-', label='Numerical', lw=2)
+    # axes[0, 0].plot(y_valid, T_fit, 'b-', label=f'Fit: (1-y)(1+{popt_T[0]:.3f}y)^(55/16) \n(R² = {r2_T:.4f})', lw=1.5)
+    axes[0, 0].plot(y_valid_masked, T_fit_masked, 'r--', label=f'Fit: (1-y)(1+{popt_T[0]:.3f}y)^(55/16) \n(R² = {r2_T:.4f})', lw=1.5)
     axes[0, 0].set_ylabel(r"$T(y)$ [dimensionless]", fontsize=12)
     axes[0, 0].legend(loc='best', fontsize=9.0)
     
@@ -557,11 +577,27 @@ def plot_and_fit_self_similar(case, self_similar_path, standalone_path, case_tit
     # Put legend in the top-left (upper left) of the U subplot which is completely empty space
     axes[1, 0].legend(loc='upper left', fontsize=8.5, framealpha=0.9)
     
-    # Panel (1,1): S
-    axes[1, 1].plot(y_valid, S_valid, 'b-', label='Numerical', lw=2)
-    axes[1, 1].plot(y_valid, S_fit, 'r--', label=f'Fit: S = {popt_S[0]:.3f}*(1-y)^{{{popt_S[1]:.3f}}}\n(R² = {r2_S:.4f})', lw=1.5)
-    axes[1, 1].set_ylabel(r"$S(y)$ [dimensionless]", fontsize=12)
+    # Panel (1,1): rho
+    # axes[1, 1].plot(y_valid_masked, rho_valid_masked, 'b-', label='Numerical', lw=2)
+    # axes[1, 1].plot(y_valid_masked, rho_fit_masked, 'r--', label=f'Fit: EOS derived from T, P\n(R² = {r2_rho_masked:.4f})', lw=1.5)
+    axes[1, 1].plot(y_valid, rho_valid, 'b-', label='Numerical', lw=2)
+    axes[1, 1].plot(y_valid, rho_fit, 'r--', label=f'Fit: EOS derived from T, P\n(R² = {r2_rho_masked:.4f})', lw=1.5)
+
+    axes[1, 1].set_ylabel(r"$\tilde{\rho}(y)$ [dimensionless density]", fontsize=12)
     axes[1, 1].legend(loc='best', fontsize=9.0)
+    
+    # Add Zoomed Inset for Rho
+    axins = axes[1, 1].inset_axes([0.1, 0.5, 0.4, 0.4])
+    axins.plot(y_valid_masked, rho_valid_masked, 'b-', lw=2)
+    axins.plot(y_valid_masked, rho_fit_masked, 'r--', lw=1.5)
+    axins.set_xlim(0.8, 0.99)
+    # Estimate ylim based on zoom region
+    zoom_idx = (y_valid_masked >= 0.8) & (y_valid_masked <= 0.99)
+    if np.any(zoom_idx):
+        axins.set_ylim(min(rho_valid_masked[zoom_idx])*0.9, max(rho_valid_masked[zoom_idx])*1.1)
+    axins.grid(True, alpha=0.3)
+    axins.set_title("Zoom near front", fontsize=9)
+    axes[1, 1].indicate_inset_zoom(axins, edgecolor="black")
     
     for ax in axes.flat:
         ax.set_xlabel(r"$y = \xi / \xi_f$", fontsize=12)
@@ -987,9 +1023,13 @@ def run_simulation_and_references(preset_name: str, case_label: str):
             return case, history, shussman_ref, menahem_ref, ablation_solver
         except Exception as e:
             print(f"Failed to load cache: {e}. Re-running simulation...")
+    # Pre-calculate evaluation times
+    eval_times_sec = np.linspace(1e-12, case.t_sec_end, 50)
+    
     # 4) Build Menahem ablation piecewise reference
     print(f"Building Menahem piecewise reference...")
-    menahem_ref = run_menahem_piecewise_reference(case, times_sec=1)
+    menahem_times_sec = np.array([0.25, 0.5, 0.75, 1.0]) * float(case.t_sec_end)
+    menahem_ref = run_menahem_piecewise_reference(case, times_sec=menahem_times_sec)
         
     # 2) Run radiation-hydrodynamics simulation
     print(f"Running simulation...")
@@ -997,7 +1037,6 @@ def run_simulation_and_references(preset_name: str, case_label: str):
     
     # 3) Build Shussman piecewise reference (seconds / nanoseconds coordinate transformation)
     print(f"Building Shussman piecewise reference...")
-    eval_times_sec = np.linspace(1e-12, case.t_sec_end, 50)
     eval_times_ns = eval_times_sec * 1e9
     T0_HeV = float(case.T0_Kelvin) / KELVIN_PER_HEV
     shussman_ref = run_shussman_piecewise_reference(case, times_ns=eval_times_ns, T0_HeV=T0_HeV)

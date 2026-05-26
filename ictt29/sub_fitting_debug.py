@@ -41,6 +41,7 @@ from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
 # =============================================================================
 
 # Exact physical parameters defined using Python Fractions
+A = Fraction()
 alpha = Fraction(3, 2)       # Opacity temperature exponent
 beta = Fraction(8, 5)        # Specific energy temperature exponent
 lambdap = Fraction(1, 5)     # Opacity density exponent
@@ -150,7 +151,7 @@ def print_solution_segment(hs: SubsonicHeatWave, ss: PistonShock):
     print(f"Level 2 (Parametrized): rho(m,t) = V(xsi)^-1 * {A_val:.5e}^(115/96) * {B_val:.5e}^(25/48) * t^(-25/48)")
     pre_rho = (A_val ** (Fraction(115, 96))) * (B_val ** (Fraction(25, 48)))
     print(f"Level 2 (Coeff): rho(m,t) = V(xsi)^-1 * {pre_rho:.5e} * t^(-0.52083)")
-    print("Level 3 (Fitted - CGS): rho(m,t) = 0.17393 * (t_ns)^-0.52083 * (1 - y)^-0.49137 g/cm^3")
+    print("Level 3 (Fitted - CGS): rho(m,t) = Derived via EOS from T_fit and P_fit profiles")
     
     # Pressure Profile
     print("\n[Pressure Profile p(m,t)]")
@@ -170,7 +171,7 @@ def print_solution_segment(hs: SubsonicHeatWave, ss: PistonShock):
     # convert cm/s to km/s: 1 km/s = 1e5 cm/s
     pre_u_kms = pre_u * 1e-5
     print(f"Level 2 (Coeff): u(m,t) = U(xsi) * {pre_u_kms:.5e} * (t_ns)^0.03646 km/s")
-    print("Level 3 (Fitted): u(m,t) = -289.83800 * (t_ns)^0.03646 * (1 - y^0.23400) / (1 + 0.75240 * y) km/s")
+    print("Level 3 (Fitted): u(m,t) = -191.29403 * (t_ns)^0.03646 * (1 - y) / (1 + 4.78201 * y) km/s")
 
     # Temperature Profile
     print("\n[Temperature Profile T(m,t)]")
@@ -355,6 +356,9 @@ def plot_subsonic_ablation_comparison(hs: SubsonicHeatWave, numerical_data: dict
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     axes = axes.ravel()
     
+    # Add Zoomed Inset for Density near front (y in [0.8, 0.99])
+    axins = axes[0].inset_axes([0.18, 0.48, 0.35, 0.35])
+    
     colors = ["red", "green", "blue"]
     
     for i, t_val in enumerate(target_times):
@@ -380,22 +384,42 @@ def plot_subsonic_ablation_comparison(hs: SubsonicHeatWave, numerical_data: dict
         y_solver = mass_solver / m_f_val
         
         # Fits (CGS & HeV values converted for plotting)
-        # Density (g/cm^3)
-        rho_fit = 0.17393 * (t_ns)**-0.52083 * (1.0 - y)**-0.49137
         # Pressure (converted from MBar to Barye: 1 MBar = 1e12 Ba)
         p_fit_MBar = 7.05133 * (t_ns)**-0.44792 * (0.34859 * y**0.87677 + 0.02905 * y**20.94836)
         p_fit = p_fit_MBar * 1e12
         # Velocity (converted from km/s to cm/s: 1 km/s = 1e5 cm/s)
-        u_fit_kms = -289.83800 * (t_ns)**0.03646 * (1.0 - y**0.23400) / (1.0 + 0.75240 * y)
+        u_fit_kms = -202.64500 * (t_ns)**0.03646 * (1.0 - y) / (1.0 + 5.48441 * y)
         u_fit = u_fit_kms * 1e5
         # Temperature (converted from HeV to Kelvin)
         T_fit_HeV = 1.01109 * (1.0 - y)**0.24158
         T_fit = T_fit_HeV * KELVIN_PER_HEV
 
+        # Density (g/cm^3) derived from EOS (T and P fits)
+        r_val = float(hs.r)
+        f_val = float(hs.f)
+        beta_val = float(hs.beta)
+        mu_val = float(hs.mu)
+        p_fit_safe = np.maximum(p_fit, 1e-15)
+        rho_fit = ((r_val * f_val * T_fit**beta_val) / p_fit_safe) ** (1.0 / (mu_val - 1.0))
+
         # Profile 1: Density
         axes[0].plot(m_sim_sub * 1e3, numerical_data["rho"][idx][sub_mask], 'o', color=colors[i], markersize=3, alpha=0.5)
         axes[0].plot(mass_solver * 1e3, sol_hs["density"], '-', color=colors[i], label=f"Solver t={t_ns:.2f} ns" if i==0 else None)
         axes[0].plot(m_sim_sub * 1e3, rho_fit, '--', color=colors[i], label=f"Fit t={t_ns:.2f} ns" if i==0 else None)
+        
+        # Zoomed inset plotting near front (y in [0.8, 0.99])
+        zoom_mask = (y >= 0.8) & (y <= 0.99)
+        m_sim_zoom = m_sim_sub[zoom_mask]
+        rho_sim_zoom = numerical_data["rho"][idx][sub_mask][zoom_mask]
+        rho_fit_zoom = rho_fit[zoom_mask]
+        
+        solver_zoom_mask = (y_solver >= 0.8) & (y_solver <= 0.99)
+        m_sol_zoom = mass_solver[solver_zoom_mask]
+        rho_sol_zoom = sol_hs["density"][solver_zoom_mask]
+        
+        axins.plot(m_sim_zoom * 1e3, rho_sim_zoom, 'o', color=colors[i], markersize=2, alpha=0.5)
+        axins.plot(m_sol_zoom * 1e3, rho_sol_zoom, '-', color=colors[i])
+        axins.plot(m_sim_zoom * 1e3, rho_fit_zoom, '--', color=colors[i])
         
         # Profile 2: Pressure
         axes[1].plot(m_sim_sub * 1e3, numerical_data["p"][idx][sub_mask] * 1e-12, 'o', color=colors[i], markersize=3, alpha=0.5)
@@ -420,6 +444,11 @@ def plot_subsonic_ablation_comparison(hs: SubsonicHeatWave, numerical_data: dict
         ax.set_xlabel("Lagrangian Mass Coordinate $m$ [mg/cm$^2$]", fontsize=12)
         if j == 0:
             ax.legend(loc="upper left")
+            
+    # Style inset
+    axins.grid(True, alpha=0.3)
+    axins.set_title("Zoom near front", fontsize=9)
+    axes[0].indicate_inset_zoom(axins, edgecolor="black")
             
     plt.suptitle("Subsonic Ablation Region Verification\nSolid: Subsonic Solver, Dashed: Piecewise Analytical Fit, Circles: Full Rad-Hydro Data", fontsize=14)
     plt.tight_layout()
@@ -526,7 +555,8 @@ def plot_relative_errors(hs: SubsonicHeatWave, output_dir: Path):
     xsi_grid = y_grid * hs.xsi_f
     
     profiles = hs.get_self_similar_profiles(xsi_vec=xsi_grid)
-    V_num, P_num, U_num, T_num, S_num = profiles["V"], profiles["P"], profiles["U"], profiles["T"], profiles["S"]
+    V_num, P_num, U_num, T_num = profiles["V"], profiles["P"], profiles["U"], profiles["T"]
+    rho_num = 1.0 / V_num
     
     # Piecewise fits from report
     # Temperature fit: T_fit(y) = 1.01109 * (1 - y)^0.24158
@@ -535,24 +565,29 @@ def plot_relative_errors(hs: SubsonicHeatWave, output_dir: Path):
     P_fit = 0.35486 * y_grid**0.87677 + 0.02905 * y_grid**20.94836
     # Velocity fit (Fit 4): U_fit(y) = -3.33700 * (1 - y^0.51600) * y^-0.19000
     U_fit = -3.33700 * (1.0 - y_grid**0.51600) * y_grid**-0.19000
-    # Flux fit: S_fit(y) = 1.60300 * (1 - y)^0.54500
-    S_fit = 1.60300 * (1.0 - y_grid)**0.54500
+    # Density calculated from Temperature and Pressure via Dimensionless EOS: rho = (r * T^beta / P)^(1 / (mu - 1))
+    r_val = 0.25
+    beta_val = 1.6
+    mu_val = 0.14
+    rho_fit = ((r_val * T_fit**beta_val) / P_fit) ** (1.0 / (mu_val - 1.0))
     
     # Calculate relative errors
-    # Temperature needs to be evaluated up to y=0.99 as T(y->1)->0
+    # Temperature and Density need to be evaluated up to y=0.99 as they have singularities/zeros
     valid_T = y_grid <= 0.99
     err_T = np.abs((T_fit[valid_T] - T_num[valid_T]) / T_num[valid_T])
     
+    valid_rho = y_grid <= 0.99
+    err_rho = np.abs((rho_fit[valid_rho] - rho_num[valid_rho]) / rho_num[valid_rho])
+    
     err_P = np.abs((P_fit - P_num) / (P_num + 1e-15))
     err_U = np.abs((U_fit - U_num) / (U_num + 1e-15))
-    err_S = np.abs((S_fit - S_num) / (S_num + 1e-15))
     
     # Plotting
     fig, ax = plt.subplots(figsize=(10, 7))
     ax.plot(y_grid[valid_T], err_T * 100, label="Temperature $\\tilde{T}(y)$ (up to $y=0.99$)", lw=2)
     ax.plot(y_grid, err_P * 100, label="Pressure $\\tilde{P}(y)$", lw=2)
     ax.plot(y_grid, err_U * 100, label="Velocity $\\tilde{U}(y)$", lw=2)
-    ax.plot(y_grid, err_S * 100, label="Radiation Flux $\\tilde{S}(y)$", lw=2)
+    ax.plot(y_grid[valid_rho], err_rho * 100, label="Density $\\tilde{\\rho}(y)$ (up to $y=0.99$)", lw=2)
     
     ax.set_xlabel("Normalized coordinate $y = \\xi / \\xi_f$", fontsize=13)
     ax.set_ylabel("Relative Error [\\%]", fontsize=13)

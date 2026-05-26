@@ -20,6 +20,7 @@ sys.path.insert(0, str(_REPO_ROOT.parent))  # Enables "project3_code" package re
 sys.path.insert(0, str(_REPO_ROOT))
 sys.path.insert(0, str(_REPO_ROOT / "menahem_new"))
 
+from project3_code.hydro_sim.problems.simulation_config import get_results_dir
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -603,7 +604,7 @@ def main():
     print_eulerian_and_energy_formulas(hs, ss)
     
     # Define outputs directory
-    results_dir = Path(__file__).resolve().parent / "position_verification_results"
+    results_dir = get_results_dir() / "ictt" / "test fits lagrangian"
     results_dir.mkdir(exist_ok=True)
     
     # 4. Load full rad-hydro numerical simulation data (base case)

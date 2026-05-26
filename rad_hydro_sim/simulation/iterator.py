@@ -277,7 +277,14 @@ def simulate_rad_hydro(
 
 
             else:
-                T_left = (rad_hydro_case.T0_Kelvin if rad_hydro_case.T0_Kelvin is not None else 0.0) * (state.t / (10**-9)) ** rad_hydro_case.tau
+                if rad_hydro_case.T0_Kelvin is None or rad_hydro_case.T0_Kelvin == 0.0:
+                    T_left = 0.0
+                else:
+                    t_ratio = state.t / 1e-9
+                    if t_ratio == 0.0 and rad_hydro_case.tau < 0:
+                        T_left = 0.0
+                    else:
+                        T_left = rad_hydro_case.T0_Kelvin * (t_ratio) ** rad_hydro_case.tau
                 T_surface = T_left
 
 

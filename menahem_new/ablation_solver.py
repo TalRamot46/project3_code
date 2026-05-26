@@ -68,6 +68,8 @@ class AblationSolver():
             mu=mu_heat,
             gamma=gamma_heat,
         ).find_xsi_f()#.plot_profiles()
+        mass = self.heat_solver.ablated_mass(time=1e-9) 
+        pass
 
         # --- set the solver for the shock region
         # pressure on heat front

@@ -66,7 +66,7 @@ def evaluate_piecewise_fits(mass_grid: np.ndarray, t_sec: float) -> dict:
     t_ns = t_sec * 1e9
     
     # 1. Front Positions
-    m_f = 0.00767554 * (t_ns ** 0.515625)
+    m_f = 0.00109 * (t_ns ** 0.515625)
     m_s = 0.0120786 * (t_ns ** 0.7765)
     
     # Pre-allocate profile arrays
@@ -133,13 +133,41 @@ def evaluate_piecewise_fits(mass_grid: np.ndarray, t_sec: float) -> dict:
 # =============================================================================
 
 def get_data():
+    import pickle
+    
+    cache_dir = Path("results/ictt/cache")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = cache_dir / "interactive_ablation_fits_cache.pkl"
+    
     print("1) Fetching Fig 8 Preset...")
     case, config = get_preset(PRESET_FIG_8_CONSTANT_TEMPERATURE)
     
-    # Run simulation with N=200 to keep it extremely fast but highly resolved
-    print("2) Running 1D Rad-Hydro Simulation (N=200)...")
-    config = replace(config, N=200, show_plot=False, show_slider=False)
-    _, _, _, history = simulate_rad_hydro(case, config)
+    if cache_path.exists():
+        print(f"--> Loading cached simulation history from {cache_path}...")
+        try:
+            with open(cache_path, "rb") as f:
+                data = pickle.load(f)
+            history = data["history"]
+            print("--> Simulation cache loaded successfully.")
+        except Exception as e:
+            print(f"--> Failed to load simulation cache ({e}). Re-running...")
+            history = None
+    else:
+        history = None
+    
+    history = None
+    if history is None:
+        # Run simulation with N=200 to keep it extremely fast but highly resolved
+        print("2) Running 1D Rad-Hydro Simulation (N=1000)...")
+        config = replace(config, show_plot=False, show_slider=False)
+        _, _, _, history = simulate_rad_hydro(case, config)
+        
+        print(f"--> Saving simulation cache to {cache_path}...")
+        try:
+            with open(cache_path, "wb") as f:
+                pickle.dump({"history": history}, f, protocol=pickle.HIGHEST_PROTOCOL)
+        except Exception as e:
+            print(f"--> Failed to save simulation cache ({e})")
     
     print("3) Instantiating Menahem Patched Ablation Solver...")
     ablation_solver = AblationSolver(**_ablation_kwargs_from_case(case))
@@ -193,22 +221,22 @@ def main():
     # Density Subplot
     line_sim_rho, = ax_rho.plot(sim_m, sim_rho, 'b-', lw=2.2, label='Simulation')
     line_men_rho, = ax_rho.plot(mass_grid, men_rho, 'm--', lw=1.8, label='Menahem Patched')
-    line_fit_rho, = ax_rho.plot(mass_grid, fit_rho, 'g:', lw=2.2, label='Analytic Fits')
+    line_fit_rho, = ax_rho.plot(mass_grid, fit_rho, 'g-', lw=2.2, label='Analytic Fits')
     
     # Pressure Subplot
     line_sim_p, = ax_p.plot(sim_m, sim_p, 'b-', lw=2.2, label='Simulation')
     line_men_p, = ax_p.plot(mass_grid, men_p, 'm--', lw=1.8, label='Menahem Patched')
-    line_fit_p, = ax_p.plot(mass_grid, fit_p, 'g:', lw=2.2, label='Analytic Fits')
+    line_fit_p, = ax_p.plot(mass_grid, fit_p, 'g-', lw=2.2, label='Analytic Fits')
     
     # Velocity Subplot
     line_sim_u, = ax_u.plot(sim_m, sim_u, 'b-', lw=2.2, label='Simulation')
     line_men_u, = ax_u.plot(mass_grid, men_u, 'm--', lw=1.8, label='Menahem Patched')
-    line_fit_u, = ax_u.plot(mass_grid, fit_u, 'g:', lw=2.2, label='Analytic Fits')
+    line_fit_u, = ax_u.plot(mass_grid, fit_u, 'g-', lw=2.2, label='Analytic Fits')
     
     # Temperature Subplot
     line_sim_T, = ax_T.plot(sim_m, sim_T, 'b-', lw=2.2, label='Simulation')
     line_men_T, = ax_T.plot(mass_grid, men_T, 'm--', lw=1.8, label='Menahem Patched')
-    line_fit_T, = ax_T.plot(mass_grid, fit_T, 'g:', lw=2.2, label='Analytic Fits')
+    line_fit_T, = ax_T.plot(mass_grid, fit_T, 'g-', lw=2.2, label='Analytic Fits')
     
     # Front vertical lines
     v_bnd_rho = ax_rho.axvline(0.0, color='grey', ls='-', alpha=0.5)
@@ -216,15 +244,15 @@ def main():
     v_shk_rho = ax_rho.axvline(fits["m_s"], color='red', ls='--', alpha=0.7, label='Shock Front')
     
     v_bnd_p = ax_p.axvline(0.0, color='grey', ls='-', alpha=0.5)
-    v_abl_p = ax_p.axvline(fits["m_f"], color='purple', ls='--', alpha=0.7)
+    v_abl_p = ax_p.axvline(fits["m_f"], color='black', ls='-', alpha=0.7)
     v_shk_p = ax_p.axvline(fits["m_s"], color='red', ls='--', alpha=0.7)
     
     v_bnd_u = ax_u.axvline(0.0, color='grey', ls='-', alpha=0.5)
-    v_abl_u = ax_u.axvline(fits["m_f"], color='purple', ls='--', alpha=0.7)
+    v_abl_u = ax_u.axvline(fits["m_f"], color='black', ls='-', alpha=0.7)
     v_shk_u = ax_u.axvline(fits["m_s"], color='red', ls='--', alpha=0.7)
     
     v_bnd_T = ax_T.axvline(0.0, color='grey', ls='-', alpha=0.5)
-    v_abl_T = ax_T.axvline(fits["m_f"], color='purple', ls='--', alpha=0.7)
+    v_abl_T = ax_T.axvline(fits["m_f"], color='black', ls='-', alpha=0.7)
     v_shk_T = ax_T.axvline(fits["m_s"], color='red', ls='--', alpha=0.7)
     
     # Styling and Labels

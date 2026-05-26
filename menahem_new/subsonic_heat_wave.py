@@ -818,10 +818,10 @@ class SubsonicHeatWave():
         logger.info(f"{self.rep}: ekin_integral trapz={np.trapezoid(y=integrand_kin, x=xsi_vec)}")
 
         logger.info(f"{self.rep}: ein_integral simpson={ein_integral_simpson}")
-        logger.info(f"{self.rep}: ein_integral trapz={np.trapz(y=integrand_in, x=xsi_vec)}")
+        logger.info(f"{self.rep}: ein_integral trapz={np.trapezoid(y=integrand_in, x=xsi_vec)}")
 
         logger.info(f"{self.rep}: etot_integral simpson={etot_integral_simpson}")
-        logger.info(f"{self.rep}: etot_integral trapz={np.trapz(y=integrand_tot, x=xsi_vec)}")
+        logger.info(f"{self.rep}: etot_integral trapz={np.trapezoid(y=integrand_tot, x=xsi_vec)}")
 
         self.energy_time_power = 2.*self.c2-self.c
         logger.info(f"{self.rep}: energy time power={self.energy_time_power:g}")
@@ -851,7 +851,7 @@ class SubsonicHeatWave():
         V_integral_total_simpson = scipy.integrate.simpson(y=V, x=xsi_vec)
         
         logger.info(f"{self.rep}: V_integral_total simpson={V_integral_total_simpson}")
-        logger.info(f"{self.rep}: V_integral_total trapz={np.trapz(y=V, x=xsi_vec)}")
+        logger.info(f"{self.rep}: V_integral_total trapz={np.trapezoid(y=V, x=xsi_vec)}")
 
         # xsi_integral_vec = np.array(xsi_vec)
         # V_integral_cum = scipy.integrate.cumtrapz(y=V, x=xsi_vec)

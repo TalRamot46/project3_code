@@ -987,7 +987,10 @@ def run_simulation_and_references(preset_name: str, case_label: str):
             return case, history, shussman_ref, menahem_ref, ablation_solver
         except Exception as e:
             print(f"Failed to load cache: {e}. Re-running simulation...")
-            
+    # 4) Build Menahem ablation piecewise reference
+    print(f"Building Menahem piecewise reference...")
+    menahem_ref = run_menahem_piecewise_reference(case, times_sec=1)
+        
     # 2) Run radiation-hydrodynamics simulation
     print(f"Running simulation...")
     _, _, _, history = simulate_rad_hydro(rad_hydro_case=case, simulation_config=config)
@@ -999,9 +1002,6 @@ def run_simulation_and_references(preset_name: str, case_label: str):
     T0_HeV = float(case.T0_Kelvin) / KELVIN_PER_HEV
     shussman_ref = run_shussman_piecewise_reference(case, times_ns=eval_times_ns, T0_HeV=T0_HeV)
     
-    # 4) Build Menahem ablation piecewise reference
-    print(f"Building Menahem piecewise reference...")
-    menahem_ref = run_menahem_piecewise_reference(case, times_sec=eval_times_sec)
     
     # 5) Instantiate AblationSolver to reuse and cache
     print(f"Instantiating AblationSolver reference...")

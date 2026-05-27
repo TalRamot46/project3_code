@@ -268,23 +268,89 @@ def perform_shock_fitting(solver):
         
     popt_P, _ = curve_fit(power_law_P, y_valid, P_valid, p0=[1.0])
     
-    # Temperature Fit (1-parameter power law: T = Ts + (T_0 - Ts) * (1-y)^d)
-    # Ts is not a PistonShock attribute; compute from EOS: T = P*V/r at shock boundary
+    # Temperature Fit Candidate Selection and Optimization
+    # Ts is the true EOS temperature at the shock boundary
     Es = float(solver.Ps * solver.Rs_or_Vs / solver.r)
-    Ts = (Es * rho_valid[-1]**(0.14)/6730)**(1/1.6)
+    Ts = T_valid[-1]
     T_0 = T_valid[0]
-    def power_law_T(y, d):
-        return Ts + (T_0 - Ts) * (1.0 - y)**d
-    print("T_s is ", Ts)
-    print("T_val[0] is ", T_valid[0])
-    print("T_val[-1] is ", T_valid[-1])
     
-    # Fit Temperature ONLY in the domain Y_FIT_MIN <= y <= 1.0
+    # 5 Candidates
+    def fit_T_1(y, a):
+        return Ts + (T_0 - Ts) * (1.0 - y)**a
+        
+    def fit_T_2(y, c, a, b):
+        return Ts + c * (1.0 - y)**a + (T_0 - Ts - c) * (1.0 - y)**b
+        
+    def fit_T_3(y, a, b):
+        return Ts + (T_0 - Ts) * (1.0 - y)**a * np.exp(-b * y)
+        
+    def fit_T_4(y, c1, c2, a, b):
+        return Ts + c1 * (1.0 - y)**a + c2 * (1.0 - y)**b
+        
+    def fit_T_5(y, a, b):
+        return Ts + (T_0 - Ts) * (1.0 - y)**a / (1.0 + b * y)
+        
+    candidates_T = [
+        {"id": 1, "func": fit_T_1, "name": "Single Power Law (BC)", "latex": r"T(y) \approx T_s + (T_0-T_s)(1-y)^{%.5f}", "p0": [1.0]},
+        {"id": 2, "func": fit_T_2, "name": "Double Power Law (BC)", "latex": r"T(y) \approx T_s + %.5f (1-y)^{%.5f} + %.5f (1-y)^{%.5f}", "p0": [(T_0-Ts)/2.0, 1.0, 2.0]},
+        {"id": 3, "func": fit_T_3, "name": "Exponential-Damped Power Law (BC)", "latex": r"T(y) \approx T_s + (T_0-T_s)(1-y)^{%.5f} e^{-%.5f y}", "p0": [1.0, 0.1]},
+        {"id": 4, "func": fit_T_4, "name": "Linear Combo (Shock-Conforming)", "latex": r"T(y) \approx T_s + %.5f (1-y)^{%.5f} + %.5f (1-y)^{%.5f}", "p0": [(T_0-Ts)/2.0, (T_0-Ts)/2.0, 1.0, 2.0]},
+        {"id": 5, "func": fit_T_5, "name": "Rational Power Law (BC)", "latex": r"T(y) \approx T_s + (T_0-T_s)\frac{(1-y)^{%.5f}}{1+%.5f y}", "p0": [1.0, 0.1]}
+    ]
+    
+    # We will perform fitting only in the Y_FIT_MIN <= y <= 1.0 domain
     fit_mask_T = y_valid >= Y_FIT_MIN
     y_fit_T = y_valid[fit_mask_T]
     T_fit_data = T_valid[fit_mask_T]
-    popt_T, _ = curve_fit(power_law_T, y_fit_T, T_fit_data, p0=[1.0])
     
+    best_T = None
+    min_avg_err_T = float("inf")
+    fits_T = {}
+    
+    for cand in candidates_T:
+        try:
+            popt, _ = curve_fit(cand["func"], y_fit_T, T_fit_data, p0=cand["p0"], maxfev=10000)
+            T_fit = cand["func"](y_valid, *popt)
+            
+            # Calculate errors inside the dynamic fitting domain y >= Y_FIT_MIN
+            T_fit_domain = T_fit[fit_mask_T]
+            T_valid_domain = T_valid[fit_mask_T]
+            rel_err_T = np.abs((T_fit_domain - T_valid_domain) / T_valid_domain) * 100
+            
+            avg_err = np.mean(rel_err_T)
+            max_err = np.max(rel_err_T)
+            
+            if cand["id"] == 1:
+                latex_str = r"T(y) \approx T_s + (T_0-T_s)(1-y)^{%.5f}" % tuple(popt)
+            elif cand["id"] == 2:
+                c, a, b = popt
+                latex_str = r"T(y) \approx T_s + %.5f (1-y)^{%.5f} + %.5f (1-y)^{%.5f}" % (c, a, T_0 - Ts - c, b)
+            elif cand["id"] == 3:
+                latex_str = r"T(y) \approx T_s + (T_0-T_s)(1-y)^{%.5f} e^{-%.5f y}" % tuple(popt)
+            elif cand["id"] == 4:
+                c1, c2, a, b = popt
+                latex_str = r"T(y) \approx T_s + %.5f (1-y)^{%.5f} + %.5f (1-y)^{%.5f}" % (c1, a, c2, b)
+            elif cand["id"] == 5:
+                latex_str = r"T(y) \approx T_s + (T_0-T_s)\frac{(1-y)^{%.5f}}{1+%.5f y}" % tuple(popt)
+                
+            fits_T[cand["id"]] = (popt, T_fit, avg_err, max_err, cand["name"], latex_str)
+            
+            if avg_err < min_avg_err_T:
+                min_avg_err_T = avg_err
+                best_T = {
+                    "id": cand["id"],
+                    "popt": popt,
+                    "func": cand["func"],
+                    "name": cand["name"],
+                    "latex": latex_str,
+                    "avg_err": avg_err,
+                    "max_err": max_err,
+                    "fit_val": T_fit
+                }
+        except Exception as e:
+            print(f"Shock temperature fit {cand['id']} failed: {e}")
+            fits_T[cand["id"]] = (None, None, 0.0, 0.0, cand["name"], cand["latex"])
+            
     # Velocity fits
     def fit_u_1(y, d): return U_0 - (U_0 - U_s) * (y**d)
     def fit_u_2(y, c, d): return c - (c - U_s) * (y**d)
@@ -332,7 +398,7 @@ def perform_shock_fitting(solver):
             print(f"Shock velocity fit {cand['id']} failed: {e}")
             fits_u[cand["id"]] = (None, None, 0.0, 0.0, cand["name"], cand["latex"])
             
-    return y_grid, y_valid, T_valid, P_valid, U_valid, rho_valid, popt_P, popt_T, best_u, fits_u
+    return y_grid, y_valid, T_valid, P_valid, U_valid, rho_valid, popt_P, best_T, fits_T, best_u, fits_u
 
 
 def evaluate_shock_fits_arrays(mass_grid, time, solver, case, y_valid, P_fit, T_fit, U_fit):
@@ -482,7 +548,7 @@ def plot_dimensional_fit_comparison(history, solver, case, y_valid, P_fit, T_fit
 
 def plot_and_fit_self_similar(
     solver, y_valid, T_valid, P_valid, U_valid, rho_valid, 
-    popt_P, popt_T, best_u, fits_u, 
+    popt_P, best_T, best_u, fits_u, 
     self_similar_path, standalone_path, case_title
 ):
     print("Generating shock 2x2 self-similar fitting plots...")
@@ -491,9 +557,8 @@ def plot_and_fit_self_similar(
     Ts = T_valid[-1]
     
     # Evaluate fits
-    T_0 = T_valid[0]
     P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
-    T_fit = Ts + (T_0 - Ts) * (1.0 - y_valid)**popt_T[0]
+    T_fit = best_T["fit_val"]
     rho_fit = P_fit / (solver.r * T_fit)
     U_fit = best_u["fit_val"]
     
@@ -517,8 +582,8 @@ def plot_and_fit_self_similar(
     ax.plot(y_valid, T_valid, 'b-', label='Numerical Solver', lw=2)
     ax.plot(y_valid, T_fit, 'r--', label='Analytical Fit', lw=1.5)
     ax.set_ylabel(r"Temperature $T(y)$ [dimensionless]", fontsize=12)
-    ax.set_title("Shock: Temperature", fontsize=13, fontweight='bold')
-    lbl_T = f"$T(y) \\approx T_s + (T_0 - T_s)(1-y)^{{{popt_T[0]:.5f}}}$\nAvg Err ({Y_FIT_MIN}<y<1): {avg_T:.4f}%\nMax Err ({Y_FIT_MIN}<y<1): {max_T:.4f}%"
+    ax.set_title(f"Shock: Temperature ({best_T['name']})", fontsize=13, fontweight='bold')
+    lbl_T = f"${best_T['latex']}$\nAvg Err ({Y_FIT_MIN}<y<1): {avg_T:.4f}%\nMax Err ({Y_FIT_MIN}<y<1): {max_T:.4f}%"
     ax.text(0.05, 0.05, lbl_T, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=9.5)
     
     # Close-up inset around Y_FIT_MIN
@@ -623,15 +688,60 @@ def plot_and_fit_self_similar(
     print(f"Saved standalone shock velocity fits to {standalone_path}")
 
 
+def plot_standalone_temperature_fits(
+    y_valid, T_valid, fits_T, best_T, standalone_path, case_title
+):
+    print("Generating standalone temperature fitting comparison plots...")
+    fig_sa, (ax_sa1, ax_sa2) = plt.subplots(2, 1, figsize=(11, 10))
+    
+    ax_sa1.plot(y_valid, T_valid, 'b-', label='Numerical Solver', lw=3.0)
+    
+    colors_T = {1: 'crimson', 2: 'darkorange', 3: 'forestgreen', 4: 'darkviolet', 5: 'deeppink'}
+    
+    # We only plot relative errors for the fitting domain y >= Y_FIT_MIN
+    fit_mask_T = y_valid >= Y_FIT_MIN
+    y_valid_T = y_valid[fit_mask_T]
+    T_valid_domain = T_valid[fit_mask_T]
+    
+    for i in range(1, 6):
+        popt, T_fit_cand, avg_err, max_err, name, latex = fits_T[i]
+        if popt is not None:
+            lbl = f"Fit {i}: {name}\nAvg Err ({Y_FIT_MIN}<y<1): {avg_err:.3f}%, Max: {max_err:.3f}%"
+            lw = 2.2 if i == best_T["id"] else 1.5
+            ax_sa1.plot(y_valid, T_fit_cand, colors_T[i], linestyle='--', label=lbl, lw=lw)
+            
+            # Error only plotted inside fitting domain
+            T_fit_cand_domain = T_fit_cand[fit_mask_T]
+            err_curve = np.abs((T_fit_cand_domain - T_valid_domain) / T_valid_domain) * 100
+            ax_sa2.plot(y_valid_T, err_curve, colors_T[i], label=f"Fit {i} (Avg: {avg_err:.3f}%)", lw=lw)
+            
+    ax_sa1.set_xlabel(r"Normalized coordinate $y = \xi / \xi_s$", fontsize=12)
+    ax_sa1.set_ylabel(r"Temperature $T(y)$ [dimensionless]", fontsize=12)
+    ax_sa1.legend(loc='best', fontsize=9.0)
+    ax_sa1.grid(True, alpha=0.3)
+    ax_sa1.set_title("Dimensionless Temperature $T(y)$ vs 5 Candidates", fontsize=13, fontweight='bold')
+    
+    ax_sa2.set_xlabel(r"Normalized coordinate $y = \xi / \xi_s$", fontsize=12)
+    ax_sa2.set_ylabel(r"Relative Error [$\%$]", fontsize=12)
+    ax_sa2.set_yscale('log')
+    ax_sa2.legend(loc='best', fontsize=9.5)
+    ax_sa2.grid(True, which="both", ls=":", alpha=0.5)
+    ax_sa2.set_title(f"Relative Errors of Temperature Fits on fitting domain y >= {Y_FIT_MIN} (semi-log)", fontsize=13, fontweight='bold')
+    
+    fig_sa.suptitle(f"Shock Temperature Curve Fitting & Optimization\nChosen Formal Fit: Fit {best_T['id']} ({best_T['name']})", fontsize=15, fontweight='bold')
+    plt.tight_layout()
+    fig_sa.savefig(standalone_path, dpi=200, bbox_inches='tight')
+    plt.close(fig_sa)
+    print(f"Saved standalone shock temperature fits to {standalone_path}")
+
+
 def plot_relative_errors(
     solver, y_valid, T_valid, P_valid, U_valid, R_valid, 
-    popt_P, popt_T, best_u, relative_errors_path, case_title
+    popt_P, best_T, best_u, relative_errors_path, case_title
 ):
     print("Generating shock relative error plots...")
-    Ts = T_valid[-1]
-    T_0 = T_valid[0]
     P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
-    T_fit = Ts + (T_0 - Ts) * (1.0 - y_valid)**popt_T[0]
+    T_fit = best_T["fit_val"]
     R_fit = P_fit / (solver.r * T_fit)
     U_fit = best_u["fit_val"]
     
@@ -737,25 +847,28 @@ def generate_verification_plots(
 
     self_similar_path = str(ss_dir / f"{case_label}_self_similar.png")
     standalone_path = str(ss_dir / f"{case_label}_velocity_fits_standalone.png")
+    standalone_T_path = str(ss_dir / f"{case_label}_temperature_fits_standalone.png")
     relative_errors_path = str(ss_dir / f"{case_label}_relative_errors.png")
     dimensional_fit_path = str(dv_dir / f"{case_label}_dimensional_fit_comparison.png")
 
-    y_grid, y_valid, T_valid, P_valid, U_valid, R_valid, popt_P, popt_T, best_u, fits_u = perform_shock_fitting(solver)
+    y_grid, y_valid, T_valid, P_valid, U_valid, R_valid, popt_P, best_T, fits_T, best_u, fits_u = perform_shock_fitting(solver)
 
     # Compute fit arrays
-    Ts = T_valid[-1]
     P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
-    T_fit = Ts + (T_valid[0] - Ts) * (1.0 - y_valid)**popt_T[0]
+    T_fit = best_T["fit_val"]
     U_fit = best_u["fit_val"]
 
-    # 1) Self-similar profiles and fits
-    plot_and_fit_self_similar(solver, y_valid, T_valid, P_valid, U_valid, R_valid, popt_P, popt_T, best_u, fits_u, self_similar_path, standalone_path, case_title)
+    # 1) Standalone Temperature fits comparison and relative errors
+    plot_standalone_temperature_fits(y_valid, T_valid, fits_T, best_T, standalone_T_path, case_title)
 
-    # 2) Dimensional fit comparison
+    # 2) Self-similar profiles and fits (using optimal models)
+    plot_and_fit_self_similar(solver, y_valid, T_valid, P_valid, U_valid, R_valid, popt_P, best_T, best_u, fits_u, self_similar_path, standalone_path, case_title)
+
+    # 3) Dimensional fit comparison
     plot_dimensional_fit_comparison(history, solver, case, y_valid, P_fit, T_fit, U_fit, dimensional_fit_path, case_title)
 
-    # 3) Relative errors of self-similar fits
-    plot_relative_errors(solver, y_valid, T_valid, P_valid, U_valid, R_valid, popt_P, popt_T, best_u, relative_errors_path, case_title)
+    # 4) Relative errors of self-similar fits
+    plot_relative_errors(solver, y_valid, T_valid, P_valid, U_valid, R_valid, popt_P, best_T, best_u, relative_errors_path, case_title)
 
 
 def run_preset_workflow(preset_name: str, case_label: str, case_title: str):

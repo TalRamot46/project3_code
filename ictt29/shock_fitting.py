@@ -449,8 +449,8 @@ def evaluate_shock_fits_arrays(mass_grid, time, solver, case, y_valid, P_fit, T_
             p[i]   = P_fit_y * (p_s_cgs / max(Ps, 1e-30))
             T[i]   = T_fit_y * (T_s_cgs / max(Ts, 1e-30))
             u[i]   = U_fit_y * (u_s_cgs / max(abs(Us_dim), 1e-30))
-            # Density from ideal gas EOS: rho = p / (r * T_cgs)
-            rho[i] = p[i] / (float(case.r) * T[i]) if T[i] > 0 else rho_s_cgs
+            # Density derived from non-ideal EOS: rho = (p / (6730 * r * T^1.6))^(1/0.86)
+            rho[i] = (p[i] / (6730.0 * float(case.r) * T[i]**1.6))**(1.0/0.86) if T[i] > 0 else rho_s_cgs
 
     return {"density": rho, "pressure": p, "velocity": u, "temperature": T}
 
@@ -559,7 +559,7 @@ def plot_and_fit_self_similar(
     # Evaluate fits
     P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
     T_fit = best_T["fit_val"]
-    rho_fit = P_fit / (solver.r * T_fit)
+    rho_fit = (P_fit / (6730.0 * solver.r * T_fit**1.6))**(1.0/0.86)
     U_fit = best_u["fit_val"]
     
     err_T = np.abs((T_fit - T_valid) / T_valid) * 100
@@ -742,7 +742,7 @@ def plot_relative_errors(
     print("Generating shock relative error plots...")
     P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
     T_fit = best_T["fit_val"]
-    R_fit = P_fit / (solver.r * T_fit)
+    R_fit = (P_fit / (6730.0 * solver.r * T_fit**1.6))**(1.0/0.86)
     U_fit = best_u["fit_val"]
     
     err_T = np.abs((T_fit - T_valid) / T_valid) * 100

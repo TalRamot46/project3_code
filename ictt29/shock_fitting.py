@@ -71,17 +71,17 @@ def get_cached_shock_solver(case, case_label):
     cache_dir.mkdir(parents=True, exist_ok=True)
     solver_cache_path = cache_dir / f"{case_label}_similarity_solver.pkl"
     
-    if solver_cache_path.exists():
-        print(f"Loading cached shock similarity solver from {solver_cache_path}...")
-        try:
-            with open(solver_cache_path, "rb") as f:
-                solver = pickle.load(f)
-            # Re-bind the ODE solver which contains method callbacks
-            solver.ode_solver = scipy.integrate.ode(solver.fode).set_integrator(solver.ode_scheme)
-            print("Similarity solver loaded successfully.")
-            return solver
-        except Exception as e:
-            print(f"Failed to load solver cache: {e}. Re-solving shock ODEs...")
+    # if solver_cache_path.exists():
+    #     print(f"Loading cached shock similarity solver from {solver_cache_path}...")
+    #     try:
+    #         with open(solver_cache_path, "rb") as f:
+    #             solver = pickle.load(f)
+    #         # Re-bind the ODE solver which contains method callbacks
+    #         solver.ode_solver = scipy.integrate.ode(solver.fode).set_integrator(solver.ode_scheme)
+    #         print("Similarity solver loaded successfully.")
+    #         return solver
+    #     except Exception as e:
+    #         print(f"Failed to load solver cache: {e}. Re-solving shock ODEs...")
             
     print("Solving shock similarity ODEs (finding xsi_s via root-finding)...")
     tau = float(case.tau or 0.0)
@@ -89,6 +89,11 @@ def get_cached_shock_solver(case, case_label):
     omega = float(getattr(case, "omega", 0.0))
     gamma = float(case.r) + 1.0
     
+    print("tau is : ", tau)
+    print("p0 is : ", p0)
+    print("omega is : ", omega)
+    print("gamma is : ", gamma)
+    exit()
     solver = PistonShock(
         rho0=float(case.rho0),
         omega=omega,

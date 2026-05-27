@@ -241,6 +241,9 @@ class PistonShock():
 
         # self similar profiles
         V, U, P = self.get_self_similar_profiles(xsi_vec=xsi_vec)
+        plt.plot(xsi_vec/xsi_vec.max(), V, label="V")
+        plt.legend()
+        plt.show()
 
         position = np.array([
              # shocked region

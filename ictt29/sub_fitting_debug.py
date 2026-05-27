@@ -161,7 +161,7 @@ def print_solution_segment(hs: SubsonicHeatWave, ss: PistonShock):
     # convert Barye to MBar: 1 MBar = 10^12 Ba
     pre_p_MBar = pre_p * 1e-12
     print(f"Level 2 (Coeff): p(m,t) = P(xsi) * {pre_p_MBar:.5e} * (t_ns)^(-0.44792) MBar")
-    print("Level 3 (Fitted): p(m,t) = 7.05133 * (t_ns)^-0.44792 * [0.34859 * y^0.87677 + 0.02905 * y^20.94836] MBar")
+    print("Level 3 (Fitted): p(m,t) = 7.05133 * (t_ns)^-0.44792 * [0.34866 * y^0.87714 + 0.02903 * y^21.08862] MBar")
 
     # Velocity Profile
     print("\n[Velocity Profile u(m,t)]")
@@ -177,7 +177,7 @@ def print_solution_segment(hs: SubsonicHeatWave, ss: PistonShock):
     print("\n[Temperature Profile T(m,t)]")
     print("Level 1 (General): T(m,t) = (p(m,t) * v(m,t)^(1-mu) / (r * f))^(1/beta)")
     print("Level 2 (Parametrized): T(m,t) = T(xsi) * T_0 * t^tau = T(xsi) * 1.0 HeV")
-    print("Level 3 (Fitted): T(m,t) = 1.01109 * (1 - y)^0.24158 HeV")
+    print("Level 3 (Fitted): T(m,t) = ((1 - y) * (1 + 0.20224 * y))^(10/39) HeV")
     
     # -------------------------------------------------------------------------
     # Shock Region Expressions
@@ -351,7 +351,7 @@ def run_hydro_only_numerical_data() -> dict:
 def plot_subsonic_ablation_comparison(hs: SubsonicHeatWave, numerical_data: dict, output_dir: Path):
     """Plots subsonic ablation solver vs fits vs numerical full rad-hydro data."""
     # Find indices for t = 0.05, 0.1, 0.15 ns
-    target_times = np.array([0.05e-9, 0.1e-9, 0.15e-9])
+    target_times = np.array([1e-9, 1.5e-9, 2e-9])
     
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     axes = axes.ravel()
@@ -385,13 +385,13 @@ def plot_subsonic_ablation_comparison(hs: SubsonicHeatWave, numerical_data: dict
         
         # Fits (CGS & HeV values converted for plotting)
         # Pressure (converted from MBar to Barye: 1 MBar = 1e12 Ba)
-        p_fit_MBar = 7.05133 * (t_ns)**-0.44792 * (0.34859 * y**0.87677 + 0.02905 * y**20.94836)
+        p_fit_MBar = 7.05133 * (t_ns)**-0.44792 * (0.34866 * y**0.87714 + 0.02903 * y**21.08862)
         p_fit = p_fit_MBar * 1e12
         # Velocity (converted from km/s to cm/s: 1 km/s = 1e5 cm/s)
-        u_fit_kms = -202.64500 * (t_ns)**0.03646 * (1.0 - y) / (1.0 + 5.48441 * y)
+        u_fit_kms = -191.29403 * (t_ns)**0.03646 * (1.0 - y) / (1.0 + 4.78201 * y)
         u_fit = u_fit_kms * 1e5
         # Temperature (converted from HeV to Kelvin)
-        T_fit_HeV = 1.01109 * (1.0 - y)**0.24158
+        T_fit_HeV = ((1.0 - y) * (1.0 + 0.20224 * y)) ** (10.0 / 39.0)
         T_fit = T_fit_HeV * KELVIN_PER_HEV
 
         # Density (g/cm^3) derived from EOS (T and P fits)
@@ -459,7 +459,7 @@ def plot_subsonic_ablation_comparison(hs: SubsonicHeatWave, numerical_data: dict
 
 def plot_shock_region_comparison(ss: PistonShock, numerical_data: dict, hs: SubsonicHeatWave, output_dir: Path):
     """Plots shock solver vs fits vs numerical hydro-only data."""
-    target_times = np.array([0.05e-9, 0.1e-9, 0.15e-9])
+    target_times = np.array([1e-9, 1.5e-9, 2e-9])
     
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     axes = axes.ravel()
@@ -559,10 +559,10 @@ def plot_relative_errors(hs: SubsonicHeatWave, output_dir: Path):
     rho_num = 1.0 / V_num
     
     # Piecewise fits from report
-    # Temperature fit: T_fit(y) = 1.01109 * (1 - y)^0.24158
-    T_fit = 1.01109 * (1.0 - y_grid)**0.24158
-    # Pressure fit: P_fit(y) = 0.35486 * y^0.87677 + 0.02905 * y^20.94836
-    P_fit = 0.35486 * y_grid**0.87677 + 0.02905 * y_grid**20.94836
+    # Temperature fit (Smith Approximation): T_fit(y) = ((1 - y) * (1 + 0.20224 * y)) ** (10/39)
+    T_fit = ((1.0 - y_grid) * (1.0 + 0.20224 * y_grid)) ** (10.0 / 39.0)
+    # Pressure fit: P_fit(y) = 0.34866 * y**0.87714 + 0.02903 * y**21.08862
+    P_fit = 0.34866 * y_grid**0.87714 + 0.02903 * y_grid**21.08862
     # Velocity fit (Fit 4): U_fit(y) = -3.33700 * (1 - y^0.51600) * y^-0.19000
     U_fit = -3.33700 * (1.0 - y_grid**0.51600) * y_grid**-0.19000
     # Density calculated from Temperature and Pressure via Dimensionless EOS: rho = (r * T^beta / P)^(1 / (mu - 1))

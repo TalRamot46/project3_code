@@ -224,7 +224,7 @@ def plot_material_hydro_profiles(history, shussman_ref, menahem_ref, material_hy
     """Plot overlay profiles of e, u, p, rho vs m (mass coordinate) at 0.05, 0.1, 0.15 ns (evolution snippets)."""
     print(f"Generating material hydrodynamics profiles for {case_title}...")
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-    target_times = [0.05e-9, 0.10e-9, 0.15e-9]
+    target_times = [1e-9, 1.5e-9, 2e-9]
     colors = plt.cm.viridis(np.linspace(0.2, 0.85, len(target_times)))
     
     # Loop over times
@@ -293,7 +293,7 @@ def plot_rad_hydro_profiles(history, shussman_ref, menahem_ref, rad_hydro_path, 
     """Plot overlay profiles of T_mat, T_rad, E_rad, and coupling vs m (mass coordinate) at 0.05, 0.1, 0.15 ns (evolution snippets)."""
     print(f"Generating radiation-hydrodynamics profiles for {case_title}...")
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-    target_times = [0.05e-9, 0.10e-9, 0.15e-9]
+    target_times = [1e-9, 1.5e-9, 2e-9]
     colors = plt.cm.viridis(np.linspace(0.2, 0.85, len(target_times)))
     
     # Loop over times

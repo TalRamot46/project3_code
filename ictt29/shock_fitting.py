@@ -63,6 +63,54 @@ from project3_code.hydro_sim.plotting.hydro_plots import _create_7panel_vertical
 
 from piston_shock import PistonShock
 
+RUN_GIFS = False  # Set to True to generate animated evolution GIFs (which takes time)
+
+def get_cached_shock_solver(case, case_label):
+    """Solve shock similarity ODEs once and cache the solver object (with found xsi_s)."""
+    cache_dir = Path("results/ictt/cache")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    solver_cache_path = cache_dir / f"{case_label}_similarity_solver.pkl"
+    
+    if solver_cache_path.exists():
+        print(f"Loading cached shock similarity solver from {solver_cache_path}...")
+        try:
+            with open(solver_cache_path, "rb") as f:
+                solver = pickle.load(f)
+            # Re-bind the ODE solver which contains method callbacks
+            solver.ode_solver = scipy.integrate.ode(solver.fode).set_integrator(solver.ode_scheme)
+            print("Similarity solver loaded successfully.")
+            return solver
+        except Exception as e:
+            print(f"Failed to load solver cache: {e}. Re-solving shock ODEs...")
+            
+    print("Solving shock similarity ODEs (finding xsi_s via root-finding)...")
+    tau = float(case.tau or 0.0)
+    p0 = _ns_amplitude_rescale(float(case.P0_Barye), tau)
+    omega = float(getattr(case, "omega", 0.0))
+    gamma = float(case.r) + 1.0
+    
+    solver = PistonShock(
+        rho0=float(case.rho0),
+        omega=omega,
+        p0=p0,
+        tau=tau,
+        gamma=gamma
+    )
+    
+    # Save cache by removing ode_solver temporarily to avoid pickling issues
+    try:
+        ode_solver = solver.ode_solver
+        del solver.ode_solver
+        with open(solver_cache_path, "wb") as f:
+            pickle.dump(solver, f, protocol=pickle.HIGHEST_PROTOCOL)
+        solver.ode_solver = ode_solver
+        print(f"Saved shock similarity solver to cache: {solver_cache_path}")
+    except Exception as e:
+        print(f"Failed to save solver cache: {e}")
+        
+    return solver
+
+
 
 # =============================================================================
 # Helper functions for shock detection and rolling average
@@ -245,405 +293,386 @@ def plot_xt_trajectories(history, case, xt_path, case_title, solver=None):
     print(f"Saved xt trajectory to {xt_path}")
 
 
-def plot_material_hydro_profiles(history, menahem_ref, material_hydro_path, case_title):
-    """Plot overlay profiles of e, u, p, rho vs m (mass coordinate) at evolution snippets."""
-    print(f"Generating material hydrodynamics profiles for {case_title}...")
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-    t_max = np.max(history.t)
-    target_times = [0.25 * t_max, 0.50 * t_max, 0.75 * t_max]
-    colors = plt.cm.viridis(np.linspace(0.2, 0.85, len(target_times)))
+def evaluate_shock_fits(mass_grid, time, solver, case, popt_P, popt_T, best_u):
+    """Map self-similar fit parameters to dimensional (CGS) physical profiles on mass_grid at time."""
+    xsi_over_m_val = solver.xsi_over_m(time=time)
+    m_s = solver.xsi_s / xsi_over_m_val
+
+    # Dimensionless shock-front boundary values
+    Ps = solver.Ps
+    Ts = float(solver.Ps * solver.Rs_or_Vs / solver.r)   # EOS: T = P*V/r at shock
+    Us_dim = solver.Us
+
+    # Initialise output arrays
+    rho = np.zeros(len(mass_grid), dtype=float)
+    p   = np.zeros(len(mass_grid), dtype=float)
+    u   = np.zeros(len(mass_grid), dtype=float)
+    T   = np.zeros(len(mass_grid), dtype=float)
+
+    # Exact solver at this time to get dimensional scale factors at the shock front
+    sol_exact = solver.solve(mass=mass_grid, time=time)
+    p_s_cgs   = float(sol_exact["pressure"][-1])    # pressure at shock front [Barye]
+    rho_s_cgs = float(sol_exact["density"][-1])     # density at shock front [g/cm^3]
+    u_s_cgs   = float(sol_exact["velocity"][-1])    # velocity at shock front [cm/s]
+    T_s_cgs   = p_s_cgs / (rho_s_cgs * float(case.r)) if rho_s_cgs > 0 else 300.0
+
+    for i, m in enumerate(mass_grid):
+        if m >= m_s:
+            # Outside shock front (unshocked region)
+            rho[i] = float(case.rho0)
+            p[i]   = 1e-6   # tiny ambient pressure [Barye]
+            u[i]   = 0.0
+            T[i]   = 300.0  # ambient temperature [K]
+        else:
+            # y = normalised coordinate in [0, 1]
+            y = float(m) / m_s
+            y = max(y, 1e-10)
+
+            # Dimensionless fits
+            P_fit_y = 1.0 - (1.0 - Ps) * (y ** popt_P[0])
+            T_fit_y = Ts * (y ** popt_T[0])
+            U_fit_y = best_u["func"](np.array([y]), *best_u["popt"])[0]
+
+            # Scale to CGS via shock-front boundary values
+            p[i]   = P_fit_y * (p_s_cgs / max(Ps, 1e-30))
+            T[i]   = T_fit_y * (T_s_cgs / max(Ts, 1e-30))
+            u[i]   = U_fit_y * (u_s_cgs / max(abs(Us_dim), 1e-30))
+            # Density from ideal gas EOS: rho = p / (r * T_cgs)
+            rho[i] = p[i] / (float(case.r) * T[i]) if T[i] > 0 else rho_s_cgs
+
+    return {"density": rho, "pressure": p, "velocity": u, "temperature": T, "m_s": m_s}
+
+
+def perform_shock_fitting(solver):
+    y_grid = np.linspace(0.0, 1.0, 500)
+    xsi_vec = y_grid * solver.xsi_s
+    xsi_vec[0] = 1e-10
     
-    # Loop over times
+    V_val, U_val, P_val = solver.get_self_similar_profiles(xsi_vec=xsi_vec)
+    R_val = np.where(V_val > 0, 1.0 / V_val, np.nan)
+    T_val = P_val * V_val / solver.r
+    
+    valid_idx = (y_grid > 0.005) & np.isfinite(V_val) & np.isfinite(U_val) & np.isfinite(P_val) & np.isfinite(T_val)
+    y_valid = y_grid[valid_idx]
+    T_valid = T_val[valid_idx]
+    P_valid = P_val[valid_idx]
+    U_valid = U_val[valid_idx]
+    R_valid = R_val[valid_idx]
+    
+    U_0 = U_valid[0]
+    U_s = U_valid[-1]
+    
+    # Pressure Fit (1-parameter power law: P = 1 - (1-Ps)*y^d)
+    def power_law_P(y, d):
+        return 1.0 - (1.0 - solver.Ps) * (y**d)
+        
+    popt_P, _ = curve_fit(power_law_P, y_valid, P_valid, p0=[1.0])
+    
+    # Temperature Fit (1-parameter power law: T = Ts*y^d)
+    # Ts is not a PistonShock attribute; compute from EOS: T = P*V/r at shock boundary
+    Ts = float(solver.Ps * solver.Rs_or_Vs / solver.r)
+    def power_law_T(y, d):
+        return Ts * (y**d)
+        
+    popt_T, _ = curve_fit(power_law_T, y_valid, T_valid, p0=[-0.3])
+    
+    # Velocity fits
+    def fit_u_1(y, d): return U_0 - (U_0 - U_s) * (y**d)
+    def fit_u_2(y, c, d): return c - (c - U_s) * (y**d)
+    def fit_u_3(y, c, a, b): return c - a * (y**b)
+    def fit_u_4(y, c, d): return c * (1.0 - y) / (1.0 + d * y) + U_s * y
+    def fit_u_5(y, c, a, b): return c * (1.0 - y**a) * (y**(-b)) + U_s * y
+    def fit_u_6(y, c, a, b): return c * (1.0 - y**a)**b + U_s * y
+    
+    candidates = [
+        {"id": 1, "func": fit_u_1, "name": "Power Law: $U_0-(U_0-U_s)y^d$", "latex": r"U(y) \approx %.5f - %.5f y^{%.5f}", "p0": [1.0]},
+        {"id": 2, "func": fit_u_2, "name": "2P Power Law: $c-(c-U_s)y^d$", "latex": r"U(y) \approx %.5f - (%.5f - U_s) y^{%.5f}", "p0": [U_0, 1.0]},
+        {"id": 3, "func": fit_u_3, "name": "3P Power Law: $c-a y^b$", "latex": r"U(y) \approx %.5f - %.5f y^{%.5f}", "p0": [U_0, U_0-U_s, 1.0]},
+        {"id": 4, "func": fit_u_4, "name": "Rational: $c(1-y)/(1+d y) + U_s y$", "latex": r"U(y) \approx \frac{%.5f (1 - y)}{1 + %.5f y} + U_s y", "p0": [U_0, 1.0]},
+        {"id": 5, "func": fit_u_5, "name": "Singular: $c(1-y^a)y^{-b} + U_s y$", "latex": r"U(y) \approx %.5f (1 - y^{%.5f}) y^{-%.5f} + U_s y", "p0": [U_0, 1.0, 0.3]},
+        {"id": 6, "func": fit_u_6, "name": "Gen Power: $c(1-y^a)^b + U_s y$", "latex": r"U(y) \approx %.5f (1 - y^{%.5f})^{%.5f} + U_s y", "p0": [U_0, 1.0, 1.0]}
+    ]
+    
+    best_u = None
+    min_avg_err = float("inf")
+    fits_u = {}
+    
+    for cand in candidates:
+        try:
+            popt, _ = curve_fit(cand["func"], y_valid, U_valid, p0=cand["p0"], maxfev=10000)
+            U_fit = cand["func"](y_valid, *popt)
+            rel_err_u = np.abs((U_fit - U_valid) / (U_valid + 1e-15)) * 100
+            avg_err = np.mean(rel_err_u)
+            max_err = np.max(rel_err_u)
+            
+            fits_u[cand["id"]] = (popt, U_fit, avg_err, max_err, cand["name"], cand["latex"])
+            
+            if avg_err < min_avg_err:
+                min_avg_err = avg_err
+                best_u = {
+                    "id": cand["id"],
+                    "popt": popt,
+                    "func": cand["func"],
+                    "name": cand["name"],
+                    "latex": cand["latex"],
+                    "avg_err": avg_err,
+                    "max_err": max_err,
+                    "fit_val": U_fit
+                }
+        except Exception as e:
+            print(f"Shock velocity fit {cand['id']} failed: {e}")
+            fits_u[cand["id"]] = (None, None, 0.0, 0.0, cand["name"], cand["latex"])
+            
+    return y_grid, y_valid, T_valid, P_valid, U_valid, R_valid, popt_P, popt_T, best_u, fits_u
+
+
+def plot_material_hydro_profiles(history, solver, case, popt_P, popt_T, best_u, material_hydro_path, case_title):
+    """Plot overlay profiles of T, rho, P, u vs m comparing Simulation, Exact Solver, and Analytic fits."""
+    print(f"Generating physical shock profiles comparison for {case_title}...")
+    fig, axes = plt.subplots(2, 2, figsize=(14, 11))
+    
+    target_times = [1e-9, 1.5e-9, 2e-9]
+    colors = ["red", "green", "blue"]
+    p_scale, u_scale = 1e12, 1e5
+    
+    ax_T = axes[0, 0]
+    ax_rho = axes[0, 1]
+    ax_p = axes[1, 0]
+    ax_u = axes[1, 1]
+    
     for t_target, color in zip(target_times, colors):
         # 1) Simulation
         idx_sim = np.argmin(np.abs(np.array(history.t) - t_target))
         m_sim = history.m[idx_sim]
+        t_actual = history.t[idx_sim]
         
-        # 2) Menahem
-        idx_men = np.argmin(np.abs(np.array(menahem_ref.times) - t_target))
-        m_men = menahem_ref.m[idx_men]
+        sim_rho = history.rho[idx_sim]
+        sim_p = history.p[idx_sim] / p_scale
+        sim_u = history.u[idx_sim] / u_scale
         
-        # Panel (0,0): Density rho
-        axes[0, 0].plot(m_sim, history.rho[idx_sim], color=color, linestyle='-', lw=1.8)
-        axes[0, 0].plot(m_men, menahem_ref.rho[idx_men], color=color, linestyle='--', lw=1.5)
+        # Temp from ideal gas relation
+        with np.errstate(divide='ignore', invalid='ignore'):
+            sim_T = np.where(sim_rho > 0, history.p[idx_sim] / (sim_rho * float(case.r)), 0.0)
+            
+        # 2) Exact Solver
+        xsi_over_m_val = solver.xsi_over_m(time=t_actual)
+        m_s_exact = solver.xsi_s / xsi_over_m_val
+        mass_exact = np.linspace(1e-12, m_s_exact, 200)
+        sol_exact = solver.solve(mass=mass_exact, time=t_actual)
         
-        # Panel (0,1): Pressure p [MBar]
-        axes[0, 1].plot(m_sim, history.p[idx_sim] / 1e12, color=color, linestyle='-', lw=1.8)
-        axes[0, 1].plot(m_men, menahem_ref.p[idx_men] / 1e12, color=color, linestyle='--', lw=1.5)
+        exact_rho = sol_exact["density"]
+        exact_p = sol_exact["pressure"] / p_scale
+        exact_u = sol_exact["velocity"] / u_scale
         
-        # Panel (1,0): Velocity u [km/s]
-        axes[1, 0].plot(m_sim, history.u[idx_sim] / 1e5, color=color, linestyle='-', lw=1.8)
-        axes[1, 0].plot(m_men, menahem_ref.u[idx_men] / 1e5, color=color, linestyle='--', lw=1.5)
+        # Exact Temp
+        with np.errstate(divide='ignore', invalid='ignore'):
+            exact_T = np.where(exact_rho > 0, sol_exact["pressure"] / (exact_rho * float(case.r)), 0.0)
+            
+        # 3) Analytical fits mapped to CGS
+        fits = evaluate_shock_fits(mass_exact, t_actual, solver, case, popt_P, popt_T, best_u)
+        fit_rho = fits["density"]
+        fit_p = fits["pressure"] / p_scale
+        fit_u = fits["velocity"] / u_scale
+        fit_T = fits["temperature"]
         
-        # Panel (1,1): Specific Energy e [1e9 erg/g]
-        axes[1, 1].plot(m_sim, history.e[idx_sim] / 1e9, color=color, linestyle='-', lw=1.8)
-        axes[1, 1].plot(m_men, menahem_ref.e[idx_men] / 1e9, color=color, linestyle='--', lw=1.5)
+        # Plot Temperature (Kelvin / Energy Units)
+        ax_T.plot(m_sim * 1e3, sim_T, '.', color=color, alpha=0.3, markersize=3, label=f'Simulation ({t_target*1e9:.1f} ns)' if color=='red' else None)
+        ax_T.plot(mass_exact * 1e3, exact_T, '-', color=color, lw=2.0, label=f'Exact Solver ({t_target*1e9:.1f} ns)' if color=='red' else None)
+        ax_T.plot(mass_exact * 1e3, fit_T, '--', color=color, lw=1.5, label=f'Analytic Fit ({t_target*1e9:.1f} ns)' if color=='red' else None)
+        
+        # Plot Density (g/cm^3)
+        ax_rho.plot(m_sim * 1e3, sim_rho, '.', color=color, alpha=0.3, markersize=3)
+        ax_rho.plot(mass_exact * 1e3, exact_rho, '-', color=color, lw=2.0)
+        ax_rho.plot(mass_exact * 1e3, fit_rho, '--', color=color, lw=1.5)
+        
+        # Plot Pressure (MBar)
+        ax_p.plot(m_sim * 1e3, sim_p, '.', color=color, alpha=0.3, markersize=3)
+        ax_p.plot(mass_exact * 1e3, exact_p, '-', color=color, lw=2.0)
+        ax_p.plot(mass_exact * 1e3, fit_p, '--', color=color, lw=1.5)
+        
+        # Plot Velocity (km/s)
+        ax_u.plot(m_sim * 1e3, sim_u, '.', color=color, alpha=0.3, markersize=3)
+        ax_u.plot(mass_exact * 1e3, exact_u, '-', color=color, lw=2.0)
+        ax_u.plot(mass_exact * 1e3, fit_u, '--', color=color, lw=1.5)
         
     # Labels and Titles
-    axes[0, 0].set_ylabel(r"$\rho$ [g/cm³]", fontsize=12)
-    axes[0, 1].set_ylabel(r"$P$ [MBar]", fontsize=12)
-    axes[1, 0].set_ylabel(r"$u$ [km/s]", fontsize=12)
-    axes[1, 1].set_ylabel(r"$e$ [$10^9$ erg/g]", fontsize=12)
+    ax_T.set_ylabel(r"$T$ [Kelvin equivalent]", fontsize=12)
+    ax_rho.set_ylabel(r"$\rho$ [g/cm³]", fontsize=12)
+    ax_p.set_ylabel(r"$P$ [MBar]", fontsize=12)
+    ax_u.set_ylabel(r"$u$ [km/s]", fontsize=12)
+    
+    ax_T.legend(loc='best', fontsize=9)
     
     for ax in axes.flat:
-        ax.set_xlabel(r"Mass coordinate $m$ [g/cm²]", fontsize=12)
-        ax.grid(True, alpha=0.3)
-        ax.ticklabel_format(axis='x', style='sci', scilimits=(0,0))
+        ax.set_xlabel(r"Mass coordinate $m$ [mg/cm²]", fontsize=11)
+        ax.grid(True, alpha=0.25)
         
-    # Legend
-    legend_elements = [
-        Line2D([0], [0], color='black', linestyle='-', lw=1.8, label='simulation'),
-        Line2D([0], [0], color='black', linestyle='--', lw=1.5, label='Menahem'),
-        Line2D([0], [0], marker='o', color='none', markerfacecolor=colors[0], markersize=8, label=f'{0.25*t_max*1e9:.2f} ns'),
-        Line2D([0], [0], marker='o', color='none', markerfacecolor=colors[1], markersize=8, label=f'{0.50*t_max*1e9:.2f} ns'),
-        Line2D([0], [0], marker='o', color='none', markerfacecolor=colors[2], markersize=8, label=f'{0.75*t_max*1e9:.2f} ns'),
-    ]
-    axes[0, 0].legend(handles=legend_elements, loc='best', fontsize=9.5)
-    
-    fig.suptitle(f"Material Hydrodynamics Profiles\n{case_title}", fontsize=14, fontweight='bold')
+    fig.suptitle(f"Dimensional Shock Profiles Comparison\n{case_title}", fontsize=14, fontweight='bold')
     plt.tight_layout()
     fig.savefig(material_hydro_path, dpi=200)
     plt.close(fig)
-    print(f"Saved material hydro profiles to {material_hydro_path}")
+    print(f"Saved dimensional shock profiles comparison to {material_hydro_path}")
 
 
-# =============================================================================
-# Self-similar extraction and fitting
-# =============================================================================
-
-def plot_and_fit_self_similar(case, self_similar_path, standalone_path, case_title):
-    """Solve the PistonShock similarity ODEs, extract R, P, U, T, fit and plot."""
-    print(f"Solving self-similar similarity ODEs for {case_title}...")
+def plot_and_fit_self_similar(
+    solver, y_valid, T_valid, P_valid, U_valid, R_valid, 
+    popt_P, popt_T, best_u, fits_u, 
+    self_similar_path, standalone_path, case_title
+):
+    print("Generating shock 2x2 self-similar fitting plots...")
     
-    # 1) Setup solver with case parameters
-    tau = float(case.tau or 0.0)
-    p0 = _ns_amplitude_rescale(float(case.P0_Barye), tau)
-    # Get omega generally, defaults to 0.0 if not specified
-    omega = float(getattr(case, "omega", 0.0))
-    gamma = float(case.r) + 1.0
+    # Evaluate fits
+    P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
+    T_fit = solver.Ts * y_valid**popt_T[0]
+    R_fit = P_fit / (solver.r * T_fit)
+    U_fit = best_u["fit_val"]
     
-    solver = PistonShock(
-        rho0=float(case.rho0),
-        omega=omega,
-        p0=p0,
-        tau=tau,
-        gamma=gamma
-    )
+    err_T = np.abs((T_fit - T_valid) / T_valid) * 100
+    err_R = np.abs((R_fit - R_valid) / R_valid) * 100
+    err_P = np.abs((P_fit - P_valid) / P_valid) * 100
+    err_U = np.abs((U_fit - U_valid) / (U_valid + 1e-15)) * 100
     
-    # Grid of y = xsi / xsi_s in [0, 1]
-    y_grid = np.linspace(0.0, 1.0, 500)
-    xsi_vec = y_grid * solver.xsi_s
-    # Avoid y=0 exactly to prevent singular divisions
-    xsi_vec[0] = 1e-10
+    avg_T, max_T = np.mean(err_T), np.max(err_T)
+    avg_R, max_R = np.mean(err_R), np.max(err_R)
+    avg_P, max_P = np.mean(err_P), np.max(err_P)
+    avg_U, max_U = best_u["avg_err"], best_u["max_err"]
     
-    V_val, U_val, P_val = solver.get_self_similar_profiles(xsi_vec=xsi_vec)
+    fig, axes = plt.subplots(2, 2, figsize=(13, 11))
     
-    # Translate specific volume back to density
-    R_val = np.where(V_val > 0, 1.0 / V_val, np.nan)
-    T_val = P_val * V_val / solver.r
+    # Panel (0,0): Temperature
+    ax = axes[0, 0]
+    ax.plot(y_valid, T_valid, 'b-', label='Numerical Solver', lw=2)
+    ax.plot(y_valid, T_fit, 'r--', label='Analytical Fit', lw=1.5)
+    ax.set_ylabel(r"Temperature $T(y)$ [dimensionless]", fontsize=12)
+    ax.set_title("Shock: Temperature", fontsize=13, fontweight='bold')
+    lbl_T = f"$T(y) \\approx T_s y^{{{popt_T[0]:.5f}}}$\nAvg Err: {avg_T:.4f}%, Max Err: {max_T:.4f}%"
+    ax.text(0.05, 0.05, lbl_T, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=9.5)
     
-    valid_idx = (y_grid > 0.005) & np.isfinite(V_val) & np.isfinite(U_val) & np.isfinite(P_val) & np.isfinite(R_val) & np.isfinite(T_val)
+    # Panel (0,1): Density
+    ax = axes[0, 1]
+    ax.plot(y_valid, R_valid, 'b-', label='Numerical Solver', lw=2)
+    ax.plot(y_valid, R_fit, 'r--', label='EOS Derived Fit', lw=1.5)
+    ax.set_ylabel(r"Density $R(y)$ [dimensionless]", fontsize=12)
+    ax.set_title("Shock: Density", fontsize=13, fontweight='bold')
+    lbl_R = r"$R(y) \approx \frac{P(y)}{(\gamma - 1) T(y)}$" + f"\nAvg Err: {avg_R:.4f}%, Max Err: {max_R:.4f}%"
+    ax.text(0.05, 0.05, lbl_R, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=9.5)
     
-    y_valid = y_grid[valid_idx]
-    V_valid = V_val[valid_idx]
-    U_valid = U_val[valid_idx]
-    P_valid = P_val[valid_idx]
-    R_valid = R_val[valid_idx]
-    T_valid = T_val[valid_idx]
+    # Panel (1,0): Pressure
+    ax = axes[1, 0]
+    ax.plot(y_valid, P_valid, 'b-', label='Numerical Solver', lw=2)
+    ax.plot(y_valid, P_fit, 'r--', label='Analytical Fit', lw=1.5)
+    ax.set_ylabel(r"Pressure $P(y)$ [dimensionless]", fontsize=12)
+    ax.set_title("Shock: Pressure", fontsize=13, fontweight='bold')
+    lbl_P = f"$P(y) \\approx 1.0 - (1.0 - P_s) y^{{{popt_P[0]:.5f}}}$\nAvg Err: {avg_P:.4f}%, Max Err: {max_P:.4f}%"
+    ax.text(0.05, 0.05, lbl_P, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=9.5)
     
-    # Boundary values at front (shock, y=1) and origin (piston, y=0)
-    V_s = V_valid[-1]
-    U_s = U_valid[-1]
-    P_s = P_valid[-1]
-    R_s = R_valid[-1]
-    T_s = T_valid[-1]
-    U_0 = U_valid[0]
+    # Panel (1,1): Velocity
+    ax = axes[1, 1]
+    ax.plot(y_valid, U_valid, 'b-', label='Numerical Solver', lw=2)
+    ax.plot(y_valid, U_fit, 'r--', label='Optimized Fit', lw=1.5)
+    ax.set_ylabel(r"Velocity $U(y)$ [dimensionless]", fontsize=12)
+    ax.set_title(f"Shock: Velocity ({best_u['name']})", fontsize=13, fontweight='bold')
     
-    # Determine if profiles are constant (constant pressure drive in uniform medium)
-    is_constant = (np.abs(P_valid.max() - P_valid.min()) < 1e-6) and (np.abs(U_valid.max() - U_valid.min()) < 1e-6)
-    
-    # Perform curve fitting for R, P, U, T using minimal parameter formulations
-    def compute_r2(y_true, y_pred):
-        ss_res = np.sum((y_true - y_pred)**2)
-        ss_tot = np.sum((y_true - np.mean(y_true))**2)
-        return 1.0 - ss_res / (ss_tot + 1e-30)
-
-    # 1-parameter power laws
-    def power_law_R(y, d):
-        return R_s * (y**(-d))
+    # Format the dynamic velocity formula in latex
+    if best_u["id"] == 1:
+        u_formula = f"$U(y) \\approx U_0 - (U_0 - U_s) y^{{{best_u['popt'][0]:.5f}}}$"
+    elif best_u["id"] == 2:
+        u_formula = f"$U(y) \\approx {best_u['popt'][0]:.5f} - ({best_u['popt'][0]:.5f} - U_s) y^{{{best_u['popt'][1]:.5f}}}$"
+    elif best_u["id"] == 3:
+        u_formula = f"$U(y) \\approx {best_u['popt'][0]:.5f} - {best_u['popt'][1]:.5f} y^{{{best_u['popt'][2]:.5f}}}$"
+    elif best_u["id"] == 4:
+        u_formula = f"$U(y) \\approx \\frac{{{best_u['popt'][0]:.5f} (1-y)}}{{1 + {best_u['popt'][1]:.5f} y}} + U_s y$"
+    elif best_u["id"] == 5:
+        u_formula = f"$U(y) \\approx {best_u['popt'][0]:.5f} (1 - y^{{{best_u['popt'][1]:.5f}}}) y^{{-{best_u['popt'][2]:.5f}}} + U_s y$"
+    elif best_u["id"] == 6:
+        u_formula = f"$U(y) \\approx {best_u['popt'][0]:.5f} (1 - y^{{{best_u['popt'][1]:.5f}}})^{{{best_u['popt'][2]:.5f}}} + U_s y$"
         
-    def power_law_P(y, d):
-        return 1.0 - (1.0 - P_s) * (y**d)
-        
-    def power_law_U(y, d):
-        return U_0 - (U_0 - U_s) * (y**d)
-        
-    def power_law_T(y, d):
-        return T_s * (y**d)
-        
-    # Extra fitting options for Velocity (U) to find the most clever fit
-    def fit_u_1(y, d):
-        # 1-param baseline
-        return U_0 - (U_0 - U_s) * (y**d)
-    def fit_u_2(y, c, d):
-        # 2-param c - (c-Us)*y^d
-        return c - (c - U_s) * (y**d)
-    def fit_u_3(y, c, a, b):
-        # 3-param generalized: c - a*y^b
-        return c - a * (y**b)
-    def fit_u_4(y, c, d):
-        # 2-param rational
-        return c * (1.0 - y) / (1.0 + d * y) + U_s * y
-    def fit_u_5(y, c, a, b):
-        # 3-param singular power law: c * (1-y^a) * y^-b + U_s * y
-        return c * (1.0 - y**a) * (y**(-b)) + U_s * y
-    def fit_u_6(y, c, a, b):
-        # 3-param generalized power law
-        return c * (1.0 - y**a)**b + U_s * y
-
-    # Fit calculations
-    if is_constant:
-        popt_P, popt_U, popt_T = [0.0], [0.0], [0.0]
-        R_fit, P_fit, U_fit, T_fit = np.full_like(y_valid, R_s), np.full_like(y_valid, P_s), np.full_like(y_valid, U_s), np.full_like(y_valid, T_s)
-        r2_R, r2_P, r2_U, r2_T = 1.0, 1.0, 1.0, 1.0
-    else:
-        try:
-            popt_P, _ = curve_fit(power_law_P, y_valid, P_valid, p0=[1.0])
-            P_fit = power_law_P(y_valid, *popt_P)
-            r2_P = compute_r2(P_valid, P_fit)
-        except Exception:
-            popt_P, P_fit, r2_P = [np.nan], P_valid, 0.0
-            
-        try:
-            popt_U, _ = curve_fit(power_law_U, y_valid, U_valid, p0=[1.0])
-            U_fit = power_law_U(y_valid, *popt_U)
-            r2_U = compute_r2(U_valid, U_fit)
-        except Exception:
-            popt_U, U_fit, r2_U = [np.nan], U_valid, 0.0
-            
-        try:
-            popt_T, _ = curve_fit(power_law_T, y_valid, T_valid, p0=[-0.3])
-            T_fit = power_law_T(y_valid, *popt_T)
-            r2_T = compute_r2(T_valid, T_fit)
-        except Exception:
-            popt_T, T_fit, r2_T = [np.nan], T_valid, 0.0
-
-        # R is derived algebraically from P and T via the EOS: R = P / (r * T)
-        R_fit = P_fit / (solver.r * T_fit)
-        r2_R = compute_r2(R_valid, R_fit)
-            
-    # Fit U options
-    fits_u = {}
-    if is_constant:
-        for i in range(1, 7):
-            fits_u[i] = (None, np.full_like(y_valid, U_s), 1.0)
-    else:
-        # Fit 1
-        try:
-            popt, _ = curve_fit(fit_u_1, y_valid, U_valid, p0=[1.0], maxfev=10000)
-            fits_u[1] = (popt, fit_u_1(y_valid, *popt), compute_r2(U_valid, fit_u_1(y_valid, *popt)))
-        except Exception:
-            fits_u[1] = (None, None, 0.0)
-        # Fit 2
-        try:
-            popt, _ = curve_fit(fit_u_2, y_valid, U_valid, p0=[U_0, 1.0], maxfev=10000)
-            fits_u[2] = (popt, fit_u_2(y_valid, *popt), compute_r2(U_valid, fit_u_2(y_valid, *popt)))
-        except Exception:
-            fits_u[2] = (None, None, 0.0)
-        # Fit 3
-        try:
-            popt, _ = curve_fit(fit_u_3, y_valid, U_valid, p0=[U_0, U_0-U_s, 1.0], maxfev=10000)
-            fits_u[3] = (popt, fit_u_3(y_valid, *popt), compute_r2(U_valid, fit_u_3(y_valid, *popt)))
-        except Exception:
-            fits_u[3] = (None, None, 0.0)
-        # Fit 4
-        try:
-            popt, _ = curve_fit(fit_u_4, y_valid, U_valid, p0=[U_0, 1.0], maxfev=10000)
-            fits_u[4] = (popt, fit_u_4(y_valid, *popt), compute_r2(U_valid, fit_u_4(y_valid, *popt)))
-        except Exception:
-            fits_u[4] = (None, None, 0.0)
-        # Fit 5
-        try:
-            popt, _ = curve_fit(fit_u_5, y_valid, U_valid, p0=[U_0, 1.0, 0.3], maxfev=10000)
-            fits_u[5] = (popt, fit_u_5(y_valid, *popt), compute_r2(U_valid, fit_u_5(y_valid, *popt)))
-        except Exception:
-            fits_u[5] = (None, None, 0.0)
-        # Fit 6
-        try:
-            popt, _ = curve_fit(fit_u_6, y_valid, U_valid, p0=[U_0, 1.0, 1.0], maxfev=10000)
-            fits_u[6] = (popt, fit_u_6(y_valid, *popt), compute_r2(U_valid, fit_u_6(y_valid, *popt)))
-        except Exception:
-            fits_u[6] = (None, None, 0.0)
-
-    colors_u = {1: 'crimson', 2: 'darkorange', 3: 'forestgreen', 4: 'darkviolet', 5: 'deeppink', 6: 'teal'}
-
-    # Plot 2x2 grid
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-    
-    # Panel (0,0): Density R
-    axes[0, 0].plot(y_valid, R_valid, 'b-', label='Numerical', lw=2)
-    if is_constant:
-        lbl_r = f'Fit: R = {R_s:.3f} (const)'
-    else:
-        lbl_r = f'Fit: EOS derived from P, T\n(R² = {r2_R:.4f})'
-    axes[0, 0].plot(y_valid, R_fit, 'r--', label=lbl_r, lw=1.5)
-    axes[0, 0].set_ylabel(r"Density $R(y)$ [dimensionless]", fontsize=12)
-    axes[0, 0].legend(loc='best', fontsize=9.0)
-    
-    # Panel (0,1): Pressure P
-    axes[0, 1].plot(y_valid, P_valid, 'b-', label='Numerical', lw=2)
-    if is_constant:
-        lbl_p = f'Fit: P = {P_s:.3f} (const)'
-    else:
-        lbl_p = f'Fit: P = 1.0 - {1.0-P_s:.3f}*y^{{{popt_P[0]:.3f}}}\n(R² = {r2_P:.4f})'
-    axes[0, 1].plot(y_valid, P_fit, 'r--', label=lbl_p, lw=1.5)
-    axes[0, 1].set_ylabel(r"Pressure $P(y)$ [dimensionless]", fontsize=12)
-    axes[0, 1].legend(loc='best', fontsize=9.0)
-    
-    # Panel (1,0): Velocity U
-    axes[1, 0].plot(y_valid, U_valid, 'b-', label='Numerical', lw=2.5)
-    selected_2x2_fits = [1, 2, 3]
-    for i in selected_2x2_fits:
-        popt, fit_val, r2 = fits_u[i]
-        if fit_val is not None:
-            if i == 1:
-                lbl = f"1P U0-(U0-Us)*y^d (R²={r2:.4f})"
-            elif i == 2:
-                lbl = f"2P c-(c-Us)*y^d (R²={r2:.4f})"
-            elif i == 3:
-                lbl = f"3P c-a*y^b (R²={r2:.4f})"
-            axes[1, 0].plot(y_valid, fit_val, colors_u[i], linestyle='--', label=lbl, lw=1.5)
-    axes[1, 0].set_ylabel(r"Velocity $U(y)$ [dimensionless]", fontsize=12)
-    axes[1, 0].legend(loc='best', fontsize=8.5)
-    
-    # Panel (1,1): Temperature T
-    axes[1, 1].plot(y_valid, T_valid, 'b-', label='Numerical', lw=2)
-    if is_constant:
-        lbl_t = f'Fit: T = {T_s:.3f} (const)'
-    else:
-        lbl_t = f'Fit: T = {T_s:.3f}*y^{{{popt_T[0]:.3f}}}\n(R² = {r2_T:.4f})'
-    axes[1, 1].plot(y_valid, T_fit, 'r--', label=lbl_t, lw=1.5)
-    axes[1, 1].set_ylabel(r"Temperature $T(y)$ [dimensionless]", fontsize=12)
-    axes[1, 1].legend(loc='best', fontsize=9.0)
+    lbl_U = u_formula + f"\nAvg Err: {avg_U:.4f}%, Max Err: {max_U:.4f}%"
+    ax.text(0.05, 0.05, lbl_U, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=9.5)
     
     for ax in axes.flat:
-        ax.set_xlabel(r"$y = \xi / \xi_s$", fontsize=12)
-        ax.grid(True, alpha=0.3)
+        ax.set_xlabel(r"Normalized coordinate $y = \xi / \xi_s$", fontsize=11)
+        ax.grid(True, alpha=0.25)
+        ax.legend(loc='best', fontsize=9.5)
         
-    fig.suptitle(f"Self-Similar Similarity Profiles & Curve-Fits\n{case_title}", fontsize=14, fontweight='bold')
+    fig.suptitle(f"Shock self-similar Profiles & Analytical Fits\n{case_title}", fontsize=15, fontweight='bold')
     plt.tight_layout()
     fig.savefig(self_similar_path, dpi=200)
     plt.close(fig)
-    print(f"Saved similarity fits grid to {self_similar_path}")
-
-    # Plot standalone velocity fits
-    fig_sa, ax_sa = plt.subplots(figsize=(12, 6.5))
-    ax_sa.plot(y_valid, U_valid, 'b-', label='Numerical (Piston Shock Similarity Solver)', lw=3.0)
+    print(f"Saved self-similar shock profiles to {self_similar_path}")
+    
+    # Standalone velocity comparisons plot
+    fig_sa, (ax_sa1, ax_sa2) = plt.subplots(1, 2, figsize=(18, 8.5))
+    ax_sa1.plot(y_valid, U_valid, 'b-', label='Numerical Solver', lw=3.0)
+    colors_u = {1: 'crimson', 2: 'darkorange', 3: 'forestgreen', 4: 'darkviolet', 5: 'deeppink', 6: 'teal'}
     
     for i in range(1, 7):
-        popt, fit_val, r2 = fits_u[i]
-        if fit_val is not None:
-            if popt is None:
-                lbl = f"Fit {i}: Constant value {U_s:.4f} (R² = {r2:.5f})"
-            else:
-                if i == 1:
-                    lbl = f"Fit 1: 1-Param Power Law: U_0 - (U_0 - U_s) * y^d\n      d={popt[0]:.4f} (R² = {r2:.5f})"
-                elif i == 2:
-                    lbl = f"Fit 2: 2-Param Power Law: c - (c - U_s) * y^d\n      c={popt[0]:.3f}, d={popt[1]:.4f} (R² = {r2:.5f})"
-                elif i == 3:
-                    lbl = f"Fit 3: 3-Param Power Law: c - a * y^b\n      c={popt[0]:.3f}, a={popt[1]:.3f}, b={popt[2]:.4f} (R² = {r2:.5f})"
-                elif i == 4:
-                    lbl = f"Fit 4: 2-Param Rational: c*(1-y)/(1+d*y) + Us*y\n      c={popt[0]:.3f}, d={popt[1]:.3f} (R² = {r2:.5f})"
-                elif i == 5:
-                    lbl = f"Fit 5: 3-Param Singular: c*(1-y^a)*y^-b + Us*y\n      c={popt[0]:.3f}, a={popt[1]:.3f}, b={popt[2]:.4f} (R² = {r2:.5f})"
-                elif i == 6:
-                    lbl = f"Fit 6: 3-Param Gen Power: c*(1-y^a)^b + Us*y\n      c={popt[0]:.3f}, a={popt[1]:.3f}, b={popt[2]:.3f} (R² = {r2:.5f})"
-                
-            ax_sa.plot(y_valid, fit_val, colors_u[i], linestyle='--', label=lbl, lw=1.6)
+        popt, U_fit_cand, avg_err, max_err, name, latex = fits_u[i]
+        if popt is not None:
+            lbl = f"Fit {i}: {name}\nAvg Err: {avg_err:.3f}%, Max Err: {max_err:.3f}%"
+            lw = 2.2 if i == best_u["id"] else 1.5
+            ax_sa1.plot(y_valid, U_fit_cand, colors_u[i], linestyle='--', label=lbl, lw=lw)
             
-    ax_sa.set_xlabel(r"Normalized coordinate $y = \xi / \xi_s$", fontsize=13)
-    ax_sa.set_ylabel(r"Dimensionless Velocity $U(y)$", fontsize=13)
-    ax_sa.set_title(f"Dimensionless Velocity Profile U(y) vs 6 Fitting Formulas\n{case_title}", fontsize=14, fontweight='bold')
+            err_curve = np.abs((U_fit_cand - U_valid) / (U_valid + 1e-15)) * 100
+            ax_sa2.plot(y_valid, err_curve, colors_u[i], label=f"Fit {i} (Avg: {avg_err:.3f}%)", lw=lw)
+            
+    ax_sa1.set_xlabel(r"Normalized coordinate $y = \xi / \xi_s$", fontsize=12)
+    ax_sa1.set_ylabel(r"Velocity $U(y)$ [dimensionless]", fontsize=12)
+    ax_sa1.legend(loc='best', fontsize=9.0)
+    ax_sa1.grid(True, alpha=0.3)
+    ax_sa1.set_title("Dimensionless Velocity $U(y)$ vs 6 Candidates", fontsize=13, fontweight='bold')
     
-    # Dynamic y-axis scaling
-    ax_sa.set_ylim(U_valid.min() - 0.1*(U_valid.max() - U_valid.min()), U_valid.max() + 0.1*(U_valid.max() - U_valid.min()))
-    ax_sa.grid(True, which='both', linestyle=':', alpha=0.5)
-    ax_sa.legend(bbox_to_anchor=(1.02, 1), loc='upper left', fontsize=9.5, borderaxespad=0., frameon=True, shadow=True)
+    ax_sa2.set_xlabel(r"Normalized coordinate $y = \xi / \xi_s$", fontsize=12)
+    ax_sa2.set_ylabel(r"Relative Error [$\%$]", fontsize=12)
+    ax_sa2.set_yscale('log')
+    ax_sa2.legend(loc='best', fontsize=9.5)
+    ax_sa2.grid(True, which="both", ls=":", alpha=0.5)
+    ax_sa2.set_title("Relative Errors of Velocity Fits (semi-log)", fontsize=13, fontweight='bold')
     
+    fig_sa.suptitle(f"Shock Velocity Profile Curve Fitting & Optimization\nChosen Formal Fit: Fit {best_u['id']} ({best_u['name']})", fontsize=15, fontweight='bold')
     plt.tight_layout()
     fig_sa.savefig(standalone_path, dpi=200, bbox_inches='tight')
     plt.close(fig_sa)
-    print(f"Saved standalone velocity fits to {standalone_path}")
+    print(f"Saved standalone shock velocity fits to {standalone_path}")
 
 
-def plot_relative_errors(case, solver, relative_errors_path, case_title):
-    """Plots the relative error of self-similar profile fits in the shock region as a function of y."""
-    # Obtain numerical profiles on a fine grid
-    y_grid = np.linspace(0.005, 1.0, 500)
-    xsi_vec = y_grid * solver.xsi_s
+def plot_relative_errors(
+    solver, y_valid, T_valid, P_valid, U_valid, R_valid, 
+    popt_P, popt_T, best_u, relative_errors_path, case_title
+):
+    print("Generating shock relative error plots...")
+    P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
+    T_fit = solver.Ts * y_valid**popt_T[0]
+    R_fit = P_fit / (solver.r * T_fit)
+    U_fit = best_u["fit_val"]
     
-    V_num, U_num, P_num = solver.get_self_similar_profiles(xsi_vec=xsi_vec)
-    R_num = 1.0 / V_num
-    T_num = P_num * V_num / solver.r
+    err_T = np.abs((T_fit - T_valid) / T_valid) * 100
+    err_R = np.abs((R_fit - R_valid) / R_valid) * 100
+    err_P = np.abs((P_fit - P_valid) / P_valid) * 100
+    err_U = np.abs((U_fit - U_valid) / (U_valid + 1e-15)) * 100
     
-    # Boundary values at front (shock, y=1) and origin (piston, y=0)
-    R_s = R_num[-1]
-    P_s = P_num[-1]
-    T_s = T_num[-1]
-    U_s = U_num[-1]
-    U_0 = U_num[0]
+    avg_T, max_T = np.mean(err_T), np.max(err_T)
+    avg_R, max_R = np.mean(err_R), np.max(err_R)
+    avg_P, max_P = np.mean(err_P), np.max(err_P)
+    avg_U, max_U = best_u["avg_err"], best_u["max_err"]
     
-    is_constant = (np.abs(P_num.max() - P_num.min()) < 1e-6) and (np.abs(U_num.max() - U_num.min()) < 1e-6)
+    fig_err, ax_err = plt.subplots(figsize=(10, 7.5))
+    ax_err.plot(y_valid, err_T, label=f'Temperature $T(y)$ (Avg: {avg_T:.4f}%, Max: {max_T:.4f}%)', lw=2.0)
+    ax_err.plot(y_valid, err_R, label=f'Density $R(y)$ (Avg: {avg_R:.4f}%, Max: {max_R:.4f}%)', lw=2.0)
+    ax_err.plot(y_valid, err_P, label=f'Pressure $P(y)$ (Avg: {avg_P:.4f}%, Max: {max_P:.4f}%)', lw=2.0)
+    ax_err.plot(y_valid, err_U, label=f'Velocity $U(y)$ (Avg: {avg_U:.4f}%, Max: {max_U:.4f}%)', lw=2.0)
     
-    if is_constant:
-        R_fit = np.full_like(y_grid, R_s)
-        P_fit = np.full_like(y_grid, P_s)
-        U_fit = np.full_like(y_grid, U_s)
-        T_fit = np.full_like(y_grid, T_s)
-    else:
-        # Fits
-        def power_law_P(y, d):
-            return 1.0 - (1.0 - P_s) * (y**d)
-        def power_law_T(y, d):
-            return T_s * (y**d)
-        def power_law_U(y, d):
-            return U_0 - (U_0 - U_s) * (y**d)
-            
-        popt_P, _ = curve_fit(power_law_P, y_grid, P_num, p0=[1.0])
-        popt_T, _ = curve_fit(power_law_T, y_grid, T_num, p0=[-0.3])
-        popt_U, _ = curve_fit(power_law_U, y_grid, U_num, p0=[1.0])
-        
-        P_fit = power_law_P(y_grid, *popt_P)
-        T_fit = power_law_T(y_grid, *popt_T)
-        U_fit = power_law_U(y_grid, *popt_U)
-        
-        # EOS derived density
-        R_fit = P_fit / (solver.r * T_fit)
-        
-    # Calculate relative errors
-    err_R = np.abs((R_fit - R_num) / (R_num + 1e-15))
-    err_P = np.abs((P_fit - P_num) / (P_num + 1e-15))
-    err_U = np.abs((U_fit - U_num) / (U_num + 1e-15))
-    err_T = np.abs((T_fit - T_num) / (T_num + 1e-15))
+    ax_err.set_xlabel(r"Normalized coordinate $y = \xi / \xi_s$", fontsize=12)
+    ax_err.set_ylabel(r"Relative Error [$\%$]", fontsize=12)
+    ax_err.set_yscale('log')
+    ax_err.grid(True, which="both", ls=":", alpha=0.5)
+    ax_err.legend(loc="best", fontsize=10.5)
+    ax_err.set_title(f"Relative Errors of Shock self-similar Fits (semi-log)\n{case_title}", fontsize=13, fontweight='bold')
     
-    # Plotting
-    fig, ax = plt.subplots(figsize=(10, 7))
-    ax.plot(y_grid, err_T * 100, label=r"Temperature $\tilde{T}(y)$", lw=2)
-    ax.plot(y_grid, err_P * 100, label=r"Pressure $\tilde{P}(y)$", lw=2)
-    ax.plot(y_grid, err_U * 100, label=r"Velocity $\tilde{U}(y)$", lw=2)
-    ax.plot(y_grid, err_R * 100, label=r"Density $\tilde{R}(y)$ (EOS derived)", lw=2)
-    
-    ax.set_xlabel("Normalized coordinate $y = \\xi / \\xi_s$", fontsize=13)
-    ax.set_ylabel("Relative Error [\\%]", fontsize=13)
-    ax.set_title(f"Relative Error of Shock Self-Similar Profile Fits\n{case_title}", fontsize=14)
-    ax.grid(True, alpha=0.3)
-    ax.legend(fontsize=11)
-    ax.set_yscale("log")
-    
-    fig.tight_layout()
-    fig.savefig(relative_errors_path, dpi=200)
-    plt.close(fig)
-    print(f"Saved self-similar relative error graph to {relative_errors_path}")
+    fig_err.tight_layout()
+    fig_err.savefig(relative_errors_path, dpi=200)
+    plt.close(fig_err)
+    print(f"Saved shock relative errors to {relative_errors_path}")
 
 
 # =============================================================================
@@ -663,7 +692,6 @@ def save_custom_evolution_gif(
     from matplotlib.animation import FuncAnimation, PillowWriter
     
     p_scale, u_scale, e_scale = 1e12, 1e5, 1e9
-    gamma = float(case.r) + 1.0
     
     # Construct 5 vertical panels
     fig, axes = plt.subplots(5, 1, figsize=(8, 12), sharex=True)
@@ -762,80 +790,67 @@ class ReferenceContainer:
         self.e = e
 
 
-# =============================================================================
-# Main Orchestration Loop
-# =============================================================================
-
 def run_simulation_and_references(preset_name: str, case_label: str):
     """Run full simulation and build PistonShock reference solver, or load from cache."""
+    from dataclasses import replace as dc_replace
     cache_dir = Path("results/ictt/cache")
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_path = cache_dir / f"{case_label}_cache.pkl"
-    
+
     case, config = get_preset(preset_name)
-    config = replace(config, N=400)
-    
+    config = dc_replace(config, N=400)
+
     if cache_path.exists():
         print(f"Loading cached simulation and reference data from {cache_path}...")
         try:
             with open(cache_path, "rb") as f:
                 data = pickle.load(f)
-            return case, data["history"], data["menahem_ref"], data["solver"]
+            return data["case"], data["history"], data["menahem_ref"]
         except Exception as e:
             print(f"Failed to load cache: {e}. Re-running simulation...")
-            
+
     # Run simulation
     print("Running simulation...")
     _, _, _, history = simulate_rad_hydro(rad_hydro_case=case, simulation_config=config)
-    
-    # Run PistonShock reference solver
+
+    # Build PistonShock reference for the menahem_ref container
     print("Building PistonShock reference...")
     times_sec = np.array(history.t)
     times_sec = times_sec[times_sec > 0.0]
-    
+
     kwargs = _shock_kwargs_from_case(case)
-    # Set general omega if preset case specifies one, defaults to 0.0
     kwargs["omega"] = float(getattr(case, "omega", 0.0))
-    solver = PistonShock(**kwargs)
-    
-    # Build a structure similar to HydroSimData
+    ref_solver = PistonShock(**kwargs)
+
     mass = _build_mass_grid(case, num_cells=400)
-    
     m_list, x_list = [], []
     rho_list, p_list, u_list, e_list = [], [], [], []
     for t in times_sec:
-        sol = solver.solve(mass=mass, time=float(t))
+        sol = ref_solver.solve(mass=mass, time=float(t))
         m_list.append(mass.copy())
         x_list.append(np.asarray(sol["position"], dtype=float))
         rho_list.append(np.asarray(sol["density"], dtype=float))
         p_list.append(np.asarray(sol["pressure"], dtype=float))
         u_list.append(np.asarray(sol["velocity"], dtype=float))
         e_list.append(np.asarray(sol["sie"], dtype=float))
-        
+
     menahem_ref = ReferenceContainer(times_sec, m_list, x_list, rho_list, p_list, u_list, e_list)
-    
-    cache_data = {
-        "case": case,
-        "history": history,
-        "menahem_ref": menahem_ref,
-        "solver": solver,
-    }
-    
+
+    cache_data = {"case": case, "history": history, "menahem_ref": menahem_ref}
     print(f"Saving simulation and reference data cache to {cache_path}...")
     try:
         with open(cache_path, "wb") as f:
             pickle.dump(cache_data, f, protocol=pickle.HIGHEST_PROTOCOL)
     except Exception as e:
         print(f"Failed to save cache: {e}")
-        
-    return case, history, menahem_ref, solver
+
+    return case, history, menahem_ref
 
 
 def generate_verification_plots(
     history,
     case,
     menahem_ref,
-    solver,
     case_label: str,
     case_title: str,
 ):
@@ -845,40 +860,47 @@ def generate_verification_plots(
     mh_dir = out_dir / "material_hydro"
     ss_dir = out_dir / "self_similar"
     ev_dir = out_dir / "evolution"
-    
+
     for d in [xt_dir, mh_dir, ss_dir, ev_dir]:
         d.mkdir(parents=True, exist_ok=True)
-        
+
     xt_path = str(xt_dir / f"{case_label}_xt.png")
     material_hydro_path = str(mh_dir / f"{case_label}_material_hydro.png")
     self_similar_path = str(ss_dir / f"{case_label}_self_similar.png")
     standalone_path = str(ss_dir / f"{case_label}_velocity_fits_standalone.png")
     relative_errors_path = str(ss_dir / f"{case_label}_relative_errors.png")
     gif_path = str(ev_dir / f"{case_label}_evolution.gif")
-    
+
+    # Solve/load cached shock solver
+    solver = get_cached_shock_solver(case, case_label)
+    y_grid, y_valid, T_valid, P_valid, U_valid, R_valid, popt_P, popt_T, best_u, fits_u = perform_shock_fitting(solver)
+
     # 1) Generate space-time trajectories and fronts
     plot_xt_trajectories(history, case, xt_path, case_title, solver=solver)
-    
+
     # 2) Plot physical material hydrodynamics comparison
-    plot_material_hydro_profiles(history, menahem_ref, material_hydro_path, case_title)
-    
-    # 3) Solve similarity ODEs, fit, and plot self-similar profiles
-    plot_and_fit_self_similar(case, self_similar_path, standalone_path, case_title)
-    
-    # 4) Plot self-similar relative errors
-    plot_relative_errors(case, solver, relative_errors_path, case_title)
-    
-    # 5) Generate animated evolution GIF
-    print(f"Saving animated custom 5-way evolution GIF to {gif_path}...")
-    save_custom_evolution_gif(
-        history=history,
-        case=case,
-        menahem_ref=menahem_ref,
-        gif_path=gif_path,
-        fps=12,
-        stride=max(1, len(history.t) // 60),
-        subtitle="Simulation vs Menahem PistonShock",
-    )
+    plot_material_hydro_profiles(history, solver, case, popt_P, popt_T, best_u, material_hydro_path, case_title)
+
+    # 3) Self-similar profiles and fits
+    plot_and_fit_self_similar(solver, y_valid, T_valid, P_valid, U_valid, R_valid, popt_P, popt_T, best_u, fits_u, self_similar_path, standalone_path, case_title)
+
+    # 4) Relative errors of self-similar fits
+    plot_relative_errors(solver, y_valid, T_valid, P_valid, U_valid, R_valid, popt_P, popt_T, best_u, relative_errors_path, case_title)
+
+    # 5) Animated evolution GIF (conditional)
+    if RUN_GIFS:
+        print(f"Saving animated custom 5-way evolution GIF to {gif_path}...")
+        save_custom_evolution_gif(
+            history=history,
+            case=case,
+            menahem_ref=menahem_ref,
+            gif_path=gif_path,
+            fps=12,
+            stride=max(1, len(history.t) // 60),
+            subtitle="Simulation vs Menahem PistonShock",
+        )
+    else:
+        print("Skipping evolution GIF generation (RUN_GIFS is set to False)...")
 
 
 def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
@@ -886,29 +908,13 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
     print("=" * 80)
     print(f"PROCESSING PRESET: {preset_name} -> {case_label}")
     print("=" * 80)
-    
-    cache_path = Path("results/ictt/cache") / f"{case_label}_cache.pkl"
-    if not cache_path.exists():
-        print("Pickle file doesn't exist, running simulation...")
-        case, history, menahem_ref, solver = run_simulation_and_references(
-            preset_name, case_label
-        )
-    else:
-        print("Pickle file exists, loading simulation...")
-        with open(cache_path, "rb") as f:
-            data = pickle.load(f)
-        case = data.get("case")
-        if case is None:
-            case, _ = get_preset(preset_name)
-        history = data["history"]
-        menahem_ref = data["menahem_ref"]
-        solver = data["solver"]
-        
+
+    case, history, menahem_ref = run_simulation_and_references(preset_name, case_label)
+
     generate_verification_plots(
         history=history,
         case=case,
         menahem_ref=menahem_ref,
-        solver=solver,
         case_label=case_label,
         case_title=case_title,
     )
@@ -916,12 +922,12 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
 
 
 def main():
-    # Process constant drive piston shock (tau=0) and power-law drive piston shock (tau=-0.45)
-    run_preset_workflow(
-        PRESET_CONSTANT_PRESSURE,
-        "constant_pressure_drive",
-        "Constant Pressure Drive (tau=0)"
-    )
+    # Process only the power-law drive piston shock matching the boundary condition (tau=-43/96)
+    # run_preset_workflow(
+    #     PRESET_CONSTANT_PRESSURE,
+    #     "constant_pressure_drive",
+    #     "Constant Pressure Drive (tau=0)"
+    # )
     run_preset_workflow(
         PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE,
         "power_law_pressure_drive",

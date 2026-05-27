@@ -488,8 +488,6 @@ def plot_shock_region_comparison(ss: PistonShock, numerical_data: dict, hs: Subs
         y_s = (m_sim_shock - m_f_val) / (m_s_val - m_f_val + 1e-30)
         
         # Fits (CGS & HeV values converted for plotting)
-        # Density (g/cm^3)
-        rho_fit = 173.88000 * y_s**0.64747
         # Pressure (converted from MBar to Barye: 1 MBar = 1e12 Ba)
         p_fit_MBar = 2.71000 * (t_ns)**-0.44792 * (1.0 + 0.49338 * y_s**1.13303)
         p_fit = p_fit_MBar * 1e12
@@ -500,6 +498,14 @@ def plot_shock_region_comparison(ss: PistonShock, numerical_data: dict, hs: Subs
         # y_s can be zero at the piston, add small eps to avoid division by zero
         T_fit_HeV = 3.20910e5 * (t_ns)**-0.44792 * (y_s + 1e-15)**-0.43848
         T_fit = T_fit_HeV * KELVIN_PER_HEV
+
+        # Density (g/cm^3) derived algebraically from pressure and temperature fits via physical EOS
+        r_val = float(r)
+        beta_val = float(beta)
+        mu_val = float(mu)
+        f_val = float(hs.f)
+        p_fit_safe = np.maximum(p_fit, 1e-15)
+        rho_fit = ((r_val * f_val * T_fit**beta_val) / p_fit_safe) ** (1.0 / (mu_val - 1.0))
 
         # Profile 1: Density
         axes[0].plot(m_sim_shock * 1e3, numerical_data["rho"][idx][shock_mask], 'o', color=colors[i], markersize=3, alpha=0.5)
@@ -548,9 +554,11 @@ def plot_shock_region_comparison(ss: PistonShock, numerical_data: dict, hs: Subs
 # PART 5: SELF-SIMILAR PROFILE RELATIVE ERROR GRAPHS
 # =============================================================================
 
-def plot_relative_errors(hs: SubsonicHeatWave, output_dir: Path):
-    """Plots the relative error of self-similar profile fits as a function of y."""
-    # Obtain numerical profiles on a fine grid
+def plot_relative_errors(hs: SubsonicHeatWave, ss: PistonShock, output_dir: Path):
+    """Plots the relative error of self-similar profile fits for both regimes in a 1x2 layout."""
+    # ----------------------------------------------------
+    # Left Panel: Subsonic Heat Wave Relative Errors
+    # ----------------------------------------------------
     y_grid = np.linspace(1e-6, 1.0 - 1e-6, 500)
     xsi_grid = y_grid * hs.xsi_f
     
@@ -559,20 +567,15 @@ def plot_relative_errors(hs: SubsonicHeatWave, output_dir: Path):
     rho_num = 1.0 / V_num
     
     # Piecewise fits from report
-    # Temperature fit (Smith Approximation): T_fit(y) = ((1 - y) * (1 + 0.20224 * y)) ** (10/39)
     T_fit = ((1.0 - y_grid) * (1.0 + 0.20224 * y_grid)) ** (10.0 / 39.0)
-    # Pressure fit: P_fit(y) = 0.34866 * y**0.87714 + 0.02903 * y**21.08862
     P_fit = 0.34866 * y_grid**0.87714 + 0.02903 * y_grid**21.08862
-    # Velocity fit (Fit 4): U_fit(y) = -3.33700 * (1 - y^0.51600) * y^-0.19000
+    # Velocity fit (Smith / singular approximation matching sub_fitting)
     U_fit = -3.33700 * (1.0 - y_grid**0.51600) * y_grid**-0.19000
-    # Density calculated from Temperature and Pressure via Dimensionless EOS: rho = (r * T^beta / P)^(1 / (mu - 1))
     r_val = 0.25
     beta_val = 1.6
     mu_val = 0.14
     rho_fit = ((r_val * T_fit**beta_val) / P_fit) ** (1.0 / (mu_val - 1.0))
     
-    # Calculate relative errors
-    # Temperature and Density need to be evaluated up to y=0.99 as they have singularities/zeros
     valid_T = y_grid <= 0.99
     err_T = np.abs((T_fit[valid_T] - T_num[valid_T]) / T_num[valid_T])
     
@@ -582,20 +585,71 @@ def plot_relative_errors(hs: SubsonicHeatWave, output_dir: Path):
     err_P = np.abs((P_fit - P_num) / (P_num + 1e-15))
     err_U = np.abs((U_fit - U_num) / (U_num + 1e-15))
     
+    # ----------------------------------------------------
+    # Right Panel: Shock Region Relative Errors
+    # ----------------------------------------------------
+    t_val = 1.5e-9
+    t_ns = 1.5
+    m_f_val = hs.ablated_mass(time=t_val)
+    m_s_val = ss.shocked_mass(time=t_val)
+    
+    mass_solver = np.linspace(m_f_val, m_s_val, 500)
+    sol_ss = ss.solve(mass=mass_solver, time=t_val)
+    
+    y_s = (mass_solver - m_f_val) / (m_s_val - m_f_val + 1e-30)
+    
+    # Fits
+    p_fit_MBar = 2.71000 * (t_ns)**-0.44792 * (1.0 + 0.49338 * y_s**1.13303)
+    p_fit = p_fit_MBar * 1e12
+    u_fit_kms = (t_ns)**-0.22396 * (3.65776 + 0.65734 * y_s**0.64494)
+    u_fit = u_fit_kms * 1e5
+    T_fit_HeV = 3.20910e5 * (t_ns)**-0.44792 * (y_s + 1e-15)**-0.43848
+    T_fit = T_fit_HeV * KELVIN_PER_HEV
+    
+    f_val = 3.4e13 / (KELVIN_PER_HEV ** beta_val)
+    f_val_cgs = f_val * KELVIN_PER_HEV**beta_val
+    p_fit_safe = np.maximum(p_fit, 1e-15)
+    rho_fit = ((r_val * f_val_cgs * T_fit**beta_val) / p_fit_safe) ** (1.0 / (mu_val - 1.0))
+    
+    T_ss_Kelvin = ((sol_ss["pressure"] * (1./sol_ss["density"])**(1.-mu_val)) / (r_val * f_val_cgs))**(1./beta_val)
+    
+    valid_T_s = y_s >= 0.005
+    err_T_s = np.abs((T_fit[valid_T_s] - T_ss_Kelvin[valid_T_s]) / T_ss_Kelvin[valid_T_s])
+    
+    err_P_s = np.abs((p_fit - sol_ss["pressure"]) / sol_ss["pressure"])
+    err_U_s = np.abs((u_fit - sol_ss["velocity"]) / sol_ss["velocity"])
+    
+    valid_rho_s = y_s >= 0.005
+    err_rho_s = np.abs((rho_fit[valid_rho_s] - sol_ss["density"][valid_rho_s]) / sol_ss["density"][valid_rho_s])
+    
     # Plotting
-    fig, ax = plt.subplots(figsize=(10, 7))
-    ax.plot(y_grid[valid_T], err_T * 100, label="Temperature $\\tilde{T}(y)$ (up to $y=0.99$)", lw=2)
-    ax.plot(y_grid, err_P * 100, label="Pressure $\\tilde{P}(y)$", lw=2)
-    ax.plot(y_grid, err_U * 100, label="Velocity $\\tilde{U}(y)$", lw=2)
-    ax.plot(y_grid[valid_rho], err_rho * 100, label="Density $\\tilde{\\rho}(y)$ (up to $y=0.99$)", lw=2)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 7.5))
     
-    ax.set_xlabel("Normalized coordinate $y = \\xi / \\xi_f$", fontsize=13)
-    ax.set_ylabel("Relative Error [\\%]", fontsize=13)
-    ax.set_title("Relative Error of Self-Similar Profile Fits ($\\tau = 0$)", fontsize=14)
-    ax.grid(True, alpha=0.3)
-    ax.legend(fontsize=11)
-    ax.set_yscale("log")
+    # Subsonic Panel
+    ax1.plot(y_grid[valid_T], err_T * 100, label=r"Temperature $\tilde{T}(y)$ (up to $y=0.99$)", lw=2)
+    ax1.plot(y_grid, err_P * 100, label=r"Pressure $\tilde{P}(y)$", lw=2)
+    ax1.plot(y_grid, err_U * 100, label=r"Velocity $\tilde{U}(y)$", lw=2)
+    ax1.plot(y_grid[valid_rho], err_rho * 100, label=r"Density $\tilde{\rho}(y)$ (up to $y=0.99$)", lw=2)
+    ax1.set_xlabel("Normalized coordinate $y = \\xi / \\xi_f$", fontsize=13)
+    ax1.set_ylabel("Relative Error [\\%]", fontsize=13)
+    ax1.set_title("Subsonic Ablation Regime ($\\tau = 0$)", fontsize=13, fontweight='bold')
+    ax1.grid(True, alpha=0.3)
+    ax1.legend(fontsize=10.5)
+    ax1.set_yscale("log")
     
+    # Shock Panel
+    ax2.plot(y_s[valid_T_s], err_T_s * 100, label=r"Temperature $T(y_s)$ (from $y_s=0.005$)", lw=2)
+    ax2.plot(y_s, err_P_s * 100, label=r"Pressure $P(y_s)$", lw=2)
+    ax2.plot(y_s, err_U_s * 100, label=r"Velocity $U(y_s)$", lw=2)
+    ax2.plot(y_s[valid_rho_s], err_rho_s * 100, label=r"Density $\rho(y_s)$ (EOS derived)", lw=2)
+    ax2.set_xlabel("Normalized coordinate $y_s = (m - m_f) / (m_s - m_f)$", fontsize=13)
+    ax2.set_ylabel("Relative Error [\\%]", fontsize=13)
+    ax2.set_title("Shock Compressed Regime", fontsize=13, fontweight='bold')
+    ax2.grid(True, alpha=0.3)
+    ax2.legend(fontsize=10.5)
+    ax2.set_yscale("log")
+    
+    fig.suptitle("Relative Error of Self-Similar Profile Fits", fontsize=15, fontweight='bold')
     fig.tight_layout()
     fig.savefig(output_dir / "self_similar_relative_errors.png", dpi=200)
     print(f"Saved: self_similar_relative_errors.png")
@@ -656,7 +710,7 @@ def main():
     plot_shock_region_comparison(ss, hydro_only_data, hs, results_dir)
     
     # 6. Plot the relative errors of self-similar profile fits
-    plot_relative_errors(hs, results_dir)
+    plot_relative_errors(hs, ss, results_dir)
     
     print("\n*** ALL TASKS SUCCESSFULLY COMPLETED! ***")
 

@@ -67,6 +67,7 @@ from project3_code.hydro_sim.plotting.hydro_plots import _create_7panel_vertical
 
 from ablation_solver import AblationSolver
 from subsonic_heat_wave import SubsonicHeatWave
+from piston_shock import PistonShock
 
 
 # =============================================================================
@@ -374,11 +375,11 @@ def plot_rad_hydro_profiles(history, shussman_ref, menahem_ref, rad_hydro_path, 
 # =============================================================================
 
 def plot_and_fit_self_similar(case, self_similar_path, standalone_path, case_title):
-    """Solve the Subsonic similarity ODEs, extract P, T, U, S, fit and plot."""
+    """Solve both Subsonic and Shock similarity ODEs, extract profiles, fit and plot."""
     print(f"Solving self-similar similarity ODEs for {case_title}...")
     heat_kwargs = _heat_kwargs_from_case(case)
     
-    # Solve similarity ODEs
+    # Solve subsonic similarity ODEs
     solver = SubsonicHeatWave(**heat_kwargs).find_xsi_f()
     
     # Grid of y = xsi / xsi_f in [0, 1]
@@ -393,7 +394,6 @@ def plot_and_fit_self_similar(case, self_similar_path, standalone_path, case_tit
     rho_val = 1.0 / V_val
     
     # Slice to avoid the numerical boundary layer near y=0 where shooting solver terminates
-    # Also avoids y=0 to prevent division by zero in singular terms (y^-b)
     valid_idx = (y_grid > 0.005) & np.isfinite(T_val) & np.isfinite(P_val) & np.isfinite(U_val) & np.isfinite(rho_val)
     
     y_valid = y_grid[valid_idx]
@@ -403,42 +403,49 @@ def plot_and_fit_self_similar(case, self_similar_path, standalone_path, case_tit
     rho_valid = rho_val[valid_idx]
     V_valid = V_val[valid_idx]
     
+    # Solve matching shock similarity ODEs
+    p0s = solver.Pf * (solver.A**solver.a3) * (solver.B**solver.b3)
+    tau_s = solver.c3
+    gamma_shock = float(case.r) + 1.0
+    omega = float(getattr(case, "omega", 0.0))
+    rho0_val = float(case.rho0)
+    
+    shock_solver = PistonShock(
+        rho0=rho0_val,
+        omega=omega,
+        p0=p0s,
+        tau=tau_s,
+        gamma=gamma_shock,
+    )
+    
+    # Grid of y_s = xsi / xsi_s in [0, 1]
+    y_grid_s = np.linspace(0.0, 1.0, 500)
+    xsi_vec_s = y_grid_s * shock_solver.xsi_s
+    # Avoid y=0 exactly to prevent singular divisions
+    xsi_vec_s[0] = 1e-10
+    
+    V_val_s, U_val_s, P_val_s = shock_solver.get_self_similar_profiles(xsi_vec=xsi_vec_s)
+    R_val_s = np.where(V_val_s > 0, 1.0 / V_val_s, np.nan)
+    T_val_s = P_val_s * V_val_s / shock_solver.r
+    
+    valid_idx_s = (y_grid_s > 0.005) & np.isfinite(V_val_s) & np.isfinite(U_val_s) & np.isfinite(P_val_s) & np.isfinite(R_val_s) & np.isfinite(T_val_s)
+    
+    y_valid_s = y_grid_s[valid_idx_s]
+    T_valid_s = T_val_s[valid_idx_s]
+    P_valid_s = P_val_s[valid_idx_s]
+    U_valid_s = U_val_s[valid_idx_s]
+    R_valid_s = R_val_s[valid_idx_s]
+    
+    # ----------------------------------------------------
+    # Subsonic Fits
+    # ----------------------------------------------------
     # Power-law fitting formulas
-    def power_law_front(y, c, d):
-        return c * (1.0 - y)**d
-        
     def power_law_origin(y, a, b, c, d):
         return a * (y)**(c) + b*y**(c+d)
 
     def smith_approximation(y, R):
         return ((1-y)*(1+R*y))**(10/39)
         
-    # Extra fitting options for Velocity (U) to find the most clever fit
-    def fit_u_1(y, c, d):
-        return c * (1.0 - y)**d
-    def fit_u_2(y, c, b):
-        return c * (1.0 - y) / (1.0 + b * y)
-    def fit_u_3(y, c, b):
-        # 2-parameter singular power law: c * (1-y) * y^-b
-        return c * (1.0 - y) * (y**(-b))
-    def fit_u_4(y, c, a, b):
-        # 3-parameter singular power law: c * (1-y^a) * y^-b
-        return c * (1.0 - y**a) * (y**(-b))
-    def fit_u_5(y, c, a, b):
-        # 3-parameter singular sum of powers: c * (1-y) * (y^a + y^-b)
-        return c * (1.0 - y) * (y**a + y**(-b))
-    def fit_u_6(y, c, a, b):
-        # 3-parameter generalized power law
-        return c * (1.0 - y**a)**b
-    def fit_u_7(y, c, b, a):
-        # 3-parameter singular power law with linear correction: c * (1-y) * y^-b * (1 + a*y)
-        return c * (1.0 - y) * (y**(-b)) * (1.0 + a * y)
-    def fit_u_8(y, c, b, a):
-        # 3-parameter singular power law with exponential attenuation: c * (1-y) * exp(-a*y) * y^-b
-        return c * (1.0 - y) * np.exp(-a * y) * (y**(-b))
-        
-    # Perform curve fitting for T, P
-    # define mask over T, take only xi/xi_f < 0.99
     mask = y_valid < 0.99
     y_valid_masked = y_valid[mask]
     T_valid_masked = T_valid[mask]
@@ -450,11 +457,10 @@ def plot_and_fit_self_similar(case, self_similar_path, standalone_path, case_tit
     T_fit = smith_approximation(y_valid, *popt_T)
     P_fit = power_law_origin(y_valid, *popt_P)
     
-    # Calculate rho_fit from EOS
+    # Calculate subsonic rho_fit from EOS
     r_val = 0.25
     beta_val = 1.6
     mu_val = 0.14
-    # reduce P_fit to the mask of T_fit
     P_fit_masked = P_fit[mask]
     rho_fit_masked = ((r_val * T_fit_masked**beta_val) / P_fit_masked) ** (1.0 / (mu_val - 1.0))
     rho_fit = ((r_val * T_fit**beta_val) / P_fit) ** (1.0 / (mu_val - 1.0))
@@ -468,142 +474,175 @@ def plot_and_fit_self_similar(case, self_similar_path, standalone_path, case_tit
     r2_T = compute_r2(T_valid_masked, T_fit_masked)
     r2_P = compute_r2(P_valid, P_fit)
     r2_rho_masked = compute_r2(rho_valid_masked, rho_fit_masked)
-    r2_rho = compute_r2(rho_valid, rho_fit)
-    # Fit the 8 velocity options with exception handling
+    
+    # ----------------------------------------------------
+    # Shock Fits
+    # ----------------------------------------------------
+    T_s = T_valid_s[-1]
+    P_s = P_valid_s[-1]
+    U_s = U_valid_s[-1]
+    R_s = R_valid_s[-1]
+    U_0 = U_valid_s[0]
+    
+    def power_law_P_s(y, d):
+        return 1.0 - (1.0 - P_s) * (y**d)
+        
+    def power_law_U_s(y, d):
+        return U_0 - (U_0 - U_s) * (y**d)
+        
+    def power_law_T_s(y, d):
+        return T_s * (y**d)
+        
+    # Fit calculations for shock region
+    try:
+        popt_P_s, _ = curve_fit(power_law_P_s, y_valid_s, P_valid_s, p0=[1.0])
+        P_fit_s = power_law_P_s(y_valid_s, *popt_P_s)
+        r2_P_s = compute_r2(P_valid_s, P_fit_s)
+    except Exception:
+        popt_P_s, P_fit_s, r2_P_s = [np.nan], P_valid_s, 0.0
+        
+    try:
+        popt_U_s, _ = curve_fit(power_law_U_s, y_valid_s, U_valid_s, p0=[1.0])
+        U_fit_s = power_law_U_s(y_valid_s, *popt_U_s)
+        r2_U_s = compute_r2(U_valid_s, U_fit_s)
+    except Exception:
+        popt_U_s, U_fit_s, r2_U_s = [np.nan], U_valid_s, 0.0
+        
+    try:
+        popt_T_s, _ = curve_fit(power_law_T_s, y_valid_s, T_valid_s, p0=[-0.3])
+        T_fit_s = power_law_T_s(y_valid_s, *popt_T_s)
+        r2_T_s = compute_r2(T_valid_s, T_fit_s)
+    except Exception:
+        popt_T_s, T_fit_s, r2_T_s = [np.nan], T_valid_s, 0.0
+        
+    # Density R derived algebraically from P and T via the EOS: R = P / (r * T)
+    R_fit_s = P_fit_s / (shock_solver.r * T_fit_s)
+    r2_R_s = compute_r2(R_valid_s, R_fit_s)
+
+    # Fits for Velocity (U) subsonic options
     fits_u = {}
+    def fit_u_1(y, c, d): return c * (1.0 - y)**d
+    def fit_u_2(y, c, b): return c * (1.0 - y) / (1.0 + b * y)
+    def fit_u_3(y, c, b): return c * (1.0 - y) * (y**(-b))
+    def fit_u_4(y, c, a, b): return c * (1.0 - y**a) * (y**(-b))
+    def fit_u_5(y, c, a, b): return c * (1.0 - y) * (y**a + y**(-b))
+    def fit_u_6(y, c, a, b): return c * (1.0 - y**a)**b
+    def fit_u_7(y, c, b, a): return c * (1.0 - y) * (y**(-b)) * (1.0 + a * y)
+    def fit_u_8(y, c, b, a): return c * (1.0 - y) * np.exp(-a * y) * (y**(-b))
     
-    # Fit 1
-    try:
-        popt, _ = curve_fit(fit_u_1, y_valid, U_valid, p0=[U_valid[0], 0.5], maxfev=10000)
-        fits_u[1] = (popt, fit_u_1(y_valid, *popt), compute_r2(U_valid, fit_u_1(y_valid, *popt)))
-    except Exception as e:
-        fits_u[1] = (None, None, 0.0)
-        
-    # Fit 2
-    try:
-        popt, _ = curve_fit(fit_u_2, y_valid, U_valid, p0=[U_valid[0], 1.0], maxfev=10000)
-        fits_u[2] = (popt, fit_u_2(y_valid, *popt), compute_r2(U_valid, fit_u_2(y_valid, *popt)))
-    except Exception as e:
-        fits_u[2] = (None, None, 0.0)
-        
-    # Fit 3 (Clever 2-param singular power law)
-    try:
-        popt, _ = curve_fit(fit_u_3, y_valid, U_valid, p0=[-1.0, 0.3], maxfev=10000)
-        fits_u[3] = (popt, fit_u_3(y_valid, *popt), compute_r2(U_valid, fit_u_3(y_valid, *popt)))
-    except Exception as e:
-        fits_u[3] = (None, None, 0.0)
-        
-    # Fit 4 (3-param singular power law)
-    try:
-        popt, _ = curve_fit(fit_u_4, y_valid, U_valid, p0=[-1.0, 1.0, 0.3], maxfev=10000)
-        fits_u[4] = (popt, fit_u_4(y_valid, *popt), compute_r2(U_valid, fit_u_4(y_valid, *popt)))
-    except Exception as e:
-        fits_u[4] = (None, None, 0.0)
-        
-    # Fit 5 (3-param singular sum of powers)
-    try:
-        popt, _ = curve_fit(fit_u_5, y_valid, U_valid, p0=[-1.0, 1.0, 0.3], maxfev=10000)
-        fits_u[5] = (popt, fit_u_5(y_valid, *popt), compute_r2(U_valid, fit_u_5(y_valid, *popt)))
-    except Exception as e:
-        fits_u[5] = (None, None, 0.0)
-        
-    # Fit 6 (3-param generalized power law)
-    try:
-        popt, _ = curve_fit(fit_u_6, y_valid, U_valid, p0=[U_valid[0], 1.0, 1.0], maxfev=10000)
-        fits_u[6] = (popt, fit_u_6(y_valid, *popt), compute_r2(U_valid, fit_u_6(y_valid, *popt)))
-    except Exception as e:
-        fits_u[6] = (None, None, 0.0)
+    for i in range(1, 9):
+        func = locals()[f"fit_u_{i}"]
+        try:
+            if i in [1, 2, 3]:
+                p0 = [U_valid[0], 0.5] if i != 3 else [-1.0, 0.3]
+            elif i in [4, 5, 6, 7, 8]:
+                p0 = [-1.0, 1.0, 0.3] if i in [4, 5] else ([U_valid[0], 1.0, 1.0] if i == 6 else [-1.0, 0.3, 0.5])
+            popt, _ = curve_fit(func, y_valid, U_valid, p0=p0, maxfev=10000)
+            fits_u[i] = (popt, func(y_valid, *popt), compute_r2(U_valid, func(y_valid, *popt)))
+        except Exception:
+            fits_u[i] = (None, None, 0.0)
+            
+    colors_u = {1: 'crimson', 2: 'darkorange', 3: 'forestgreen', 4: 'darkviolet', 5: 'deeppink', 6: 'teal', 7: 'chocolate', 8: 'royalblue'}
 
-    # Fit 7 (3-param singular power law with linear correction)
-    try:
-        popt, _ = curve_fit(fit_u_7, y_valid, U_valid, p0=[-1.0, 0.3, 0.5], maxfev=10000)
-        fits_u[7] = (popt, fit_u_7(y_valid, *popt), compute_r2(U_valid, fit_u_7(y_valid, *popt)))
-    except Exception as e:
-        fits_u[7] = (None, None, 0.0)
-
-    # Fit 8 (3-param singular power law with exponential attenuation)
-    try:
-        popt, _ = curve_fit(fit_u_8, y_valid, U_valid, p0=[-1.0, 0.3, 0.5], maxfev=10000)
-        fits_u[8] = (popt, fit_u_8(y_valid, *popt), compute_r2(U_valid, fit_u_8(y_valid, *popt)))
-    except Exception as e:
-        fits_u[8] = (None, None, 0.0)
-        
-    # Colors for Fits
-    colors_u = {
-        1: 'crimson',
-        2: 'darkorange',
-        3: 'forestgreen',
-        4: 'darkviolet',
-        5: 'deeppink',
-        6: 'teal',
-        7: 'chocolate',
-        8: 'royalblue'
-    }
-
-    # 1. Plotting 2x2 grid (Clean, non-overlapping)
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+    # ----------------------------------------------------
+    # 2x4 Plotting Grid
+    # ----------------------------------------------------
+    fig, axes = plt.subplots(2, 4, figsize=(22, 10))
     
+    # SUBSONIC HEAT REGIME
     # Panel (0,0): T
     axes[0, 0].plot(y_valid_masked, T_valid_masked, 'b-', label='Numerical', lw=2)
-    # axes[0, 0].plot(y_valid, T_fit, 'b-', label=f'Fit: (1-y)(1+{popt_T[0]:.3f}y)^(55/16) \n(R² = {r2_T:.4f})', lw=1.5)
     axes[0, 0].plot(y_valid_masked, T_fit_masked, 'r--', label=f'Fit: (1-y)(1+{popt_T[0]:.3f}y)^(55/16) \n(R² = {r2_T:.4f})', lw=1.5)
-    axes[0, 0].set_ylabel(r"$T(y)$ [dimensionless]", fontsize=12)
+    axes[0, 0].set_ylabel(r"Temperature $T(y)$ [dimensionless]", fontsize=12)
+    axes[0, 0].set_xlabel(r"$y = \xi / \xi_f$", fontsize=12)
     axes[0, 0].legend(loc='best', fontsize=9.0)
+    axes[0, 0].set_title("Subsonic: Temperature", fontsize=13, fontweight='bold')
     
     # Panel (0,1): P
     axes[0, 1].plot(y_valid, P_valid, 'b-', label='Numerical', lw=2)
     axes[0, 1].plot(y_valid, P_fit, 'r--', label=f'Fit: P = {popt_P[0]:.3f}*y^{{{popt_P[2]:.3f}}} + {popt_P[1]:.3f}*y^{popt_P[2]+popt_P[3]:.3f}\n(R² = {r2_P:.4f})', lw=1.5)
-    axes[0, 1].set_ylabel(r"$P(y)$ [dimensionless]", fontsize=12)
+    axes[0, 1].set_ylabel(r"Pressure $P(y)$ [dimensionless]", fontsize=12)
+    axes[0, 1].set_xlabel(r"$y = \xi / \xi_f$", fontsize=12)
     axes[0, 1].legend(loc='best', fontsize=9.0)
+    axes[0, 1].set_title("Subsonic: Pressure", fontsize=13, fontweight='bold')
     
-    # Panel (1,0): U (Clever Fits Selected for clean legibility)
+    # Panel (1,0): U
     axes[1, 0].plot(y_valid, U_valid, 'b-', label='Numerical', lw=2.5)
-    
     selected_2x2_fits = [1, 3, 4, 5]
     for i in selected_2x2_fits:
         popt, fit_val, r2 = fits_u[i]
         if popt is not None:
-            if i == 1:
-                lbl = f"Baseline c*(1-y)^d (R²={r2:.4f})"
-            elif i == 3:
-                lbl = f"Clever 2P c*(1-y)*y^-b (R²={r2:.4f})"
-            elif i == 4:
-                lbl = f"Clever 3P c*(1-y^a)*y^-b (R²={r2:.4f})"
-            elif i == 5:
-                lbl = f"User 3P c*(1-y)*(y^a+y^-b) (R²={r2:.4f})"
+            if i == 1: lbl = f"Baseline c*(1-y)^d (R²={r2:.4f})"
+            elif i == 3: lbl = f"Clever 2P c*(1-y)*y^-b (R²={r2:.4f})"
+            elif i == 4: lbl = f"Clever 3P c*(1-y^a)*y^-b (R²={r2:.4f})"
+            elif i == 5: lbl = f"User 3P c*(1-y)*(y^a+y^-b) (R²={r2:.4f})"
             axes[1, 0].plot(y_valid, fit_val, colors_u[i], linestyle='--', label=lbl, lw=1.5)
-            
-    axes[1, 0].set_ylabel(r"$U(y)$ [dimensionless]", fontsize=12)
-    # Put legend in the top-left (upper left) of the U subplot which is completely empty space
+    axes[1, 0].set_ylabel(r"Velocity $U(y)$ [dimensionless]", fontsize=12)
+    axes[1, 0].set_xlabel(r"$y = \xi / \xi_f$", fontsize=12)
     axes[1, 0].legend(loc='upper left', fontsize=8.5, framealpha=0.9)
+    axes[1, 0].set_title("Subsonic: Velocity", fontsize=13, fontweight='bold')
     
-    # Panel (1,1): rho
-    # axes[1, 1].plot(y_valid_masked, rho_valid_masked, 'b-', label='Numerical', lw=2)
-    # axes[1, 1].plot(y_valid_masked, rho_fit_masked, 'r--', label=f'Fit: EOS derived from T, P\n(R² = {r2_rho_masked:.4f})', lw=1.5)
+    # Panel (1,1): Density
     axes[1, 1].plot(y_valid, rho_valid, 'b-', label='Numerical', lw=2)
     axes[1, 1].plot(y_valid, rho_fit, 'r--', label=f'Fit: EOS derived from T, P\n(R² = {r2_rho_masked:.4f})', lw=1.5)
-
-    axes[1, 1].set_ylabel(r"$\tilde{\rho}(y)$ [dimensionless density]", fontsize=12)
+    axes[1, 1].set_ylabel(r"Density $\tilde{\rho}(y)$ [dimensionless]", fontsize=12)
+    axes[1, 1].set_xlabel(r"$y = \xi / \xi_f$", fontsize=12)
     axes[1, 1].legend(loc='best', fontsize=9.0)
+    axes[1, 1].set_title("Subsonic: Density", fontsize=13, fontweight='bold')
     
-    # Add Zoomed Inset for Rho
+    # Add Zoomed Inset for Rho subsonic
     axins = axes[1, 1].inset_axes([0.1, 0.5, 0.4, 0.4])
     axins.plot(y_valid_masked, rho_valid_masked, 'b-', lw=2)
     axins.plot(y_valid_masked, rho_fit_masked, 'r--', lw=1.5)
     axins.set_xlim(0.8, 0.99)
-    # Estimate ylim based on zoom region
     zoom_idx = (y_valid_masked >= 0.8) & (y_valid_masked <= 0.99)
     if np.any(zoom_idx):
         axins.set_ylim(min(rho_valid_masked[zoom_idx])*0.9, max(rho_valid_masked[zoom_idx])*1.1)
     axins.grid(True, alpha=0.3)
     axins.set_title("Zoom near front", fontsize=9)
     axes[1, 1].indicate_inset_zoom(axins, edgecolor="black")
+
+    # SHOCK COMPRESSED REGIME
+    # Panel (0,2): T shock
+    axes[0, 2].plot(y_valid_s, T_valid_s, 'b-', label='Numerical', lw=2)
+    lbl_t_s = f'Fit: T = {T_s:.3f}*y^{{{popt_T_s[0]:.3f}}}\n(R² = {r2_T_s:.4f})'
+    axes[0, 2].plot(y_valid_s, T_fit_s, 'r--', label=lbl_t_s, lw=1.5)
+    axes[0, 2].set_ylabel(r"Temperature $T(y)$ [dimensionless]", fontsize=12)
+    axes[0, 2].set_xlabel(r"$y = \xi / \xi_s$", fontsize=12)
+    axes[0, 2].legend(loc='best', fontsize=9.0)
+    axes[0, 2].set_title("Shock: Temperature", fontsize=13, fontweight='bold')
+    
+    # Panel (0,3): P shock
+    axes[0, 3].plot(y_valid_s, P_valid_s, 'b-', label='Numerical', lw=2)
+    lbl_p_s = f'Fit: P = 1.0 - {1.0-P_s:.3f}*y^{{{popt_P_s[0]:.3f}}}\n(R² = {r2_P_s:.4f})'
+    axes[0, 3].plot(y_valid_s, P_fit_s, 'r--', label=lbl_p_s, lw=1.5)
+    axes[0, 3].set_ylabel(r"Pressure $P(y)$ [dimensionless]", fontsize=12)
+    axes[0, 3].set_xlabel(r"$y = \xi / \xi_s$", fontsize=12)
+    axes[0, 3].legend(loc='best', fontsize=9.0)
+    axes[0, 3].set_title("Shock: Pressure", fontsize=13, fontweight='bold')
+    
+    # Panel (1,2): U shock
+    axes[1, 2].plot(y_valid_s, U_valid_s, 'b-', label='Numerical', lw=2.5)
+    lbl_u_s = f'Fit: U = {U_0:.3f} - {U_0-U_s:.3f}*y^{{{popt_U_s[0]:.3f}}}\n(R² = {r2_U_s:.4f})'
+    axes[1, 2].plot(y_valid_s, U_fit_s, 'r--', label=lbl_u_s, lw=1.5)
+    axes[1, 2].set_ylabel(r"Velocity $U(y)$ [dimensionless]", fontsize=12)
+    axes[1, 2].set_xlabel(r"$y = \xi / \xi_s$", fontsize=12)
+    axes[1, 2].legend(loc='best', fontsize=9.0)
+    axes[1, 2].set_title("Shock: Velocity", fontsize=13, fontweight='bold')
+    
+    # Panel (1,3): Density R shock
+    axes[1, 3].plot(y_valid_s, R_valid_s, 'b-', label='Numerical', lw=2)
+    lbl_r_s = f'Fit: EOS derived from P, T\n(R² = {r2_R_s:.4f})'
+    axes[1, 3].plot(y_valid_s, R_fit_s, 'r--', label=lbl_r_s, lw=1.5)
+    axes[1, 3].set_ylabel(r"Density $R(y)$ [dimensionless]", fontsize=12)
+    axes[1, 3].set_xlabel(r"$y = \xi / \xi_s$", fontsize=12)
+    axes[1, 3].legend(loc='best', fontsize=9.0)
+    axes[1, 3].set_title("Shock: Density", fontsize=13, fontweight='bold')
     
     for ax in axes.flat:
-        ax.set_xlabel(r"$y = \xi / \xi_f$", fontsize=12)
         ax.grid(True, alpha=0.3)
         
-    fig.suptitle(f"Self-Similar Similarity Profiles & Curve-Fits\n{case_title}", fontsize=14, fontweight='bold')
+    fig.suptitle(f"Piecewise Self-Similar Similarity Profiles & Fits (Both Regimes)\n{case_title}", fontsize=16, fontweight='bold')
     plt.tight_layout()
     fig.savefig(self_similar_path, dpi=200)
     plt.close(fig)

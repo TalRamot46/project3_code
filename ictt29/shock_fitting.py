@@ -403,17 +403,10 @@ def plot_and_fit_self_similar(case, self_similar_path, standalone_path, case_tit
 
     # Fit calculations
     if is_constant:
-        popt_R, popt_P, popt_U, popt_T = [0.0], [0.0], [0.0], [0.0]
+        popt_P, popt_U, popt_T = [0.0], [0.0], [0.0]
         R_fit, P_fit, U_fit, T_fit = np.full_like(y_valid, R_s), np.full_like(y_valid, P_s), np.full_like(y_valid, U_s), np.full_like(y_valid, T_s)
         r2_R, r2_P, r2_U, r2_T = 1.0, 1.0, 1.0, 1.0
     else:
-        try:
-            popt_R, _ = curve_fit(power_law_R, y_valid, R_valid, p0=[0.3])
-            R_fit = power_law_R(y_valid, *popt_R)
-            r2_R = compute_r2(R_valid, R_fit)
-        except Exception:
-            popt_R, R_fit, r2_R = [np.nan], R_valid, 0.0
-            
         try:
             popt_P, _ = curve_fit(power_law_P, y_valid, P_valid, p0=[1.0])
             P_fit = power_law_P(y_valid, *popt_P)
@@ -429,11 +422,15 @@ def plot_and_fit_self_similar(case, self_similar_path, standalone_path, case_tit
             popt_U, U_fit, r2_U = [np.nan], U_valid, 0.0
             
         try:
-            popt_T, _ = curve_fit(power_law_T, y_valid, T_valid, p0=[0.3])
+            popt_T, _ = curve_fit(power_law_T, y_valid, T_valid, p0=[-0.3])
             T_fit = power_law_T(y_valid, *popt_T)
             r2_T = compute_r2(T_valid, T_fit)
         except Exception:
             popt_T, T_fit, r2_T = [np.nan], T_valid, 0.0
+
+        # R is derived algebraically from P and T via the EOS: R = P / (r * T)
+        R_fit = P_fit / (solver.r * T_fit)
+        r2_R = compute_r2(R_valid, R_fit)
             
     # Fit U options
     fits_u = {}
@@ -488,7 +485,7 @@ def plot_and_fit_self_similar(case, self_similar_path, standalone_path, case_tit
     if is_constant:
         lbl_r = f'Fit: R = {R_s:.3f} (const)'
     else:
-        lbl_r = f'Fit: R = {R_s:.3f}*y^{{-{popt_R[0]:.3f}}}\n(R² = {r2_R:.4f})'
+        lbl_r = f'Fit: EOS derived from P, T\n(R² = {r2_R:.4f})'
     axes[0, 0].plot(y_valid, R_fit, 'r--', label=lbl_r, lw=1.5)
     axes[0, 0].set_ylabel(r"Density $R(y)$ [dimensionless]", fontsize=12)
     axes[0, 0].legend(loc='best', fontsize=9.0)
@@ -577,6 +574,76 @@ def plot_and_fit_self_similar(case, self_similar_path, standalone_path, case_tit
     fig_sa.savefig(standalone_path, dpi=200, bbox_inches='tight')
     plt.close(fig_sa)
     print(f"Saved standalone velocity fits to {standalone_path}")
+
+
+def plot_relative_errors(case, solver, relative_errors_path, case_title):
+    """Plots the relative error of self-similar profile fits in the shock region as a function of y."""
+    # Obtain numerical profiles on a fine grid
+    y_grid = np.linspace(0.005, 1.0, 500)
+    xsi_vec = y_grid * solver.xsi_s
+    
+    V_num, U_num, P_num = solver.get_self_similar_profiles(xsi_vec=xsi_vec)
+    R_num = 1.0 / V_num
+    T_num = P_num * V_num / solver.r
+    
+    # Boundary values at front (shock, y=1) and origin (piston, y=0)
+    R_s = R_num[-1]
+    P_s = P_num[-1]
+    T_s = T_num[-1]
+    U_s = U_num[-1]
+    U_0 = U_num[0]
+    
+    is_constant = (np.abs(P_num.max() - P_num.min()) < 1e-6) and (np.abs(U_num.max() - U_num.min()) < 1e-6)
+    
+    if is_constant:
+        R_fit = np.full_like(y_grid, R_s)
+        P_fit = np.full_like(y_grid, P_s)
+        U_fit = np.full_like(y_grid, U_s)
+        T_fit = np.full_like(y_grid, T_s)
+    else:
+        # Fits
+        def power_law_P(y, d):
+            return 1.0 - (1.0 - P_s) * (y**d)
+        def power_law_T(y, d):
+            return T_s * (y**d)
+        def power_law_U(y, d):
+            return U_0 - (U_0 - U_s) * (y**d)
+            
+        popt_P, _ = curve_fit(power_law_P, y_grid, P_num, p0=[1.0])
+        popt_T, _ = curve_fit(power_law_T, y_grid, T_num, p0=[-0.3])
+        popt_U, _ = curve_fit(power_law_U, y_grid, U_num, p0=[1.0])
+        
+        P_fit = power_law_P(y_grid, *popt_P)
+        T_fit = power_law_T(y_grid, *popt_T)
+        U_fit = power_law_U(y_grid, *popt_U)
+        
+        # EOS derived density
+        R_fit = P_fit / (solver.r * T_fit)
+        
+    # Calculate relative errors
+    err_R = np.abs((R_fit - R_num) / (R_num + 1e-15))
+    err_P = np.abs((P_fit - P_num) / (P_num + 1e-15))
+    err_U = np.abs((U_fit - U_num) / (U_num + 1e-15))
+    err_T = np.abs((T_fit - T_num) / (T_num + 1e-15))
+    
+    # Plotting
+    fig, ax = plt.subplots(figsize=(10, 7))
+    ax.plot(y_grid, err_T * 100, label=r"Temperature $\tilde{T}(y)$", lw=2)
+    ax.plot(y_grid, err_P * 100, label=r"Pressure $\tilde{P}(y)$", lw=2)
+    ax.plot(y_grid, err_U * 100, label=r"Velocity $\tilde{U}(y)$", lw=2)
+    ax.plot(y_grid, err_R * 100, label=r"Density $\tilde{R}(y)$ (EOS derived)", lw=2)
+    
+    ax.set_xlabel("Normalized coordinate $y = \\xi / \\xi_s$", fontsize=13)
+    ax.set_ylabel("Relative Error [\\%]", fontsize=13)
+    ax.set_title(f"Relative Error of Shock Self-Similar Profile Fits\n{case_title}", fontsize=14)
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=11)
+    ax.set_yscale("log")
+    
+    fig.tight_layout()
+    fig.savefig(relative_errors_path, dpi=200)
+    plt.close(fig)
+    print(f"Saved self-similar relative error graph to {relative_errors_path}")
 
 
 # =============================================================================
@@ -786,6 +853,7 @@ def generate_verification_plots(
     material_hydro_path = str(mh_dir / f"{case_label}_material_hydro.png")
     self_similar_path = str(ss_dir / f"{case_label}_self_similar.png")
     standalone_path = str(ss_dir / f"{case_label}_velocity_fits_standalone.png")
+    relative_errors_path = str(ss_dir / f"{case_label}_relative_errors.png")
     gif_path = str(ev_dir / f"{case_label}_evolution.gif")
     
     # 1) Generate space-time trajectories and fronts
@@ -797,7 +865,10 @@ def generate_verification_plots(
     # 3) Solve similarity ODEs, fit, and plot self-similar profiles
     plot_and_fit_self_similar(case, self_similar_path, standalone_path, case_title)
     
-    # 4) Generate animated evolution GIF
+    # 4) Plot self-similar relative errors
+    plot_relative_errors(case, solver, relative_errors_path, case_title)
+    
+    # 5) Generate animated evolution GIF
     print(f"Saving animated custom 5-way evolution GIF to {gif_path}...")
     save_custom_evolution_gif(
         history=history,

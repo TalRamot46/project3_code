@@ -314,7 +314,8 @@ def evaluate_shock_fits(mass_grid, time, solver, case, popt_P, popt_T, best_u):
     p_s_cgs   = float(sol_exact["pressure"][-1])    # pressure at shock front [Barye]
     rho_s_cgs = float(sol_exact["density"][-1])     # density at shock front [g/cm^3]
     u_s_cgs   = float(sol_exact["velocity"][-1])    # velocity at shock front [cm/s]
-    T_s_cgs   = p_s_cgs / (rho_s_cgs * float(case.r)) if rho_s_cgs > 0 else 300.0
+    e_s_cgs = p_s_cgs / (rho_s_cgs * float(case.r))          # specific internal energy at shock front [erg/g]
+    T_s_cgs = (e_s_cgs * rho_s_cgs**(0.14)/6730)**(1/1.6)  # temperature at shock front from EOS [K]
 
     for i, m in enumerate(mass_grid):
         if m >= m_s:
@@ -349,15 +350,18 @@ def perform_shock_fitting(solver):
     xsi_vec[0] = 1e-10
     
     V_val, U_val, P_val = solver.get_self_similar_profiles(xsi_vec=xsi_vec)
-    R_val = np.where(V_val > 0, 1.0 / V_val, np.nan)
-    T_val = P_val * V_val / solver.r
+    plt.plot(xsi_vec / xsi_vec.max(), V_val, label='V(y)')
+    plt.show()
+    rho_val = np.where(V_val > 0, 1.0 / V_val, np.nan)
+    e_val = P_val * V_val / solver.r
+    T_val = (e_val * rho_val**(0.14)/6730)**(1/1.6)
     
     valid_idx = (y_grid > 0.005) & np.isfinite(V_val) & np.isfinite(U_val) & np.isfinite(P_val) & np.isfinite(T_val)
     y_valid = y_grid[valid_idx]
     T_valid = T_val[valid_idx]
     P_valid = P_val[valid_idx]
     U_valid = U_val[valid_idx]
-    R_valid = R_val[valid_idx]
+    rho_valid = rho_val[valid_idx]
     
     U_0 = U_valid[0]
     U_s = U_valid[-1]
@@ -370,7 +374,8 @@ def perform_shock_fitting(solver):
     
     # Temperature Fit (1-parameter power law: T = Ts*y^d)
     # Ts is not a PistonShock attribute; compute from EOS: T = P*V/r at shock boundary
-    Ts = float(solver.Ps * solver.Rs_or_Vs / solver.r)
+    Es = float(solver.Ps * solver.Rs_or_Vs / solver.r)
+    Ts = (Es * rho_valid[-1]**(0.14)/6730)**(1/1.6)
     def power_law_T(y, d):
         return Ts * (y**d)
         
@@ -423,7 +428,7 @@ def perform_shock_fitting(solver):
             print(f"Shock velocity fit {cand['id']} failed: {e}")
             fits_u[cand["id"]] = (None, None, 0.0, 0.0, cand["name"], cand["latex"])
             
-    return y_grid, y_valid, T_valid, P_valid, U_valid, R_valid, popt_P, popt_T, best_u, fits_u
+    return y_grid, y_valid, T_valid, P_valid, U_valid, rho_valid, popt_P, popt_T, best_u, fits_u
 
 
 def plot_material_hydro_profiles(history, solver, case, popt_P, popt_T, best_u, material_hydro_path, case_title):
@@ -466,8 +471,11 @@ def plot_material_hydro_profiles(history, solver, case, popt_P, popt_T, best_u, 
         
         # Exact Temp
         with np.errstate(divide='ignore', invalid='ignore'):
-            exact_T = np.where(exact_rho > 0, sol_exact["pressure"] / (exact_rho * float(case.r)), 0.0)
-            
+            exact_e = np.where(exact_rho > 0, sol_exact["pressure"] / (exact_rho * float(case.r)), 0.0)
+            f = 6711
+            mu = 0.14
+            beta = 1.6
+            exact_T = (exact_e / (f * exact_rho**(-mu)))**(1/beta)
         # 3) Analytical fits mapped to CGS
         fits = evaluate_shock_fits(mass_exact, t_actual, solver, case, popt_P, popt_T, best_u)
         fit_rho = fits["density"]
@@ -515,7 +523,7 @@ def plot_material_hydro_profiles(history, solver, case, popt_P, popt_T, best_u, 
 
 
 def plot_and_fit_self_similar(
-    solver, y_valid, T_valid, P_valid, U_valid, R_valid, 
+    solver, y_valid, T_valid, P_valid, U_valid, rho_valid, 
     popt_P, popt_T, best_u, fits_u, 
     self_similar_path, standalone_path, case_title
 ):
@@ -527,25 +535,25 @@ def plot_and_fit_self_similar(
     # Evaluate fits
     P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
     T_fit = Ts * y_valid**popt_T[0]
-    R_fit = P_fit / (solver.r * T_fit)
+    rho_fit = P_fit / (solver.r * T_fit)
     U_fit = best_u["fit_val"]
     
     err_T = np.abs((T_fit - T_valid) / T_valid) * 100
-    err_R = np.abs((R_fit - R_valid) / R_valid) * 100
+    err_rho = np.abs((rho_fit - rho_valid) / rho_valid) * 100
     err_P = np.abs((P_fit - P_valid) / P_valid) * 100
     err_U = np.abs((U_fit - U_valid) / (U_valid + 1e-15)) * 100
     
     avg_T, max_T = np.mean(err_T), np.max(err_T)
-    avg_R, max_R = np.mean(err_R), np.max(err_R)
+    avg_rho, max_rho = np.mean(err_rho), np.max(err_rho)
     avg_P, max_P = np.mean(err_P), np.max(err_P)
-    avg_U, max_U = best_u["avg_err"], best_u["max_err"]
+    avg_U, max_U = np.mean(err_U), np.max(err_U)
     
     fig, axes = plt.subplots(2, 2, figsize=(13, 11))
     
     # Panel (0,0): Temperature
     ax = axes[0, 0]
     ax.plot(y_valid, T_valid, 'b-', label='Numerical Solver', lw=2)
-    ax.plot(y_valid, T_fit, 'r--', label='Analytical Fit', lw=1.5)
+    # ax.plot(y_valid, T_fit, 'r--', label='Analytical Fit', lw=1.5)
     ax.set_ylabel(r"Temperature $T(y)$ [dimensionless]", fontsize=12)
     ax.set_title("Shock: Temperature", fontsize=13, fontweight='bold')
     lbl_T = f"$T(y) \\approx T_s y^{{{popt_T[0]:.5f}}}$\nAvg Err: {avg_T:.4f}%, Max Err: {max_T:.4f}%"
@@ -553,11 +561,11 @@ def plot_and_fit_self_similar(
     
     # Panel (0,1): Density
     ax = axes[0, 1]
-    ax.plot(y_valid, R_valid, 'b-', label='Numerical Solver', lw=2)
-    ax.plot(y_valid, R_fit, 'r--', label='EOS Derived Fit', lw=1.5)
-    ax.set_ylabel(r"Density $R(y)$ [dimensionless]", fontsize=12)
+    ax.plot(y_valid, rho_valid, 'b-', label='Numerical Solver', lw=2)
+    ax.plot(y_valid, rho_fit, 'r--', label='EOS Derived Fit', lw=1.5)
+    ax.set_ylabel(r"Density $\rho(y)$ [dimensionless]", fontsize=12)
     ax.set_title("Shock: Density", fontsize=13, fontweight='bold')
-    lbl_R = r"$R(y) \approx \frac{P(y)}{(\gamma - 1) T(y)}$" + f"\nAvg Err: {avg_R:.4f}%, Max Err: {max_R:.4f}%"
+    lbl_R = r"$\rho(y)$" + f"\nAvg Err: {avg_rho:.4f}%, Max Err: {max_rho:.4f}%"
     ax.text(0.05, 0.05, lbl_R, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=9.5)
     
     # Panel (1,0): Pressure
@@ -645,23 +653,23 @@ def plot_relative_errors(
 ):
     print("Generating shock relative error plots...")
     P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
-    T_fit = solver.Ts * y_valid**popt_T[0]
+    T_fit = 1 * y_valid**popt_T[0]
     R_fit = P_fit / (solver.r * T_fit)
     U_fit = best_u["fit_val"]
     
     err_T = np.abs((T_fit - T_valid) / T_valid) * 100
-    err_R = np.abs((R_fit - R_valid) / R_valid) * 100
+    error_rho = np.abs((R_fit - R_valid) / R_valid) * 100
     err_P = np.abs((P_fit - P_valid) / P_valid) * 100
     err_U = np.abs((U_fit - U_valid) / (U_valid + 1e-15)) * 100
     
     avg_T, max_T = np.mean(err_T), np.max(err_T)
-    avg_R, max_R = np.mean(err_R), np.max(err_R)
+    avg_R, max_R = np.mean(error_rho), np.max(error_rho)
     avg_P, max_P = np.mean(err_P), np.max(err_P)
     avg_U, max_U = best_u["avg_err"], best_u["max_err"]
     
     fig_err, ax_err = plt.subplots(figsize=(10, 7.5))
     ax_err.plot(y_valid, err_T, label=f'Temperature $T(y)$ (Avg: {avg_T:.4f}%, Max: {max_T:.4f}%)', lw=2.0)
-    ax_err.plot(y_valid, err_R, label=f'Density $R(y)$ (Avg: {avg_R:.4f}%, Max: {max_R:.4f}%)', lw=2.0)
+    ax_err.plot(y_valid, error_rho, label=f'Density $\\rho(y)$ (Avg: {avg_R:.4f}%, Max: {max_R:.4f}%)', lw=2.0)
     ax_err.plot(y_valid, err_P, label=f'Pressure $P(y)$ (Avg: {avg_P:.4f}%, Max: {max_P:.4f}%)', lw=2.0)
     ax_err.plot(y_valid, err_U, label=f'Velocity $U(y)$ (Avg: {avg_U:.4f}%, Max: {max_U:.4f}%)', lw=2.0)
     
@@ -801,7 +809,6 @@ def run_simulation_and_references(preset_name: str, case_label: str):
     cache_path = cache_dir / f"{case_label}_cache.pkl"
 
     case, config = get_preset(preset_name)
-    config = dc_replace(config, N=400)
 
     if cache_path.exists():
         print(f"Loading cached simulation and reference data from {cache_path}...")

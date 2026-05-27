@@ -64,7 +64,7 @@ from project3_code.hydro_sim.plotting.hydro_plots import _create_7panel_vertical
 from piston_shock import PistonShock
 
 USE_CACHE = False  # Set to True to use pre-saved pickle files, False to run again
-Y_FIT_MIN = 0.5    # Configure the lower bound for fitting Temperature T
+Y_FIT_MIN = 0.2   # Configure the lower bound for fitting Temperature T
 
 def get_cached_shock_solver(case, case_label):
     """Solve shock similarity ODEs once and cache the solver object (with found xsi_s)."""
@@ -567,11 +567,12 @@ def plot_and_fit_self_similar(
     err_P = np.abs((P_fit - P_valid) / P_valid) * 100
     err_U = np.abs((U_fit - U_valid) / (U_valid + 1e-15)) * 100
     
-    # Restrict Temperature error computation only to the Y_FIT_MIN <= y <= 1.0 domain
+    # Restrict Temperature and Density error computation only to the Y_FIT_MIN <= y <= 1.0 domain
     err_T_filtered = err_T[y_valid >= Y_FIT_MIN]
     avg_T, max_T = np.mean(err_T_filtered), np.max(err_T_filtered)
     
-    avg_rho, max_rho = np.mean(err_rho), np.max(err_rho)
+    err_rho_filtered = err_rho[y_valid >= Y_FIT_MIN]
+    avg_rho, max_rho = np.mean(err_rho_filtered), np.max(err_rho_filtered)
     avg_P, max_P = np.mean(err_P), np.max(err_P)
     avg_U, max_U = np.mean(err_U), np.max(err_U)
     
@@ -606,7 +607,7 @@ def plot_and_fit_self_similar(
     ax.plot(y_valid, rho_fit, 'r--', label='EOS Derived Fit', lw=1.5)
     ax.set_ylabel(r"Density $\rho(y)$ [dimensionless]", fontsize=12)
     ax.set_title("Shock: Density", fontsize=13, fontweight='bold')
-    lbl_R = r"$\rho(y)$" + f"\nAvg Err: {avg_rho:.4f}%, Max Err: {max_rho:.4f}%"
+    lbl_R = r"$\rho(y)$" + f"\nAvg Err ({Y_FIT_MIN}<y<1): {avg_rho:.4f}%\nMax Err ({Y_FIT_MIN}<y<1): {max_rho:.4f}%"
     ax.text(0.05, 0.05, lbl_R, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=9.5)
     
     # Panel (1,0): Pressure
@@ -750,19 +751,20 @@ def plot_relative_errors(
     err_P = np.abs((P_fit - P_valid) / P_valid) * 100
     err_U = np.abs((U_fit - U_valid) / (U_valid + 1e-15)) * 100
     
-    # Filter Temperature error to Y_FIT_MIN <= y <= 1.0
+    # Filter Temperature and Density errors to Y_FIT_MIN <= y <= 1.0
     fit_mask_T = y_valid >= Y_FIT_MIN
     y_valid_T = y_valid[fit_mask_T]
     err_T_filtered = err_T[fit_mask_T]
+    err_rho_filtered = error_rho[fit_mask_T]
     
     avg_T, max_T = np.mean(err_T_filtered), np.max(err_T_filtered)
-    avg_R, max_R = np.mean(error_rho), np.max(error_rho)
+    avg_R, max_R = np.mean(err_rho_filtered), np.max(err_rho_filtered)
     avg_P, max_P = np.mean(err_P), np.max(err_P)
     avg_U, max_U = best_u["avg_err"], best_u["max_err"]
     
     fig_err, ax_err = plt.subplots(figsize=(10, 7.5))
     ax_err.plot(y_valid_T, err_T_filtered, label=f'Temperature $T(y)$ (Avg ({Y_FIT_MIN}<y<1): {avg_T:.4f}%, Max ({Y_FIT_MIN}<y<1): {max_T:.4f}%)', lw=2.0)
-    ax_err.plot(y_valid, error_rho, label=f'Density $\\rho(y)$ (Avg: {avg_R:.4f}%, Max: {max_R:.4f}%)', lw=2.0)
+    ax_err.plot(y_valid_T, err_rho_filtered, label=f'Density $\\rho(y)$ (Avg ({Y_FIT_MIN}<y<1): {avg_R:.4f}%, Max ({Y_FIT_MIN}<y<1): {max_R:.4f}%)', lw=2.0)
     ax_err.plot(y_valid, err_P, label=f'Pressure $P(y)$ (Avg: {avg_P:.4f}%, Max: {max_P:.4f}%)', lw=2.0)
     ax_err.plot(y_valid, err_U, label=f'Velocity $U(y)$ (Avg: {avg_U:.4f}%, Max: {max_U:.4f}%)', lw=2.0)
     

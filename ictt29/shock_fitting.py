@@ -63,7 +63,7 @@ from project3_code.hydro_sim.plotting.hydro_plots import _create_7panel_vertical
 
 from piston_shock import PistonShock
 
-RUN_GIFS = False  # Set to True to generate animated evolution GIFs (which takes time)
+USE_CACHE = False  # Set to True to use pre-saved pickle files, False to run again
 
 def get_cached_shock_solver(case, case_label):
     """Solve shock similarity ODEs once and cache the solver object (with found xsi_s)."""
@@ -71,17 +71,17 @@ def get_cached_shock_solver(case, case_label):
     cache_dir.mkdir(parents=True, exist_ok=True)
     solver_cache_path = cache_dir / f"{case_label}_similarity_solver.pkl"
     
-    # if solver_cache_path.exists():
-    #     print(f"Loading cached shock similarity solver from {solver_cache_path}...")
-    #     try:
-    #         with open(solver_cache_path, "rb") as f:
-    #             solver = pickle.load(f)
-    #         # Re-bind the ODE solver which contains method callbacks
-    #         solver.ode_solver = scipy.integrate.ode(solver.fode).set_integrator(solver.ode_scheme)
-    #         print("Similarity solver loaded successfully.")
-    #         return solver
-    #     except Exception as e:
-    #         print(f"Failed to load solver cache: {e}. Re-solving shock ODEs...")
+    if USE_CACHE and solver_cache_path.exists():
+        print(f"Loading cached shock similarity solver from {solver_cache_path}...")
+        try:
+            with open(solver_cache_path, "rb") as f:
+                solver = pickle.load(f)
+            # Re-bind the ODE solver which contains method callbacks
+            solver.ode_solver = scipy.integrate.ode(solver.fode).set_integrator(solver.ode_scheme)
+            print("Similarity solver loaded successfully.")
+            return solver
+        except Exception as e:
+            print(f"Failed to load solver cache: {e}. Re-solving shock ODEs...")
             
     print("Solving shock similarity ODEs (finding xsi_s via root-finding)...")
     tau = float(case.tau or 0.0)
@@ -89,11 +89,6 @@ def get_cached_shock_solver(case, case_label):
     omega = float(getattr(case, "omega", 0.0))
     gamma = float(case.r) + 1.0
     
-    print("tau is : ", tau)
-    print("p0 is : ", p0)
-    print("omega is : ", omega)
-    print("gamma is : ", gamma)
-    exit()
     solver = PistonShock(
         rho0=float(case.rho0),
         omega=omega,
@@ -103,15 +98,16 @@ def get_cached_shock_solver(case, case_label):
     )
     
     # Save cache by removing ode_solver temporarily to avoid pickling issues
-    try:
-        ode_solver = solver.ode_solver
-        del solver.ode_solver
-        with open(solver_cache_path, "wb") as f:
-            pickle.dump(solver, f, protocol=pickle.HIGHEST_PROTOCOL)
-        solver.ode_solver = ode_solver
-        print(f"Saved shock similarity solver to cache: {solver_cache_path}")
-    except Exception as e:
-        print(f"Failed to save solver cache: {e}")
+    if USE_CACHE:
+        try:
+            ode_solver = solver.ode_solver
+            del solver.ode_solver
+            with open(solver_cache_path, "wb") as f:
+                pickle.dump(solver, f, protocol=pickle.HIGHEST_PROTOCOL)
+            solver.ode_solver = ode_solver
+            print(f"Saved shock similarity solver to cache: {solver_cache_path}")
+        except Exception as e:
+            print(f"Failed to save solver cache: {e}")
         
     return solver
 
@@ -191,111 +187,7 @@ def _get_equally_spaced_elements(times: np.ndarray, n: int) -> np.ndarray:
 # Plotting functions
 # =============================================================================
 
-def plot_xt_trajectories(history, case, xt_path, case_title, solver=None):
-    """Plot cell boundaries x(t) and diagnosed fronts (Simulation vs Analytic)."""
-    print(f"Generating space-time (xt) plot for {case_title}...")
-    times = np.asarray(history.t, dtype=float)
-    x_sim = np.asarray(history.x, dtype=float)
-    n_cells = x_sim.shape[1] - 1
-    
-    if solver is None:
-        solver = PistonShock(**_shock_kwargs_from_case(case))
-    mass_grid = _build_mass_grid(case, num_cells=n_cells)
-    
-    times_model = _get_equally_spaced_elements(times, 200)
-    results = []
-    for t in times_model:
-        sol = solver.solve(mass=mass_grid, time=max(float(t), 1e-18))
-        results.append(sol)
-        
-    position_times = np.array([r["position"] for r in results]).T
-    shock_position = np.array([r["shock_position"] for r in results], dtype=float)
-    piston_position = np.array([r["piston_position"] for r in results], dtype=float)
-    
-    # 2) Simulation piston/shock trajectories
-    x_piston_sim = np.full(times.size, np.nan, dtype=float)
-    x_shock_sim = np.full(times.size, np.nan, dtype=float)
-    p0_barye = float(case.P0_Barye)
-    tau = float(case.tau)
-    
-    for k, t in enumerate(times):
-        xk = np.asarray(history.x[k], dtype=float)
-        pk = np.asarray(history.p[k], dtype=float)
-        rhok = np.asarray(history.rho[k], dtype=float)
-        mk = np.asarray(history.m[k], dtype=float)
-        
-        # Boundary pressure
-        if t <= 0.0:
-            p_drive = 0.0
-        else:
-            p_drive = p0_barye * ((t / 1e-9) ** tau)
-            
-        _, x_p = _sim_piston_position(xk, pk, p_drive, rel_tol=0.05)
-        x_piston_sim[k] = x_p
-        
-        rhok_smooth = _rolling_mean(rhok, 5)
-        ishock, _ = find_shock_front(
-            rhok_smooth,
-            mk,
-            rho_unshocked=float(case.rho0),
-            gamma=float(case.r) + 1.0,
-            Hugoniot_threshold=0.5,
-        )
-        if ishock >= 1:
-            x_shock_sim[k] = float(xk[ishock])
-            
-    # Apply linear regression correction for small times (t < 0.002 ns) in shock detection
-    later_times = np.array([])
-    later_x = np.array([])
-    for k in range(1, times.size):
-        t_ns = times[k] * 1e9
-        if t_ns >= 0.002 and not np.isnan(x_shock_sim[k]):
-            later_times = np.append(later_times, times[k])
-            later_x = np.append(later_x, x_shock_sim[k])
-            
-    if len(later_times) >= 2:
-        slope, intercept = np.polyfit(np.log(later_times+1e-20), np.log(later_x), 1)
-        for k in range(1, times.size):
-            t_ns = times[k] * 1e9
-            if t_ns < 0.002:
-                x_shock_sim[k] = np.exp(slope * np.log(times[k] + 1e-20) + intercept)
-                
-    # 3) Setup figure
-    fig, ax = plt.subplots(figsize=(9.5, 6.5))
-    
-    # Plot mass trajectories
-    NUM_PRESENTED_CELLS = 50
-    chosen_cell_indices = _get_equally_spaced_elements(np.arange(n_cells), NUM_PRESENTED_CELLS)
-    
-    matched_sim_coordinates = np.zeros_like(x_sim, dtype=float)
-    matched_sim_coordinates[:, 1:] = 0.5 * (x_sim[:, 1:] + x_sim[:, :-1])
-    
-    legend_added = False
-    for j in chosen_cell_indices:
-        lbl_sim = "Simulation Cells" if not legend_added else None
-        lbl_men = "Analytic Cells" if not legend_added else None
-        ax.plot(times * 1e9, matched_sim_coordinates[:, j + 1], color="black", lw=0.4, alpha=0.8, label=lbl_sim)
-        ax.plot(times_model * 1e9, position_times[j + 2], color="blue", lw=0.4, alpha=0.7, label=lbl_men)
-        legend_added = True
-        
-    # Plot bold fronts
-    ax.plot(times * 1e9, x_shock_sim, lw=2.5, c="red", label="Shock (simulation)")
-    ax.plot(times_model * 1e9, shock_position, lw=2.0, ls="--", c="darkred", label="Shock (Menahem)")
-    ax.plot(times * 1e9, x_piston_sim, lw=2.5, c="green", label="Piston (simulation)")
-    ax.plot(times_model * 1e9, piston_position, lw=2.0, ls="--", c="darkgreen", label="Piston (Menahem)")
-    
-    ax.set_xlabel(r"$t$ [ns]", fontsize=12)
-    ax.set_ylabel(r"$x$ [cm]", fontsize=12)
-    ax.set_title(f"Space-Time (xt) Trajectories and Fronts\n{case_title}", fontsize=13, fontweight='bold')
-    ax.grid(True, alpha=0.25)
-    ax.legend(loc="lower right", fontsize=9.5)
-    ax.set_xlim(0, times.max() * 1e9)
-    ax.set_ylim(0, max(shock_position.max(), x_shock_sim[np.isfinite(x_shock_sim)].max()) * 1.05)
-    
-    fig.tight_layout()
-    fig.savefig(xt_path, dpi=200)
-    plt.close(fig)
-    print(f"Saved xt trajectory to {xt_path}")
+# (plot_xt_trajectories has been removed to focus exclusively on self-similar fits and relative errors)
 
 
 def evaluate_shock_fits(mass_grid, time, solver, case, popt_P, popt_T, best_u):
@@ -355,13 +247,11 @@ def perform_shock_fitting(solver):
     xsi_vec[0] = 1e-10
     
     V_val, U_val, P_val = solver.get_self_similar_profiles(xsi_vec=xsi_vec)
-    plt.plot(xsi_vec / xsi_vec.max(), V_val, label='V(y)')
-    plt.show()
     rho_val = np.where(V_val > 0, 1.0 / V_val, np.nan)
     e_val = P_val * V_val / solver.r
-    T_val = (e_val * rho_val**(0.14)/6730)**(1/1.6)
+    T_val = (e_val * (rho_val**(0.14))/6730)**(1/1.6)
     
-    valid_idx = (y_grid > 0.005) & np.isfinite(V_val) & np.isfinite(U_val) & np.isfinite(P_val) & np.isfinite(T_val)
+    valid_idx = np.isfinite(V_val) & np.isfinite(U_val) & np.isfinite(P_val) & np.isfinite(T_val)
     y_valid = y_grid[valid_idx]
     T_valid = T_val[valid_idx]
     P_valid = P_val[valid_idx]
@@ -382,8 +272,11 @@ def perform_shock_fitting(solver):
     Es = float(solver.Ps * solver.Rs_or_Vs / solver.r)
     Ts = (Es * rho_valid[-1]**(0.14)/6730)**(1/1.6)
     def power_law_T(y, d):
-        return Ts * (y**d)
-        
+        return Ts * (1-y)**d
+    print("T_s is ", Ts)
+    print("T_val[0] is ", T_valid[0])
+    print("T_val[-1] is ", T_valid[-1])
+    
     popt_T, _ = curve_fit(power_law_T, y_valid, T_valid, p0=[-0.3])
     
     # Velocity fits
@@ -436,7 +329,58 @@ def perform_shock_fitting(solver):
     return y_grid, y_valid, T_valid, P_valid, U_valid, rho_valid, popt_P, popt_T, best_u, fits_u
 
 
-def plot_material_hydro_profiles(history, solver, case, popt_P, popt_T, best_u, material_hydro_path, case_title):
+def evaluate_shock_fits_arrays(mass_grid, time, solver, case, y_valid, P_fit, T_fit, U_fit):
+    """Map self-similar fit arrays to dimensional (CGS) physical profiles on mass_grid at time."""
+    xsi_over_m_val = solver.xsi_over_m(time=time)
+    m_s = solver.xsi_s / xsi_over_m_val
+
+    # Dimensionless shock-front boundary values
+    Ps = solver.Ps
+    Ts = float(solver.Ps * solver.Rs_or_Vs / solver.r)   # EOS: T = P*V/r at shock
+    Us_dim = solver.Us
+
+    # Initialise output arrays
+    rho = np.zeros(len(mass_grid), dtype=float)
+    p   = np.zeros(len(mass_grid), dtype=float)
+    u   = np.zeros(len(mass_grid), dtype=float)
+    T   = np.zeros(len(mass_grid), dtype=float)
+
+    # Exact solver at this time to get dimensional scale factors at the shock front
+    sol_exact = solver.solve(mass=mass_grid, time=time)
+    p_s_cgs   = float(sol_exact["pressure"][-1])    # pressure at shock front [Barye]
+    rho_s_cgs = float(sol_exact["density"][-1])     # density at shock front [g/cm^3]
+    u_s_cgs   = float(sol_exact["velocity"][-1])    # velocity at shock front [cm/s]
+    e_s_cgs = p_s_cgs / (rho_s_cgs * float(case.r))          # specific internal energy at shock front [erg/g]
+    T_s_cgs = (e_s_cgs * rho_s_cgs**(0.14)/6730)**(1/1.6)  # temperature at shock front from EOS [K]
+
+    for i, m in enumerate(mass_grid):
+        if m >= m_s:
+            # Outside shock front (unshocked region)
+            rho[i] = float(case.rho0)
+            p[i]   = 1e-6   # tiny ambient pressure [Barye]
+            u[i]   = 0.0
+            T[i]   = 300.0  # ambient temperature [K]
+        else:
+            # y = normalised coordinate in [0, 1]
+            y = float(m) / m_s
+            y = max(y, 1e-10)
+
+            # Interpolate from dimensionless fit arrays
+            P_fit_y = np.interp(y, y_valid, P_fit)
+            T_fit_y = np.interp(y, y_valid, T_fit)
+            U_fit_y = np.interp(y, y_valid, U_fit)
+
+            # Scale to CGS via shock-front boundary values
+            p[i]   = P_fit_y * (p_s_cgs / max(Ps, 1e-30))
+            T[i]   = T_fit_y * (T_s_cgs / max(Ts, 1e-30))
+            u[i]   = U_fit_y * (u_s_cgs / max(abs(Us_dim), 1e-30))
+            # Density from ideal gas EOS: rho = p / (r * T_cgs)
+            rho[i] = p[i] / (float(case.r) * T[i]) if T[i] > 0 else rho_s_cgs
+
+    return {"density": rho, "pressure": p, "velocity": u, "temperature": T}
+
+
+def plot_dimensional_fit_comparison(history, solver, case, y_valid, P_fit, T_fit, U_fit, material_hydro_path, case_title):
     """Plot overlay profiles of T, rho, P, u vs m comparing Simulation, Exact Solver, and Analytic fits."""
     print(f"Generating physical shock profiles comparison for {case_title}...")
     fig, axes = plt.subplots(2, 2, figsize=(14, 11))
@@ -481,8 +425,8 @@ def plot_material_hydro_profiles(history, solver, case, popt_P, popt_T, best_u, 
             mu = 0.14
             beta = 1.6
             exact_T = (exact_e / (f * exact_rho**(-mu)))**(1/beta)
-        # 3) Analytical fits mapped to CGS
-        fits = evaluate_shock_fits(mass_exact, t_actual, solver, case, popt_P, popt_T, best_u)
+        # 3) Analytical fits mapped to CGS via array interpolation
+        fits = evaluate_shock_fits_arrays(mass_exact, t_actual, solver, case, y_valid, P_fit, T_fit, U_fit)
         fit_rho = fits["density"]
         fit_p = fits["pressure"] / p_scale
         fit_u = fits["velocity"] / u_scale
@@ -558,7 +502,7 @@ def plot_and_fit_self_similar(
     # Panel (0,0): Temperature
     ax = axes[0, 0]
     ax.plot(y_valid, T_valid, 'b-', label='Numerical Solver', lw=2)
-    # ax.plot(y_valid, T_fit, 'r--', label='Analytical Fit', lw=1.5)
+    ax.plot(y_valid, T_fit, 'r--', label='Analytical Fit', lw=1.5)
     ax.set_ylabel(r"Temperature $T(y)$ [dimensionless]", fontsize=12)
     ax.set_title("Shock: Temperature", fontsize=13, fontweight='bold')
     lbl_T = f"$T(y) \\approx T_s y^{{{popt_T[0]:.5f}}}$\nAvg Err: {avg_T:.4f}%, Max Err: {max_T:.4f}%"
@@ -695,117 +639,6 @@ def plot_relative_errors(
 # Custom 5-way animated GIF Evolution saver
 # =============================================================================
 
-def save_custom_evolution_gif(
-    history,
-    case,
-    menahem_ref,
-    gif_path: str,
-    fps: int = 12,
-    stride: int = 1,
-    subtitle: str | None = None,
-):
-    """Generate animated 5-way GIF comparing Simulation vs Menahem PistonShock reference."""
-    from matplotlib.animation import FuncAnimation, PillowWriter
-    
-    p_scale, u_scale, e_scale = 1e12, 1e5, 1e9
-    
-    # Construct 5 vertical panels
-    fig, axes = plt.subplots(5, 1, figsize=(8, 12), sharex=True)
-    k0 = 0
-    m0 = history.m[k0]
-    
-    # 1) Simulation lines (blue solid)
-    sim_lines = []
-    sim_lines.append(axes[0].plot(m0, history.rho[k0], lw=2, label="simulation", color="blue")[0])
-    sim_lines.append(axes[1].plot(m0, history.p[k0] / p_scale, lw=2, label="simulation", color="blue")[0])
-    sim_lines.append(axes[2].plot(m0, history.u[k0] / u_scale, lw=2, label="simulation", color="blue")[0])
-    sim_lines.append(axes[3].plot(m0, history.e[k0] / e_scale, lw=2, label="simulation", color="blue")[0])
-    sim_lines.append(axes[4].plot(m0, history.T[k0] if hasattr(history, 'T') else np.zeros_like(m0), lw=2, label="simulation", color="blue")[0])
-    
-    # 2) Menahem PistonShock lines (magenta/dashed)
-    men_lines = []
-    men_lines.append(axes[0].plot([], [], lw=1.5, color="magenta", linestyle="--", label="Menahem")[0])
-    men_lines.append(axes[1].plot([], [], lw=1.5, color="magenta", linestyle="--", label="Menahem")[0])
-    men_lines.append(axes[2].plot([], [], lw=1.5, color="magenta", linestyle="--", label="Menahem")[0])
-    men_lines.append(axes[3].plot([], [], lw=1.5, color="magenta", linestyle="--", label="Menahem")[0])
-    men_lines.append(axes[4].plot([], [], lw=1.5, color="magenta", linestyle="--", label="Menahem")[0])
-    
-    for ax in axes:
-        ax.legend(loc="upper right", fontsize=8)
-        ax.grid(True, alpha=0.3)
-        
-    x_mass = r"Mass coordinate $m$ [g/cm²]"
-    axes[0].set_ylabel(r"$\rho$ [g/cm³]")
-    axes[1].set_ylabel(r"$P$ [MBar]")
-    axes[2].set_ylabel(r"$u$ [km/s]")
-    axes[3].set_ylabel(r"$e_{\mathrm{mat}}$ [$10^9$ erg/g]")
-    axes[4].set_ylabel(r"$T_{\mathrm{mat}}$ [K]")
-    axes[4].set_xlabel(x_mass)
-    
-    title = fig.suptitle("", fontweight="medium")
-    frame_ids = np.arange(0, len(history.t), stride)
-    
-    def init():
-        return sim_lines + men_lines
-        
-    def update(frame_idx):
-        k = int(frame_ids[frame_idx])
-        mk = history.m[k]
-        t = history.t[k]
-        sim_lines[0].set_data(mk, history.rho[k])
-        sim_lines[1].set_data(mk, history.p[k] / p_scale)
-        sim_lines[2].set_data(mk, history.u[k] / u_scale)
-        sim_lines[3].set_data(mk, history.e[k] / e_scale)
-        
-        # Temp from ideal gas relation: p / (rho * r)
-        with np.errstate(divide='ignore', invalid='ignore'):
-            Tk_sim = np.where(history.rho[k] > 0, history.p[k] / (history.rho[k] * float(case.r)), 0.0)
-        sim_lines[4].set_data(mk, Tk_sim)
-        
-        if menahem_ref is not None:
-            men_idx = int(np.argmin(np.abs(menahem_ref.times - t)))
-            mm = menahem_ref.m[men_idx]
-            men_lines[0].set_data(mm, menahem_ref.rho[men_idx])
-            men_lines[1].set_data(mm, menahem_ref.p[men_idx] / p_scale)
-            men_lines[2].set_data(mm, menahem_ref.u[men_idx] / u_scale)
-            men_lines[3].set_data(mm, menahem_ref.e[men_idx] / e_scale)
-            
-            # Temp from ideal gas relation
-            with np.errstate(divide='ignore', invalid='ignore'):
-                Tk_men = np.where(menahem_ref.rho[men_idx] > 0, menahem_ref.p[men_idx] / (menahem_ref.rho[men_idx] * float(case.r)), 0.0)
-            men_lines[4].set_data(mm, Tk_men)
-            
-        case_title = case.title if hasattr(case, "title") and case.title else "Simulation"
-        header = f"{case_title}\n{subtitle}" if subtitle else case_title
-        title.set_text(
-            f"{header}\n"
-            f"$P(0,t)=P_0 t^{{\\tau}},\\; P_0={case.P0_Barye:.3e},\\; \\tau={case.tau},\\; t={t*1e9:.3f}$ ns"
-        )
-        
-        for ax in axes:
-            ax.relim()
-            ax.autoscale_view()
-        return sim_lines + men_lines
-        
-    anim = FuncAnimation(fig, update, frames=len(frame_ids), init_func=init, blit=False)
-    
-    Path(gif_path).parent.mkdir(parents=True, exist_ok=True)
-    anim.save(gif_path, writer=PillowWriter(fps=fps))
-    plt.close(fig)
-    print(f"Saved custom GIF to {gif_path}")
-
-
-class ReferenceContainer:
-    def __init__(self, times, m, x, rho, p, u, e):
-        self.times = times
-        self.m = m
-        self.x = x
-        self.rho = rho
-        self.p = p
-        self.u = u
-        self.e = e
-
-
 def run_simulation_and_references(preset_name: str, case_label: str):
     """Run full simulation and build PistonShock reference solver, or load from cache."""
     from dataclasses import replace as dc_replace
@@ -815,12 +648,16 @@ def run_simulation_and_references(preset_name: str, case_label: str):
 
     case, config = get_preset(preset_name)
 
-    if cache_path.exists():
+    if USE_CACHE and cache_path.exists():
         print(f"Loading cached simulation and reference data from {cache_path}...")
         try:
             with open(cache_path, "rb") as f:
                 data = pickle.load(f)
-            return data["case"], data["history"], data["menahem_ref"]
+            solver = data["solver"]
+            # Re-bind the ODE solver which contains method callbacks
+            if not hasattr(solver, "ode_solver") or solver.ode_solver is None:
+                solver.ode_solver = scipy.integrate.ode(solver.fode).set_integrator(solver.ode_scheme)
+            return data["case"], data["history"], solver
         except Exception as e:
             print(f"Failed to load cache: {e}. Re-running simulation...")
 
@@ -828,94 +665,63 @@ def run_simulation_and_references(preset_name: str, case_label: str):
     print("Running simulation...")
     _, _, _, history = simulate_rad_hydro(rad_hydro_case=case, simulation_config=config)
 
-    # Build PistonShock reference for the menahem_ref container
-    print("Building PistonShock reference...")
-    times_sec = np.array(history.t)
-    times_sec = times_sec[times_sec > 0.0]
+    # Get PistonShock solver
+    print("Getting cached PistonShock solver...")
+    solver = get_cached_shock_solver(case, case_label)
 
-    kwargs = _shock_kwargs_from_case(case)
-    kwargs["omega"] = float(getattr(case, "omega", 0.0))
-    ref_solver = PistonShock(**kwargs)
+    cache_data = {"case": case, "history": history, "solver": solver}
+    if USE_CACHE:
+        print(f"Saving simulation and reference data cache to {cache_path}...")
+        try:
+            # PistonShock solver contains an un-picklable ode_solver, detach temporarily
+            ode_solver = getattr(solver, "ode_solver", None)
+            if hasattr(solver, "ode_solver"):
+                del solver.ode_solver
+            with open(cache_path, "wb") as f:
+                pickle.dump(cache_data, f, protocol=pickle.HIGHEST_PROTOCOL)
+            if ode_solver is not None:
+                solver.ode_solver = ode_solver
+        except Exception as e:
+            print(f"Failed to save cache: {e}")
 
-    mass = _build_mass_grid(case, num_cells=400)
-    m_list, x_list = [], []
-    rho_list, p_list, u_list, e_list = [], [], [], []
-    for t in times_sec:
-        sol = ref_solver.solve(mass=mass, time=float(t))
-        m_list.append(mass.copy())
-        x_list.append(np.asarray(sol["position"], dtype=float))
-        rho_list.append(np.asarray(sol["density"], dtype=float))
-        p_list.append(np.asarray(sol["pressure"], dtype=float))
-        u_list.append(np.asarray(sol["velocity"], dtype=float))
-        e_list.append(np.asarray(sol["sie"], dtype=float))
-
-    menahem_ref = ReferenceContainer(times_sec, m_list, x_list, rho_list, p_list, u_list, e_list)
-
-    cache_data = {"case": case, "history": history, "menahem_ref": menahem_ref}
-    print(f"Saving simulation and reference data cache to {cache_path}...")
-    try:
-        with open(cache_path, "wb") as f:
-            pickle.dump(cache_data, f, protocol=pickle.HIGHEST_PROTOCOL)
-    except Exception as e:
-        print(f"Failed to save cache: {e}")
-
-    return case, history, menahem_ref
+    return case, history, solver
 
 
 def generate_verification_plots(
     history,
     case,
-    menahem_ref,
+    solver,
     case_label: str,
     case_title: str,
 ):
-    """Generate all verification comparisons, plotting, fitting, and animated GIF."""
+    """Generate analytical self-similar fits, dimensional comparison, and relative error plots."""
     out_dir = Path("results/ictt")
-    xt_dir = out_dir / "xt"
-    mh_dir = out_dir / "material_hydro"
     ss_dir = out_dir / "self_similar"
-    ev_dir = out_dir / "evolution"
+    dv_dir = out_dir / "dimensional_verification"
+    ss_dir.mkdir(parents=True, exist_ok=True)
+    dv_dir.mkdir(parents=True, exist_ok=True)
 
-    for d in [xt_dir, mh_dir, ss_dir, ev_dir]:
-        d.mkdir(parents=True, exist_ok=True)
-
-    xt_path = str(xt_dir / f"{case_label}_xt.png")
-    material_hydro_path = str(mh_dir / f"{case_label}_material_hydro.png")
     self_similar_path = str(ss_dir / f"{case_label}_self_similar.png")
     standalone_path = str(ss_dir / f"{case_label}_velocity_fits_standalone.png")
     relative_errors_path = str(ss_dir / f"{case_label}_relative_errors.png")
-    gif_path = str(ev_dir / f"{case_label}_evolution.gif")
+    dimensional_fit_path = str(dv_dir / f"{case_label}_dimensional_fit_comparison.png")
 
-    # Solve/load cached shock solver
-    solver = get_cached_shock_solver(case, case_label)
     y_grid, y_valid, T_valid, P_valid, U_valid, R_valid, popt_P, popt_T, best_u, fits_u = perform_shock_fitting(solver)
 
-    # 1) Generate space-time trajectories and fronts
-    plot_xt_trajectories(history, case, xt_path, case_title, solver=solver)
+    # Compute fit arrays
+    Ts = float(solver.Ps * solver.Rs_or_Vs / solver.r)
+    P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
+    T_fit = Ts * y_valid**popt_T[0]
+    U_fit = best_u["fit_val"]
 
-    # 2) Plot physical material hydrodynamics comparison
-    plot_material_hydro_profiles(history, solver, case, popt_P, popt_T, best_u, material_hydro_path, case_title)
-
-    # 3) Self-similar profiles and fits
+    # 1) Self-similar profiles and fits
     plot_and_fit_self_similar(solver, y_valid, T_valid, P_valid, U_valid, R_valid, popt_P, popt_T, best_u, fits_u, self_similar_path, standalone_path, case_title)
 
-    # 4) Relative errors of self-similar fits
-    plot_relative_errors(solver, y_valid, T_valid, P_valid, U_valid, R_valid, popt_P, popt_T, best_u, relative_errors_path, case_title)
+    # 2) Dimensional fit comparison
+    plot_dimensional_fit_comparison(history, solver, case, y_valid, P_fit, T_fit, U_fit, dimensional_fit_path, case_title)
 
-    # 5) Animated evolution GIF (conditional)
-    if RUN_GIFS:
-        print(f"Saving animated custom 5-way evolution GIF to {gif_path}...")
-        save_custom_evolution_gif(
-            history=history,
-            case=case,
-            menahem_ref=menahem_ref,
-            gif_path=gif_path,
-            fps=12,
-            stride=max(1, len(history.t) // 60),
-            subtitle="Simulation vs Menahem PistonShock",
-        )
-    else:
-        print("Skipping evolution GIF generation (RUN_GIFS is set to False)...")
+    # 3) Relative errors of self-similar fits
+    plot_relative_errors(solver, y_valid, T_valid, P_valid, U_valid, R_valid, popt_P, popt_T, best_u, relative_errors_path, case_title)
 
 
 def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
@@ -924,12 +730,12 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
     print(f"PROCESSING PRESET: {preset_name} -> {case_label}")
     print("=" * 80)
 
-    case, history, menahem_ref = run_simulation_and_references(preset_name, case_label)
+    case, history, solver = run_simulation_and_references(preset_name, case_label)
 
     generate_verification_plots(
         history=history,
         case=case,
-        menahem_ref=menahem_ref,
+        solver=solver,
         case_label=case_label,
         case_title=case_title,
     )

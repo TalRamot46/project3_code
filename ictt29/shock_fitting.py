@@ -521,9 +521,12 @@ def plot_and_fit_self_similar(
 ):
     print("Generating shock 2x2 self-similar fitting plots...")
     
+    # Compute Ts from EOS (not a PistonShock attribute)
+    Ts = float(solver.Ps * solver.Rs_or_Vs / solver.r)
+    
     # Evaluate fits
     P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
-    T_fit = solver.Ts * y_valid**popt_T[0]
+    T_fit = Ts * y_valid**popt_T[0]
     R_fit = P_fit / (solver.r * T_fit)
     U_fit = best_u["fit_val"]
     
@@ -931,7 +934,7 @@ def main():
     run_preset_workflow(
         PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE,
         "power_law_pressure_drive",
-        "Power-Law Pressure Drive (tau=-0.45)"
+        "Power-Law Pressure Drive (tau=-43/96)"
     )
     print("\nAll custom simulations, PistonShock comparisons, plotting, fitting, and exports completed successfully!")
 

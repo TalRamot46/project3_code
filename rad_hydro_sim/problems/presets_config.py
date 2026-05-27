@@ -35,7 +35,7 @@ from project3_code.rad_hydro_sim.simulation.radiation_step import KELVIN_PER_HEV
 KELVIN_PRE_HEV = 1_160_500
 
 # Power-law preset: change this to update both tau and the title
-_power_law_tau = -0.447
+_power_law_tau = -43/96
 
 PRESET_TEST_CASES = {
     PRESET_CONSTANT_PRESSURE: RadHydroCase(

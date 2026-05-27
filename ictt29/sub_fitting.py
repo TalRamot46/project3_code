@@ -1,18 +1,12 @@
-# ictt29/plot_test_cases.py
+# ictt29/sub_fitting.py
 """
-verification and similarity profile fitting script for Fig 8 and Fig 9.
+Subsonic self-similar profile fitting and dimensional comparison script.
 
-Compiles and compares:
-1. 1D Rad-Hydro Simulation.
-2. Shussman piecewise reference solver (subsonic + shock).
-3. Menahem AblationSolver (piecewise subsonic + shock).
-
-Outputs generated inside results/ictt/ (split by graph types):
-- xt/ Space-time trajectory and fronts (PNG)
-- material_hydro/ e, u, p, rho vs mass coordinate m (PNG)
-- rad_hydro/ E_rad, E_mat, T_rad, T_mat vs mass coordinate m (PNG)
-- self_similar/ Dimensionless similarity profiles T, P, U, S with curve-fits (PNG)
-- evolution/ Animated 3-way GIFs (Simulation vs Shussman vs Menahem).
+Produces:
+1. 2x2 self-similar profile fits (T, rho_EOS, P, U) with LaTeX formula + error labels
+2. Semi-log relative error plot for all 4 profiles
+3. Velocity candidate comparison (6 fits side-by-side)
+4. Dimensional subsonic comparison (solver vs fit vs rad-hydro)
 """
 from __future__ import annotations
 
@@ -20,7 +14,6 @@ import os
 import sys
 import pickle
 from pathlib import Path
-from dataclasses import replace
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
@@ -51,23 +44,13 @@ if str(_MENAHEM_DIR) not in sys.path:
 from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
 from project3_code.rad_hydro_sim.problems.presets_config import (
     PRESET_FIG_8_CONSTANT_TEMPERATURE,
-    PRESET_FIG_9_CONSTANT_FLUX,
 )
-from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
-from project3_code.rad_hydro_sim.verification.shussman_comparison import run_shussman_piecewise_reference
 from project3_code.rad_hydro_sim.verification.menahem_comparison import (
-    run_menahem_piecewise_reference,
-    _ablation_kwargs_from_case,
     _heat_kwargs_from_case,
-    _ns_amplitude_rescale,
-    _build_mass_grid,
 )
 from project3_code.rad_hydro_sim.simulation.radiation_step import KELVIN_PER_HEV
-from project3_code.hydro_sim.plotting.hydro_plots import _create_7panel_vertical_figure
 
-from ablation_solver import AblationSolver
 from subsonic_heat_wave import SubsonicHeatWave
-from piston_shock import PistonShock
 
 RUN_GIFS = False  # Set to True to generate animated evolution GIFs (which takes time)
 
@@ -105,158 +88,6 @@ def get_cached_subsonic_solver(case, case_label):
         print(f"Failed to save solver cache: {e}")
         
     return solver
-
-
-
-# =============================================================================
-# Helper functions for shock detection and rolling average
-# =============================================================================
-
-def find_shock_front(
-    rho: np.ndarray,
-    m_coordinate: np.ndarray,
-    *,
-    rho_unshocked: float,
-    gamma: float,
-    Hugoniot_threshold: float = 0.5,
-) -> tuple[int, float]:
-    """Detect the shock as the right edge of the compressed region."""
-    rho_arr = np.asarray(rho, dtype=float)
-    m_arr = np.asarray(m_coordinate, dtype=float)
-    n = rho_arr.size
-    if n < 3:
-        return -1, float("nan")
-
-    rho_thresh = float(rho_unshocked) * Hugoniot_threshold * (gamma + 1.0) / (gamma - 1.0)
-    compressed = rho_arr > rho_thresh
-    compressed_idx = np.flatnonzero(compressed)
-    if compressed_idx.size > 0:
-        i = int(compressed_idx[-1])
-        return i, float(rho_arr[i])
-
-    drho_dm = np.gradient(rho_arr, m_arr)
-    i_steep = int(np.argmin(drho_dm))
-    if np.isfinite(drho_dm[i_steep]):
-        return i_steep, float(rho_arr[i_steep])
-    return -1, float("nan")
-
-
-def _rolling_mean(a: np.ndarray, window: int) -> np.ndarray:
-    if window <= 1:
-        return np.asarray(a, dtype=float)
-    w = int(max(1, window))
-    kernel = np.ones(w, dtype=float) / float(w)
-    return np.convolve(np.asarray(a, dtype=float), kernel, mode="same")
-
-
-def _get_equally_spaced_elements(times: np.ndarray, n: int) -> np.ndarray:
-    ideal_times = np.linspace(times.min(), times.max(), n)
-    indices = np.searchsorted(times, ideal_times)
-    indices = np.clip(indices, 0, len(times) - 1)
-    for i in range(len(indices)):
-        idx = indices[i]
-        if idx > 0 and abs(times[idx-1] - ideal_times[i]) < abs(times[idx] - ideal_times[i]):
-            indices[i] = idx - 1
-    unique_indices = np.unique(indices)
-    return times[unique_indices]
-
-
-# =============================================================================
-# Plotting functions
-# =============================================================================
-
-def plot_xt_trajectories(history, case, xt_path, case_title, ablation_solver=None):
-    """Plot cell boundaries x(t) and diagnosed fronts (Simulation vs Analytic)."""
-    print(f"Generating space-time (xt) plot for {case_title}...")
-    times = np.asarray(history.t, dtype=float)
-    x_sim = np.asarray(history.x, dtype=float)
-    n_cells = x_sim.shape[1] - 1
-    
-    # 1) Menahem AblationSolver analytic solution
-    if ablation_solver is None:
-        ablation_solver = AblationSolver(**_ablation_kwargs_from_case(case))
-    mass_grid = _build_mass_grid(case, num_cells=n_cells)
-    
-    times_model = _get_equally_spaced_elements(times, 200)
-    results = []
-    for t in times_model:
-        sol = ablation_solver.solve(mass=mass_grid, time=max(float(t), 1e-18))
-        results.append(sol)
-        
-    position_times = np.array([r["position"] for r in results]).T
-    shock_position = np.array([r["shock_position"] for r in results], dtype=float)
-    piston_position = np.array([r["piston_position"] for r in results], dtype=float)
-    heat_position = np.array([r["heat_position"] for r in results], dtype=float)
-    boundary_position = np.array([r["boundary_position"] for r in results], dtype=float)
-    
-    # 2) Simulation shock from density profile
-    x_shock_sim = np.full(times.size - 1, np.nan, dtype=float)
-    for k in range(1, times.size):
-        rhok = np.asarray(history.rho[k], dtype=float)
-        mk = np.asarray(history.m[k], dtype=float)
-        rhok_smooth = _rolling_mean(rhok, 5)
-        ishock, _ = find_shock_front(
-            rhok_smooth,
-            mk,
-            rho_unshocked=float(case.rho0),
-            gamma=float(case.r) + 1.0,
-            Hugoniot_threshold=0.5,
-        )
-        if ishock >= 1:
-            x_shock_sim[k - 1] = float(x_sim[k, ishock])
-            
-    # Apply linear regression correction for small times (t < 0.002 ns)
-    later_times = np.array([])
-    later_x = np.array([])
-    for k in range(1, times.size):
-        t_ns = times[k] * 1e9
-        if t_ns >= 0.002 and not np.isnan(x_shock_sim[k - 1]):
-            later_times = np.append(later_times, times[k])
-            later_x = np.append(later_x, x_shock_sim[k - 1])
-            
-    if len(later_times) >= 2:
-        slope, intercept = np.polyfit(np.log(later_times+1e-20), np.log(later_x), 1)
-        for k in range(1, times.size):
-            t_ns = times[k] * 1e9
-            if t_ns < 0.002:
-                x_shock_sim[k - 1] = np.exp(slope * np.log(times[k] + 1e-20) + intercept)
-            
-    # 3) Setup figure
-    fig, ax = plt.subplots(figsize=(9.5, 6.5))
-    
-    # Plot mass trajectories - thin background grid so they don't cover the fronts
-    NUM_PRESENTED_CELLS = 50
-    chosen_cell_indices = _get_equally_spaced_elements(np.arange(n_cells), NUM_PRESENTED_CELLS)
-    
-    matched_sim_coordinates = np.zeros_like(x_sim, dtype=float)
-    matched_sim_coordinates[:, 1:] = 0.5 * (x_sim[:, 1:] + x_sim[:, :-1])
-    
-    legend_added = False
-    for j in chosen_cell_indices:
-        lbl_sim = "Simulation Cells" if not legend_added else None
-        lbl_men = "Analytic Cells" if not legend_added else None
-        ax.plot(times * 1e9, matched_sim_coordinates[:, j + 1], color="black", lw=0.4, alpha=0.8, label=lbl_sim)
-        ax.plot(times_model * 1e9, position_times[j + 2], color="blue", lw=0.4, alpha=0.7, label=lbl_men)
-        legend_added = True
-        
-    # Plot bold fronts
-    ax.plot(times[1:] * 1e9, x_shock_sim, lw=2.5, c="red", label="Shock (simulation)")
-    ax.plot(times_model * 1e9, shock_position, lw=2.0, ls="--", c="darkred", label="Shock (Menahem)")
-    ax.plot(times_model * 1e9, piston_position, lw=2.0, ls="--", c="green", label="Piston (Menahem)")
-    ax.plot(times_model * 1e9, heat_position, lw=2.0, ls="--", c="purple", label="Heat Wave (Menahem)")
-    # ax.plot(times_model * 1e9, boundary_position, lw=2.0, ls="--", c="black", label="Boundary (Menahem)")
-    
-    ax.set_xlabel(r"$t$ [ns]", fontsize=12)
-    ax.set_ylabel(r"$x$ [cm]", fontsize=12)
-    ax.set_title(f"Space-Time (xt) Trajectories and Fronts\n{case_title}", fontsize=13, fontweight='bold')
-    ax.grid(True, alpha=0.25)
-    ax.legend(loc="lower right", fontsize=9.5)
-    # ax.set_xlim(times.min() * 1e9, times.max() * 1e9)
-    ax.set_ylim(0, 0.00016)
-    
-    fig.tight_layout()
-    fig.savefig(xt_path, dpi=200)
-    plt.close(fig)
 
 
 def evaluate_subsonic_fits(mass_grid, t_sec, solver, popt_T, popt_P, best_u):
@@ -309,163 +140,6 @@ def evaluate_subsonic_fits(mass_grid, t_sec, solver, popt_T, popt_P, best_u):
     return {"density": rho, "pressure": p, "velocity": u, "temperature": T, "m_f": m_f}
 
 
-def plot_material_hydro_profiles(history, solver, popt_T, popt_P, best_u, material_hydro_path, case_title):
-    """Plot overlay profiles of T, rho, P, u vs m comparing Simulation, Exact Solver, and Analytic fits."""
-    print(f"Generating subsonic physical comparison profiles for {case_title}...")
-    fig, axes = plt.subplots(2, 2, figsize=(14, 11))
-    
-    target_times = [1e-9, 1.5e-9, 2e-9]
-    colors = ["red", "green", "blue"]
-    p_scale, u_scale = 1e12, 1e5
-    
-    ax_T = axes[0, 0]
-    ax_rho = axes[0, 1]
-    ax_p = axes[1, 0]
-    ax_u = axes[1, 1]
-    
-    for t_target, color in zip(target_times, colors):
-        # 1) Simulation
-        idx_sim = np.argmin(np.abs(np.array(history.t) - t_target))
-        m_sim = history.m[idx_sim]
-        t_actual = history.t[idx_sim]
-        
-        sim_rho = history.rho[idx_sim]
-        sim_p = history.p[idx_sim] / p_scale
-        sim_u = history.u[idx_sim] / u_scale
-        sim_T = history.T[idx_sim]
-        
-        # 2) Exact Solver
-        m_f_exact = solver.ablated_mass(time=t_actual)
-        mass_exact = np.linspace(1e-12, m_f_exact, 200)
-        sol_exact = solver.solve(mass=mass_exact, time=t_actual)
-        
-        exact_rho = sol_exact["density"]
-        exact_p = sol_exact["pressure"] / p_scale
-        exact_u = sol_exact["velocity"] / u_scale
-        exact_T = sol_exact["temperature"]
-        
-        # 3) Analytical fits mapped to CGS
-        fits = evaluate_subsonic_fits(mass_exact, t_actual, solver, popt_T, popt_P, best_u)
-        fit_rho = fits["density"]
-        fit_p = fits["pressure"] / p_scale
-        fit_u = fits["velocity"] / u_scale
-        fit_T = fits["temperature"]
-        
-        # Plot Temperature (K)
-        ax_T.plot(m_sim * 1e3, sim_T, '.', color=color, alpha=0.3, markersize=3, label=f'Simulation ({t_target*1e9:.1f} ns)' if color=='red' else None)
-        ax_T.plot(mass_exact * 1e3, exact_T, '-', color=color, lw=2.0, label=f'Exact Solver ({t_target*1e9:.1f} ns)' if color=='red' else None)
-        ax_T.plot(mass_exact * 1e3, fit_T, '--', color=color, lw=1.5, label=f'Analytic Fit ({t_target*1e9:.1f} ns)' if color=='red' else None)
-        
-        # Plot Density (g/cm^3)
-        ax_rho.plot(m_sim * 1e3, sim_rho, '.', color=color, alpha=0.3, markersize=3)
-        ax_rho.plot(mass_exact * 1e3, exact_rho, '-', color=color, lw=2.0)
-        ax_rho.plot(mass_exact * 1e3, fit_rho, '--', color=color, lw=1.5)
-        
-        # Plot Pressure (MBar)
-        ax_p.plot(m_sim * 1e3, sim_p, '.', color=color, alpha=0.3, markersize=3)
-        ax_p.plot(mass_exact * 1e3, exact_p, '-', color=color, lw=2.0)
-        ax_p.plot(mass_exact * 1e3, fit_p, '--', color=color, lw=1.5)
-        
-        # Plot Velocity (km/s)
-        ax_u.plot(m_sim * 1e3, sim_u, '.', color=color, alpha=0.3, markersize=3)
-        ax_u.plot(mass_exact * 1e3, exact_u, '-', color=color, lw=2.0)
-        ax_u.plot(mass_exact * 1e3, fit_u, '--', color=color, lw=1.5)
-
-    # Labels and Titles
-    ax_T.set_ylabel(r"$T$ [Kelvin]", fontsize=12)
-    ax_rho.set_ylabel(r"$\rho$ [g/cm³]", fontsize=12)
-    ax_p.set_ylabel(r"$P$ [MBar]", fontsize=12)
-    ax_u.set_ylabel(r"$u$ [km/s]", fontsize=12)
-    
-    ax_T.legend(loc='best', fontsize=9)
-    
-    for ax in axes.flat:
-        ax.set_xlabel(r"Mass coordinate $m$ [mg/cm²]", fontsize=11)
-        ax.grid(True, alpha=0.25)
-        
-    fig.suptitle(f"Dimensional Subsonic Profiles Comparison\n{case_title}", fontsize=14, fontweight='bold')
-    plt.tight_layout()
-    fig.savefig(material_hydro_path, dpi=200)
-    plt.close(fig)
-
-
-def plot_rad_hydro_profiles(history, shussman_ref, menahem_ref, rad_hydro_path, case_title):
-    """Plot overlay profiles of T_mat, T_rad, E_rad, and coupling vs m (mass coordinate) at 0.05, 0.1, 0.15 ns (evolution snippets)."""
-    print(f"Generating radiation-hydrodynamics profiles for {case_title}...")
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-    target_times = [1e-9, 1.5e-9, 2e-9]
-    colors = plt.cm.viridis(np.linspace(0.2, 0.85, len(target_times)))
-    
-    # Loop over times
-    for t_target, color in zip(target_times, colors):
-        # 1) Simulation
-        idx_sim = np.argmin(np.abs(np.array(history.t) - t_target))
-        m_sim = history.m[idx_sim]
-        T_rad_sim = history.T[idx_sim]
-        T_mat_sim = (history.T_material[idx_sim] if (hasattr(history, 'T_material') and history.T_material is not None) else history.T[idx_sim])
-        E_rad_sim = history.E_rad[idx_sim]
-        
-        # 2) Shussman
-        idx_sh = np.argmin(np.abs(np.array(shussman_ref.times) - t_target))
-        m_sh = shussman_ref.m[idx_sh]
-        T_rad_sh = shussman_ref.T[idx_sh] * KELVIN_PER_HEV
-        T_mat_sh = T_rad_sh  # Subsonic radiation diffusion equilibrium
-        E_rad_sh = shussman_ref.E_rad[idx_sh]
-        
-        # 3) Menahem
-        idx_men = np.argmin(np.abs(np.array(menahem_ref.times) - t_target))
-        m_men = menahem_ref.m[idx_men]
-        T_rad_men = menahem_ref.T[idx_men] * KELVIN_PER_HEV
-        T_mat_men = (menahem_ref.T_material[idx_men] if menahem_ref.T_material else menahem_ref.T[idx_men]) * KELVIN_PER_HEV
-        E_rad_men = menahem_ref.E_rad[idx_men]
-        
-        # Panel (0,0): T_mat [K]
-        axes[0, 0].plot(m_sim, T_mat_sim, color=color, linestyle='-', lw=1.8)
-        axes[0, 0].plot(m_sh, T_mat_sh, color=color, linestyle='--', lw=1.5)
-        axes[0, 0].plot(m_men, T_mat_men, color=color, linestyle='--', lw=1.5)
-        
-        # Panel (0,1): T_rad [K]
-        axes[0, 1].plot(m_sim, T_rad_sim, color=color, linestyle='-', lw=1.8)
-        axes[0, 1].plot(m_sh, T_rad_sh, color=color, linestyle='--', lw=1.5)
-        axes[0, 1].plot(m_men, T_rad_men, color=color, linestyle='--', lw=1.5)
-        
-        # Panel (1,0): E_rad [erg/cm³]
-        axes[1, 0].plot(m_sim, E_rad_sim, color=color, linestyle='-', lw=1.8)
-        axes[1, 0].plot(m_sh, E_rad_sh, color=color, linestyle='--', lw=1.5)
-        axes[1, 0].plot(m_men, E_rad_men, color=color, linestyle='--', lw=1.5)
-        
-        # Panel (1,1): T_mat and T_rad Coupling Comparison [K]
-        axes[1, 1].plot(m_sim, T_mat_sim, color=color, linestyle='-', lw=1.8)
-        axes[1, 1].plot(m_sim, T_rad_sim, color=color, linestyle='-.', lw=1.2)
-        axes[1, 1].plot(m_men, T_mat_men, color=color, linestyle='--', lw=1.2)
-        axes[1, 1].plot(m_men, T_rad_men, color=color, linestyle='--', lw=1.0)
-        
-    # Labels and Titles
-    axes[0, 0].set_ylabel(r"$T_{\mathrm{mat}}$ [K]", fontsize=12)
-    axes[0, 1].set_ylabel(r"$T_{\mathrm{rad}}$ [K]", fontsize=12)
-    axes[1, 0].set_ylabel(r"$E_{\mathrm{rad}}$ [erg/cm³]", fontsize=12)
-    axes[1, 1].set_ylabel(r"Coupling $T_{\mathrm{mat}}, T_{\mathrm{rad}}$ [K]", fontsize=12)
-    
-    for ax in axes.flat:
-        ax.set_xlabel(r"Mass coordinate $m$ [g/cm²]", fontsize=12)
-        ax.grid(True, alpha=0.3)
-        ax.ticklabel_format(axis='x', style='sci', scilimits=(0,0))
-        
-    # Legend
-    legend_elements = [
-        Line2D([0], [0], color='black', linestyle='-', lw=1.8, label='simulation'),
-        Line2D([0], [0], color='black', linestyle='--', lw=1.5, label='Shussman'),
-        Line2D([0], [0], color='black', linestyle='--', lw=1.5, label='Menahem'),
-        Line2D([0], [0], marker='o', color='none', markerfacecolor=colors[0], markersize=8, label='0.05 ns'),
-        Line2D([0], [0], marker='o', color='none', markerfacecolor=colors[1], markersize=8, label='0.10 ns'),
-        Line2D([0], [0], marker='o', color='none', markerfacecolor=colors[2], markersize=8, label='0.15 ns'),
-        Line2D([0], [0], color='grey', linestyle='-.', lw=1.2, label=r'T_rad (Simulation)'),
-    ]
-    axes[0, 0].legend(handles=legend_elements, loc='best', fontsize=9.5)
-    
-    fig.suptitle(f"Radiation-Hydrodynamics Profiles\n{case_title}", fontsize=14, fontweight='bold')
-    plt.tight_layout()
-    fig.savefig(rad_hydro_path, dpi=200)
 def perform_subsonic_fitting(solver):
     y_grid = np.linspace(0.0, 1.0 - 1e-6, 500)
     xsi_vec = y_grid * solver.xsi_f
@@ -672,7 +346,7 @@ def plot_and_fit_self_similar(solver, self_similar_path, standalone_path, relati
     print(f"Saved subsonic relative errors to {relative_errors_path}")
     
     # ----------------------------------------------------
-    # 3) Velocity Standalone Fits Comparison Plot (Task 4)
+    # 3) Velocity Standalone Fits Comparison Plot (Task 3)
     # ----------------------------------------------------
     fig_sa, (ax_sa1, ax_sa2) = plt.subplots(1, 2, figsize=(18, 8.5))
     
@@ -710,533 +384,166 @@ def plot_and_fit_self_similar(solver, self_similar_path, standalone_path, relati
     plt.close(fig_sa)
     print(f"Saved standalone velocity fits to {standalone_path}")
 
-def save_custom_evolution_gif(
-    history,
-    case,
-    shussman_ref,
-    menahem_ref,
-    gif_path: str,
-    fps: int = 12,
-    stride: int = 1,
-    subtitle: str | None = None,
-):
-    """Generate animated 3-way GIF comparing Simulation, Shussman reference, and Menahem reference."""
-    from matplotlib.animation import FuncAnimation, PillowWriter
-    
-    p_scale, u_scale, e_scale = 1e12, 1e5, 1e9
-    has_T_material = hasattr(history, "T_material") and history.T_material is not None
-    
-    fig, axes = _create_7panel_vertical_figure()
-    k0 = 0
-    m0 = history.m[k0] if hasattr(history, "m") else history.x[k0]
-    
-    # 1) Simulation lines (blue solid)
-    sim_lines = []
-    sim_lines.append(axes[0].plot(m0, history.rho[k0], lw=2, label="simulation", color="blue")[0])
-    sim_lines.append(axes[1].plot(m0, history.p[k0] / p_scale, lw=2, label="simulation", color="blue")[0])
-    sim_lines.append(axes[2].plot(m0, history.u[k0] / u_scale, lw=2, label="simulation", color="blue")[0])
-    sim_lines.append(axes[3].plot(m0, history.e[k0] / e_scale, lw=2, label="simulation", color="blue")[0])
-    sim_lines.append(axes[4].plot(m0, history.T_material[k0] if has_T_material else history.T[k0], lw=2, label="simulation", color="blue")[0])
-    sim_lines.append(axes[5].plot(m0, history.T[k0], lw=2, label="simulation", color="blue")[0])
-    sim_lines.append(axes[6].plot(m0, history.E_rad[k0], lw=2, label="simulation", color="blue")[0])
-    
-    # 2) Shussman reference lines (green dashed)
-    sh_lines = []
-    sh_lines.append(axes[0].plot([], [], lw=1.5, color="green", linestyle="--", label="Shussman")[0])
-    sh_lines.append(axes[1].plot([], [], lw=1.5, color="green", linestyle="--", label="Shussman")[0])
-    sh_lines.append(axes[2].plot([], [], lw=1.5, color="green", linestyle="--", label="Shussman")[0])
-    sh_lines.append(axes[3].plot([], [], lw=1.5, color="green", linestyle="--", label="Shussman")[0])
-    sh_lines.append(axes[4].plot([], [], lw=1.5, color="green", linestyle="--", label="Shussman")[0])
-    sh_lines.append(axes[5].plot([], [], lw=1.5, color="green", linestyle="--", label="Shussman")[0])
-    sh_lines.append(axes[6].plot([], [], lw=1.5, color="green", linestyle="--", label="Shussman")[0])
-    
-    # 3) Menahem reference lines (red dashed)
-    men_lines = []
-    men_lines.append(axes[0].plot([], [], lw=1.5, color="red", linestyle="--", label="Menahem")[0])
-    men_lines.append(axes[1].plot([], [], lw=1.5, color="red", linestyle="--", label="Menahem")[0])
-    men_lines.append(axes[2].plot([], [], lw=1.5, color="red", linestyle="--", label="Menahem")[0])
-    men_lines.append(axes[3].plot([], [], lw=1.5, color="red", linestyle="--", label="Menahem")[0])
-    men_lines.append(axes[4].plot([], [], lw=1.5, color="red", linestyle="--", label="Menahem")[0])
-    men_lines.append(axes[5].plot([], [], lw=1.5, color="red", linestyle="--", label="Menahem")[0])
-    men_lines.append(axes[6].plot([], [], lw=1.5, color="red", linestyle="--", label="Menahem")[0])
-    
-    for ax in axes:
-        ax.legend(loc="upper right", fontsize=8)
-        
-    x_mass = r"Mass coordinate $m$ [g/cm²]"
-    axes[0].set_ylabel(r"$\rho$ [g/cm³]")
-    axes[1].set_ylabel(r"$P$ [MBar]")
-    axes[2].set_ylabel(r"$u$ [km/s]")
-    axes[3].set_ylabel(r"$e_{\mathrm{mat}}$ [$10^9$ erg/g]")
-    axes[4].set_ylabel(r"$T_{\mathrm{mat}}$ [K]")
-    axes[5].set_ylabel(r"$T_{\mathrm{rad}}$ [K]")
-    axes[6].set_ylabel(r"$E_{\mathrm{rad}}$ [erg/cm³]")
-    for ax in axes:
-        ax.set_xlabel(x_mass)
-        ax.tick_params(axis="x", labelbottom=True)
-        ax.grid(True, alpha=0.3)
-        
-    title = fig.suptitle("", fontweight="medium")
-    frame_ids = np.arange(0, len(history.t), stride)
-    
-    def init():
-        return sim_lines + sh_lines + men_lines
-        
-    def update(frame_idx):
-        k = int(frame_ids[frame_idx])
-        mk = history.m[k] if hasattr(history, "m") else history.x[k]
-        t = history.t[k]
-        sim_lines[0].set_data(mk, history.rho[k])
-        sim_lines[1].set_data(mk, history.p[k] / p_scale)
-        sim_lines[2].set_data(mk, history.u[k] / u_scale)
-        sim_lines[3].set_data(mk, history.e[k] / e_scale)
-        sim_lines[4].set_data(mk, history.T_material[k] if has_T_material else history.T[k])
-        sim_lines[5].set_data(mk, history.T[k])
-        sim_lines[6].set_data(mk, history.E_rad[k])
-        
-        if shussman_ref is not None:
-            sh_idx = int(np.argmin(np.abs(shussman_ref.times - t)))
-            mr = shussman_ref.m[sh_idx]
-            sh_lines[0].set_data(mr, shussman_ref.rho[sh_idx])
-            sh_lines[1].set_data(mr, shussman_ref.p[sh_idx] / p_scale)
-            sh_lines[2].set_data(mr, shussman_ref.u[sh_idx] / u_scale)
-            sh_lines[3].set_data(mr, shussman_ref.e[sh_idx] / e_scale)
-            T_sh_K = (shussman_ref.T[sh_idx] * KELVIN_PER_HEV) if (shussman_ref.T and sh_idx < len(shussman_ref.T)) else np.array([])
-            sh_lines[4].set_data(mr, T_sh_K)
-            sh_lines[5].set_data(mr, T_sh_K)
-            E_sh = shussman_ref.E_rad[sh_idx] if (shussman_ref.E_rad and sh_idx < len(shussman_ref.E_rad)) else np.array([])
-            sh_lines[6].set_data(mr, E_sh)
-            
-        if menahem_ref is not None:
-            men_idx = int(np.argmin(np.abs(menahem_ref.times - t)))
-            mm = menahem_ref.m[men_idx]
-            men_lines[0].set_data(mm, menahem_ref.rho[men_idx])
-            men_lines[1].set_data(mm, menahem_ref.p[men_idx] / p_scale)
-            men_lines[2].set_data(mm, menahem_ref.u[men_idx] / u_scale)
-            men_lines[3].set_data(mm, menahem_ref.e[men_idx] / e_scale)
-            T_men_rad_K = (menahem_ref.T[men_idx] * KELVIN_PER_HEV) if (menahem_ref.T and men_idx < len(menahem_ref.T)) else np.array([])
-            if hasattr(menahem_ref, "T_material") and menahem_ref.T_material:
-                T_men_mat_K = (menahem_ref.T_material[men_idx] * KELVIN_PER_HEV)
-            else:
-                T_men_mat_K = T_men_rad_K
-            men_lines[4].set_data(mm, T_men_mat_K)
-            men_lines[5].set_data(mm, T_men_rad_K)
-            E_men = menahem_ref.E_rad[men_idx] if (menahem_ref.E_rad and men_idx < len(menahem_ref.E_rad)) else np.array([])
-            men_lines[6].set_data(mm, E_men)
-            
-        case_title = case.title if hasattr(case, "title") and case.title else "Simulation"
-        header = f"{case_title}\n{subtitle}" if subtitle else case_title
-        if case.T0_Kelvin is not None and case.tau is not None:
-            title.set_text(
-                f"{header}\n"
-                f"$T(0,t)=T_0 t^{{\\tau}},\\; T_0={case.T0_Kelvin},\\; \\tau={case.tau},\\; t={t:.3e}$ s"
-            )
-        elif getattr(case, "P0", None) is not None and getattr(case, "tau", None) is not None:
-            title.set_text(
-                f"{header}\n"
-                f"$P(0,t)=P_0 t^{{\\tau}},\\; P_0={case.P0_Barye},\\; \\tau={case.tau},\\; t={t:.3e}$ s"
-            )
-        else:
-            title.set_text(f"{header}\n$t={t:.3e}$ s")
-            
-        for ax in axes:
-            ax.relim()
-            ax.autoscale_view()
-        return sim_lines + sh_lines + men_lines
-        
-    anim = FuncAnimation(fig, update, frames=len(frame_ids), init_func=init, blit=False)
-    
-    Path(gif_path).parent.mkdir(parents=True, exist_ok=True)
-    anim.save(gif_path, writer=PillowWriter(fps=fps))
-    plt.close(fig)
-    print(f"Saved custom GIF to {gif_path}")
-
-
-def save_custom_euler_evolution_gif(
-    history,
-    case,
-    shussman_ref,
-    menahem_ref,
-    gif_path: str,
-    fps: int = 12,
-    stride: int = 1,
-    subtitle: str | None = None,
-    ablation_solver=None,
-):
-    """Generate animated 3-way GIF in shifted Eulerian coordinates with front predictions."""
-    from matplotlib.animation import FuncAnimation, PillowWriter
-    
-    p_scale, u_scale, e_scale = 1e12, 1e5, 1e9
-    has_T_material = hasattr(history, "T_material") and history.T_material is not None
-    
-    fig, axes = _create_7panel_vertical_figure()
-    k0 = 0
-    
-    # Grid construction for fronts
-    n_cells = len(history.rho[0])
-    mass_grid = _build_mass_grid(case, num_cells=n_cells)
-    if ablation_solver is None:
-        from ablation_solver import AblationSolver
-        ablation_solver = AblationSolver(**_ablation_kwargs_from_case(case))
-    
-    # 1) Simulation lines (blue solid)
-    # Shift simulation cell coordinates so boundary is at x=0
-    shift_sim = history.x[k0, 0] - history.m[k0, 0] / (2.0 * history.rho[k0, 0])
-    xk0 = history.x[k0] - shift_sim
-    
-    sim_lines = []
-    sim_lines.append(axes[0].plot(xk0, history.rho[k0], lw=2, label="simulation", color="blue")[0])
-    sim_lines.append(axes[1].plot(xk0, history.p[k0] / p_scale, lw=2, label="simulation", color="blue")[0])
-    sim_lines.append(axes[2].plot(xk0, history.u[k0] / u_scale, lw=2, label="simulation", color="blue")[0])
-    sim_lines.append(axes[3].plot(xk0, history.e[k0] / e_scale, lw=2, label="simulation", color="blue")[0])
-    sim_lines.append(axes[4].plot(xk0, history.T_material[k0] if has_T_material else history.T[k0], lw=2, label="simulation", color="blue")[0])
-    sim_lines.append(axes[5].plot(xk0, history.T[k0], lw=2, label="simulation", color="blue")[0])
-    sim_lines.append(axes[6].plot(xk0, history.E_rad[k0], lw=2, label="simulation", color="blue")[0]               )
-    
-    # 2) Shussman reference lines (green dashed)
-    sh_lines = []
-    sh_lines.append(axes[0].plot([], [], lw=1.5, color="green", linestyle="--", label="Shussman")[0])
-    sh_lines.append(axes[1].plot([], [], lw=1.5, color="green", linestyle="--", label="Shussman")[0])
-    sh_lines.append(axes[2].plot([], [], lw=1.5, color="green", linestyle="--", label="Shussman")[0])
-    sh_lines.append(axes[3].plot([], [], lw=1.5, color="green", linestyle="--", label="Shussman")[0])
-    sh_lines.append(axes[4].plot([], [], lw=1.5, color="green", linestyle="--", label="Shussman")[0])
-    sh_lines.append(axes[5].plot([], [], lw=1.5, color="green", linestyle="--", label="Shussman")[0])
-    sh_lines.append(axes[6].plot([], [], lw=1.5, color="green", linestyle="--", label="Shussman")[0])
-    
-    # 3) Menahem reference lines (red dashed)
-    men_lines = []
-    men_lines.append(axes[0].plot([], [], lw=1.5, color="red", linestyle="--", label="Menahem")[0])
-    men_lines.append(axes[1].plot([], [], lw=1.5, color="red", linestyle="--", label="Menahem")[0])
-    men_lines.append(axes[2].plot([], [], lw=1.5, color="red", linestyle="--", label="Menahem")[0])
-    men_lines.append(axes[3].plot([], [], lw=1.5, color="red", linestyle="--", label="Menahem")[0])
-    men_lines.append(axes[4].plot([], [], lw=1.5, color="red", linestyle="--", label="Menahem")[0])
-    men_lines.append(axes[5].plot([], [], lw=1.5, color="red", linestyle="--", label="Menahem")[0])
-    men_lines.append(axes[6].plot([], [], lw=1.5, color="red", linestyle="--", label="Menahem")[0])
-    
-    # 4) Front vertical lines
-    bnd_vlines = []
-    abl_vlines = []
-    sh_vlines = []
-    for i, ax in enumerate(axes):
-        lbl_bnd = "Boundary Front" if i == 0 else None
-        lbl_abl = "Ablation Front" if i == 0 else None
-        lbl_sh = "Shock Front" if i == 0 else None
-        bnd_vlines.append(ax.axvline(0.0, color="black", linestyle="-", alpha=0.5, label=lbl_bnd))
-        abl_vlines.append(ax.axvline(0.0, color="purple", linestyle="--", alpha=0.7, label=lbl_abl))
-        sh_vlines.append(ax.axvline(0.0, color="red", linestyle="--", alpha=0.7, label=lbl_sh))
-        
-    for ax in axes:
-        ax.legend(loc="upper right", fontsize=8)
-        
-    x_euler = r"Eulerian coordinate $x$ [cm] (shifted)"
-    axes[0].set_ylabel(r"$\rho$ [g/cm³]")
-    axes[1].set_ylabel(r"$P$ [MBar]")
-    axes[2].set_ylabel(r"$u$ [km/s]")
-    axes[3].set_ylabel(r"$e_{\mathrm{mat}}$ [$10^9$ erg/g]")
-    axes[4].set_ylabel(r"$T_{\mathrm{mat}}$ [K]")
-    axes[5].set_ylabel(r"$T_{\mathrm{rad}}$ [K]")
-    axes[6].set_ylabel(r"$E_{\mathrm{rad}}$ [erg/cm³]")
-    for ax in axes:
-        ax.set_xlabel(x_euler)
-        ax.tick_params(axis="x", labelbottom=True)
-        ax.grid(True, alpha=0.3)
-        
-    title = fig.suptitle("", fontweight="medium")
-    frame_ids = np.arange(0, len(history.t), stride)
-    
-    def init():
-        return sim_lines + sh_lines + men_lines + bnd_vlines + abl_vlines + sh_vlines
-        
-    def update(frame_idx):
-        k = int(frame_ids[frame_idx])
-        t = history.t[k]
-        
-        # Shift simulation cell coordinates so boundary is at x=0
-        shift_sim = history.x[k, 0] - history.m[k, 0] / (2.0 * history.rho[k, 0])
-        xk = history.x[k] - shift_sim
-        
-        sim_lines[0].set_data(xk, history.rho[k])
-        sim_lines[1].set_data(xk, history.p[k] / p_scale)
-        sim_lines[2].set_data(xk, history.u[k] / u_scale)
-        sim_lines[3].set_data(xk, history.e[k] / e_scale)
-        sim_lines[4].set_data(xk, history.T_material[k] if has_T_material else history.T[k])
-        sim_lines[5].set_data(xk, history.T[k])
-        sim_lines[6].set_data(xk, history.E_rad[k])
-        
-        if shussman_ref is not None:
-            sh_idx = int(np.argmin(np.abs(shussman_ref.times - t)))
-            xr = shussman_ref.x[sh_idx]
-            sh_lines[0].set_data(xr, shussman_ref.rho[sh_idx])
-            sh_lines[1].set_data(xr, shussman_ref.p[sh_idx] / p_scale)
-            sh_lines[2].set_data(xr, shussman_ref.u[sh_idx] / u_scale)
-            sh_lines[3].set_data(xr, shussman_ref.e[sh_idx] / e_scale)
-            T_sh_K = (shussman_ref.T[sh_idx] * KELVIN_PER_HEV) if (shussman_ref.T and sh_idx < len(shussman_ref.T)) else np.array([])
-            sh_lines[4].set_data(xr, T_sh_K)
-            sh_lines[5].set_data(xr, T_sh_K)
-            E_sh = shussman_ref.E_rad[sh_idx] if (shussman_ref.E_rad and sh_idx < len(shussman_ref.E_rad)) else np.array([])
-            sh_lines[6].set_data(xr, E_sh)
-            
-        if menahem_ref is not None:
-            men_idx = int(np.argmin(np.abs(menahem_ref.times - t)))
-            xm = menahem_ref.x[men_idx]
-            men_lines[0].set_data(xm, menahem_ref.rho[men_idx])
-            men_lines[1].set_data(xm, menahem_ref.p[men_idx] / p_scale)
-            men_lines[2].set_data(xm, menahem_ref.u[men_idx] / u_scale)
-            men_lines[3].set_data(xm, menahem_ref.e[men_idx] / e_scale)
-            T_men_rad_K = (menahem_ref.T[men_idx] * KELVIN_PER_HEV) if (menahem_ref.T and men_idx < len(menahem_ref.T)) else np.array([])
-            if hasattr(menahem_ref, "T_material") and menahem_ref.T_material:
-                T_men_mat_K = (menahem_ref.T_material[men_idx] * KELVIN_PER_HEV)
-            else:
-                T_men_mat_K = T_men_rad_K
-            men_lines[4].set_data(xm, T_men_mat_K)
-            men_lines[5].set_data(xm, T_men_rad_K)
-            E_men = menahem_ref.E_rad[men_idx] if (menahem_ref.E_rad and men_idx < len(menahem_ref.E_rad)) else np.array([])
-            men_lines[6].set_data(xm, E_men)
-            
-        # 4) Front predictions via AblationSolver
-        try:
-            sol = ablation_solver.solve(mass=mass_grid, time=max(float(t), 1e-18))
-            x_bnd = 0.00
-            x_abl = sol["heat_position"] - sol["boundary_position"]
-            x_shock = sol["shock_position"] - sol["boundary_position"]
-        except Exception:
-            x_bnd = 0.0
-            x_abl = np.nan
-            x_shock = np.nan
-            
-        for i, ax in enumerate(axes):
-            bnd_vlines[i].set_xdata([x_bnd, x_bnd])
-            abl_vlines[i].set_xdata([x_abl, x_abl])
-            sh_vlines[i].set_xdata([x_shock, x_shock])
-            
-        case_title = case.title if hasattr(case, "title") and case.title else "Simulation"
-        header = f"{case_title}\n{subtitle}" if subtitle else case_title
-        if case.T0_Kelvin is not None and case.tau is not None:
-            title.set_text(
-                f"{header}\n"
-                f"$T(0,t)=T_0 t^{{\\tau}},\\; T_0={case.T0_Kelvin},\\; \\tau={case.tau},\\; t={t:.3e}$ s"
-            )
-        elif getattr(case, "P0", None) is not None and getattr(case, "tau", None) is not None:
-            title.set_text(
-                f"{header}\n"
-                f"$P(0,t)=P_0 t^{{\\tau}},\\; P_0={case.P0_Barye},\\; \\tau={case.tau},\\; t={t:.3e}$ s"
-            )
-        else:
-            title.set_text(f"{header}\n$t={t:.3e}$ s")
-            
-        for ax in axes:
-            ax.relim()
-            ax.autoscale_view()
-        return sim_lines + sh_lines + men_lines + bnd_vlines + abl_vlines + sh_vlines
-        
-    anim = FuncAnimation(fig, update, frames=len(frame_ids), init_func=init, blit=False)
-    
-    Path(gif_path).parent.mkdir(parents=True, exist_ok=True)
-    anim.save(gif_path, writer=PillowWriter(fps=fps))
-    plt.close(fig)
-    print(f"Saved custom Eulerian GIF to {gif_path}")
-
 
 # =============================================================================
-# Main Orchestration Loop
+# Dimensional Subsonic Comparison (Task 5)
 # =============================================================================
 
-def run_simulation_and_references(preset_name: str, case_label: str):
-    """Run full simulation and build reference solvers, or load from pickle cache."""
-    import pickle
+def load_full_rad_hydro_numerical_data() -> dict:
+    """Loads the Fig 8 (tau = 0) Rad-Hydro simulation results from saved npz."""
+    fn = os.path.join(r'C:\Users\TLP-001\Documents\GitHub\project3_code\rad_hydro_sim\data', 
+                      'sim_data_Fig_8_comparison_\u03c40_Shussman_verification.npz')
+    if not os.path.exists(fn):
+        raise FileNotFoundError(f"Missing saved full rad-hydro npz file at {fn}")
     
-    cache_dir = Path("results/ictt/cache")
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_path = cache_dir / f"{case_label}_cache.pkl"
-    
-    # 1) Initialize case and set grid size N=400
-    case, config = get_preset(preset_name)
-    config = replace(config, N=400)
-    
-    if cache_path.exists():
-        print(f"Loading cached simulation and reference data from {cache_path}...")
-        try:
-            with open(cache_path, "rb") as f:
-                data = pickle.load(f)
-            # Unpack cached objects
-            history = data["history"]
-            shussman_ref = data["shussman_ref"]
-            menahem_ref = data["menahem_ref"]
-            ablation_solver = data["ablation_solver"]
-            print("Cache loaded successfully.")
-            return case, history, shussman_ref, menahem_ref, ablation_solver
-        except Exception as e:
-            print(f"Failed to load cache: {e}. Re-running simulation...")
-    # Pre-calculate evaluation times
-    eval_times_sec = np.linspace(1e-12, case.t_sec_end, 50)
-    
-    # 4) Build Menahem ablation piecewise reference
-    print(f"Building Menahem piecewise reference...")
-    menahem_times_sec = np.array([0.25, 0.5, 0.75, 1.0]) * float(case.t_sec_end)
-    menahem_ref = run_menahem_piecewise_reference(case, times_sec=menahem_times_sec)
-        
-    # 2) Run radiation-hydrodynamics simulation
-    print(f"Running simulation...")
-    _, _, _, history = simulate_rad_hydro(rad_hydro_case=case, simulation_config=config)
-    
-    # 3) Build Shussman piecewise reference (seconds / nanoseconds coordinate transformation)
-    print(f"Building Shussman piecewise reference...")
-    eval_times_ns = eval_times_sec * 1e9
-    T0_HeV = float(case.T0_Kelvin) / KELVIN_PER_HEV
-    shussman_ref = run_shussman_piecewise_reference(case, times_ns=eval_times_ns, T0_HeV=T0_HeV)
-    
-    
-    # 5) Instantiate AblationSolver to reuse and cache
-    print(f"Instantiating AblationSolver reference...")
-    ablation_solver = AblationSolver(**_ablation_kwargs_from_case(case))
-    
-    # Cache everything
-    cache_data = {
-        "case": case,
-        "history": history,
-        "shussman_ref": shussman_ref,
-        "menahem_ref": menahem_ref,
-        "ablation_solver": ablation_solver,
+    loaded = np.load(fn, allow_pickle=True)
+    return {
+        "times": np.asarray(loaded["times"], dtype=float),
+        "m": [np.asarray(arr, dtype=float) for arr in loaded["m"]],
+        "x": [np.asarray(arr, dtype=float) for arr in loaded["x"]],
+        "rho": [np.asarray(arr, dtype=float) for arr in loaded["rho"]],
+        "p": [np.asarray(arr, dtype=float) for arr in loaded["p"]],
+        "u": [np.asarray(arr, dtype=float) for arr in loaded["u"]],
+        "T": [np.asarray(arr, dtype=float) for arr in loaded["T"]],
     }
+
+
+def plot_subsonic_ablation_comparison(hs, numerical_data: dict, output_dir: Path):
+    """Plots subsonic ablation solver vs fits vs numerical full rad-hydro data."""
+    target_times = np.array([1e-9, 1.5e-9, 2e-9])
     
-    print(f"Saving simulation and reference data cache to {cache_path}...")
-    try:
-        with open(cache_path, "wb") as f:
-            pickle.dump(cache_data, f, protocol=pickle.HIGHEST_PROTOCOL)
-        print("Cache saved successfully.")
-    except Exception as e:
-        print(f"Failed to save cache: {e}")
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    axes = axes.ravel()
+    
+    # Add Zoomed Inset for Density near front (y in [0.8, 0.99])
+    axins = axes[0].inset_axes([0.18, 0.48, 0.35, 0.35])
+    
+    colors = ["red", "green", "blue"]
+    
+    for i, t_val in enumerate(target_times):
+        # Closest numerical index
+        idx = np.argmin(np.abs(numerical_data["times"] - t_val))
+        t_sec = numerical_data["times"][idx]
+        t_ns = t_sec * 1e9
         
-    return case, history, shussman_ref, menahem_ref, ablation_solver
-
-
-def generate_verification_plots(
-    history,
-    case,
-    shussman_ref,
-    menahem_ref,
-    ablation_solver,
-    case_label: str,
-    case_title: str,
-):
-    """Generate all verification comparisons, plotting, fitting, and exports."""
-    # Create results output directory structure
-    out_dir = Path("results/ictt")
-    xt_dir = out_dir / "xt"
-    mh_dir = out_dir / "material_hydro"
-    rh_dir = out_dir / "rad_hydro"
-    ss_dir = out_dir / "self_similar"
-    ev_dir = out_dir / "evolution"
-    ev_euler_dir = out_dir / "evolution with euler predictions"
-    
-    for d in [xt_dir, mh_dir, rh_dir, ss_dir, ev_dir, ev_euler_dir]:
-        d.mkdir(parents=True, exist_ok=True)
+        # Numerical ablated mass front
+        m_f_val = hs.ablated_mass(time=t_sec)
         
-    xt_path = str(xt_dir / f"{case_label}_xt.png")
-    material_hydro_path = str(mh_dir / f"{case_label}_material_hydro.png")
-    rad_hydro_path = str(rh_dir / f"{case_label}_rad_hydro.png")
-    self_similar_path = str(ss_dir / f"{case_label}_self_similar.png")
-    standalone_path = str(ss_dir / f"{case_label}_velocity_fits_standalone.png")
-    relative_errors_path = str(ss_dir / f"{case_label}_relative_errors.png")
-    gif_path = str(ev_dir / f"{case_label}_evolution.gif")
-    gif_euler_path = str(ev_euler_dir / f"{case_label}_euler_evolution.gif")
-    
-    # Solve subsonic similarity ODEs once (or load from cache) to share fits among all plots
-    solver = get_cached_subsonic_solver(case, case_label)
-    _, _, _, _, _, _, _, popt_T, popt_P, best_u, _ = perform_subsonic_fitting(solver)
-    
-    # 1) Generate space-time trajectories and fronts plot (reusing ablation_solver)
-    plot_xt_trajectories(history, case, xt_path, case_title, ablation_solver=ablation_solver)
-    
-    # 2) Plot material hydrodynamics profiles comparing Sim, Solver, and Fits
-    plot_material_hydro_profiles(history, solver, popt_T, popt_P, best_u, material_hydro_path, case_title)
-    
-    # 3) Plot radiation-hydrodynamics profiles
-    plot_rad_hydro_profiles(history, shussman_ref, menahem_ref, rad_hydro_path, case_title)
-    
-    # 4) Plot similarity profiles and errors
-    plot_and_fit_self_similar(solver, self_similar_path, standalone_path, relative_errors_path, case_title)
-    
-    # 5) Generate evolution GIFs (conditionally)
-    if RUN_GIFS:
-        print(f"Saving animated custom 3-way evolution GIF to {gif_path}...")
-        save_custom_evolution_gif(
-            history=history,
-            case=case,
-            shussman_ref=shussman_ref,
-            menahem_ref=menahem_ref,
-            gif_path=gif_path,
-            fps=12,
-            stride=max(1, len(history.t) // 60),
-            subtitle="Simulation vs Shussman vs Menahem reference",
-        )
+        # Subsonic Solver Lagrangian Grid
+        mass_solver = np.linspace(1e-12, m_f_val, 300)
+        sol_hs = hs.solve(mass=mass_solver, time=t_sec)
         
-        print(f"Saving animated custom Eulerian GIF with front predictions to {gif_euler_path}...")
-        save_custom_euler_evolution_gif(
-            history=history,
-            case=case,
-            shussman_ref=shussman_ref,
-            menahem_ref=menahem_ref,
-            gif_path=gif_euler_path,
-            fps=12,
-            stride=max(1, len(history.t) // 60),
-            subtitle="Simulation vs Shussman vs Menahem reference (Eulerian coordinates)",
-            ablation_solver=ablation_solver,
-        )
-    else:
-        print("Skipping evolution GIFs generation (RUN_GIFS is set to False)...")
+        # Slicing numerical simulation to the subsonic region (m <= m_f)
+        m_sim = numerical_data["m"][idx]
+        sub_mask = m_sim <= m_f_val
+        m_sim_sub = m_sim[sub_mask]
+        
+        # Reconstruct fits
+        y = m_sim_sub / m_f_val
+        y_solver = mass_solver / m_f_val
+        
+        # Fits (CGS & HeV values converted for plotting)
+        # Pressure (converted from MBar to Barye: 1 MBar = 1e12 Ba)
+        p_fit_MBar = 7.05133 * (t_ns)**-0.44792 * (0.34866 * y**0.87714 + 0.02903 * y**21.08862)
+        p_fit = p_fit_MBar * 1e12
+        # Velocity (converted from km/s to cm/s: 1 km/s = 1e5 cm/s)
+        u_fit_kms = -191.29403 * (t_ns)**0.03646 * (1.0 - y) / (1.0 + 4.78201 * y)
+        u_fit = u_fit_kms * 1e5
+        # Temperature (converted from HeV to Kelvin)
+        T_fit_HeV = ((1.0 - y) * (1.0 + 0.20224 * y)) ** (10.0 / 39.0)
+        T_fit = T_fit_HeV * KELVIN_PER_HEV
+
+        # Density (g/cm^3) derived from EOS (T and P fits)
+        r_val = float(hs.r)
+        f_val = float(hs.f)
+        beta_val = float(hs.beta)
+        mu_val = float(hs.mu)
+        p_fit_safe = np.maximum(p_fit, 1e-15)
+        rho_fit = ((r_val * f_val * T_fit**beta_val) / p_fit_safe) ** (1.0 / (mu_val - 1.0))
+
+        # Profile 1: Density
+        axes[0].plot(m_sim_sub * 1e3, numerical_data["rho"][idx][sub_mask], 'o', color=colors[i], markersize=3, alpha=0.5)
+        axes[0].plot(mass_solver * 1e3, sol_hs["density"], '-', color=colors[i], label=f"Solver t={t_ns:.2f} ns" if i==0 else None)
+        axes[0].plot(m_sim_sub * 1e3, rho_fit, '--', color=colors[i], label=f"Fit t={t_ns:.2f} ns" if i==0 else None)
+        
+        # Zoomed inset plotting near front (y in [0.8, 0.99])
+        zoom_mask = (y >= 0.8) & (y <= 0.99)
+        m_sim_zoom = m_sim_sub[zoom_mask]
+        rho_sim_zoom = numerical_data["rho"][idx][sub_mask][zoom_mask]
+        rho_fit_zoom = rho_fit[zoom_mask]
+        
+        solver_zoom_mask = (y_solver >= 0.8) & (y_solver <= 0.99)
+        m_sol_zoom = mass_solver[solver_zoom_mask]
+        rho_sol_zoom = sol_hs["density"][solver_zoom_mask]
+        
+        axins.plot(m_sim_zoom * 1e3, rho_sim_zoom, 'o', color=colors[i], markersize=2, alpha=0.5)
+        axins.plot(m_sol_zoom * 1e3, rho_sol_zoom, '-', color=colors[i])
+        axins.plot(m_sim_zoom * 1e3, rho_fit_zoom, '--', color=colors[i])
+        
+        # Profile 2: Pressure
+        axes[1].plot(m_sim_sub * 1e3, numerical_data["p"][idx][sub_mask] * 1e-12, 'o', color=colors[i], markersize=3, alpha=0.5)
+        axes[1].plot(mass_solver * 1e3, sol_hs["pressure"] * 1e-12, '-', color=colors[i])
+        axes[1].plot(m_sim_sub * 1e3, p_fit_MBar, '--', color=colors[i])
+
+        # Profile 3: Velocity
+        axes[2].plot(m_sim_sub * 1e3, numerical_data["u"][idx][sub_mask] * 1e-5, 'o', color=colors[i], markersize=3, alpha=0.5)
+        axes[2].plot(mass_solver * 1e3, sol_hs["velocity"] * 1e-5, '-', color=colors[i])
+        axes[2].plot(m_sim_sub * 1e3, u_fit_kms, '--', color=colors[i])
+
+        # Profile 4: Temperature
+        axes[3].plot(m_sim_sub * 1e3, numerical_data["T"][idx][sub_mask] / KELVIN_PER_HEV, 'o', color=colors[i], markersize=3, alpha=0.5)
+        axes[3].plot(mass_solver * 1e3, sol_hs["temperature"] / KELVIN_PER_HEV, '-', color=colors[i])
+        axes[3].plot(m_sim_sub * 1e3, T_fit_HeV, '--', color=colors[i])
+
+    # Styling
+    labels = ["Density [g/cm$^3$]", "Pressure [MBar]", "Velocity [km/s]", "Temperature [HeV]"]
+    for j, ax in enumerate(axes):
+        ax.grid(True, alpha=0.3)
+        ax.set_ylabel(labels[j], fontsize=12)
+        ax.set_xlabel("Lagrangian Mass Coordinate $m$ [mg/cm$^2$]", fontsize=12)
+        if j == 0:
+            ax.legend(loc="upper left")
+            
+    # Style inset
+    axins.grid(True, alpha=0.3)
+    axins.set_title("Zoom near front", fontsize=9)
+    axes[0].indicate_inset_zoom(axins, edgecolor="black")
+            
+    plt.suptitle("Subsonic Ablation Region Verification\nSolid: Subsonic Solver, Dashed: Piecewise Analytical Fit, Circles: Full Rad-Hydro Data", fontsize=14)
+    plt.tight_layout()
+    fig.savefig(output_dir / "ablation_region_comparison.png", dpi=200)
+    print(f"Saved: ablation_region_comparison.png")
+    plt.close(fig)
 
 
-def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
-    """Run full verification comparison pipeline for a given preset."""
-    print("=" * 80)
-    print(f"PROCESSING PRESET: {preset_name} -> {case_label}")
-    print("=" * 80)
-    
-    # call run_simulation_and_references only if cache file doesn't exist
-    cache_path = Path("results/ictt/cache") / f"{case_label}_cache.pkl"
-    if not cache_path.exists():
-        print("Pickle file doesn't exist, running simulation...")
-        case, history, shussman_ref, menahem_ref, ablation_solver = run_simulation_and_references(
-            preset_name, case_label
-        )
-    else:
-        print("Pickle file exists, loading simulation...")
-        with open(cache_path, "rb") as f:
-            data = pickle.load(f)
-        case = data.get("case")
-        if case is None:
-            case, _ = get_preset(preset_name)
-        history = data["history"]
-        shussman_ref = data["shussman_ref"]
-        menahem_ref = data["menahem_ref"]
-        ablation_solver = data["ablation_solver"]
-    
-    generate_verification_plots(
-        history=history,
-        case=case,
-        shussman_ref=shussman_ref,
-        menahem_ref=menahem_ref,
-        ablation_solver=ablation_solver,
-        case_label=case_label,
-        case_title=case_title,
-    )
-    print(f"Preset {preset_name} processed successfully.")
-
+# =============================================================================
+# Main
+# =============================================================================
 
 def main():
-    # Process constant boundary temperature (Fig 8)
-    run_preset_workflow(
-        PRESET_FIG_8_CONSTANT_TEMPERATURE, 
-        "constant_boundary_temperature_tau_0", 
-        "Constant Boundary Temperature (tau=0)"
-    )
-    # run_preset_workflow(
-    #     PRESET_FIG_9_CONSTANT_FLUX, 
-    #     "constant_flux_temperature_tau_0_123", 
-    #     "Constant Flux Temperature (tau=0.123)"
-    # )
-    print("\nAll custom simulations, reference comparisons, plotting, fitting, and exports completed successfully!")
+    case, _ = get_preset(PRESET_FIG_8_CONSTANT_TEMPERATURE)
+    
+    # Output dirs
+    ss_dir = Path("results/ictt/self_similar")
+    dim_dir = Path("results/ictt/test fits lagrangian")
+    ss_dir.mkdir(parents=True, exist_ok=True)
+    dim_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Solve subsonic similarity ODEs
+    solver = get_cached_subsonic_solver(case, "constant_boundary_temperature_tau_0")
+    
+    # Tasks 1-3: Self-similar fits, errors, velocity candidates
+    self_similar_path = str(ss_dir / "subsonic_self_similar.png")
+    standalone_path = str(ss_dir / "subsonic_velocity_fits_standalone.png")
+    relative_errors_path = str(ss_dir / "subsonic_relative_errors.png")
+    plot_and_fit_self_similar(solver, self_similar_path, standalone_path, relative_errors_path,
+                             "Constant Boundary Temperature (tau=0)")
+    
+    # Task 5: Dimensional subsonic comparison
+    numerical_data = load_full_rad_hydro_numerical_data()
+    plot_subsonic_ablation_comparison(solver, numerical_data, dim_dir)
+    
+    print("\nSubsonic fitting completed successfully!")
 
 
 if __name__ == "__main__":

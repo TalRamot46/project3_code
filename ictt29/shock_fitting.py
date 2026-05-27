@@ -64,6 +64,7 @@ from project3_code.hydro_sim.plotting.hydro_plots import _create_7panel_vertical
 from piston_shock import PistonShock
 
 USE_CACHE = False  # Set to True to use pre-saved pickle files, False to run again
+Y_FIT_MIN = 0.5    # Configure the lower bound for fitting Temperature T
 
 def get_cached_shock_solver(case, case_label):
     """Solve shock similarity ODEs once and cache the solver object (with found xsi_s)."""
@@ -267,17 +268,22 @@ def perform_shock_fitting(solver):
         
     popt_P, _ = curve_fit(power_law_P, y_valid, P_valid, p0=[1.0])
     
-    # Temperature Fit (1-parameter power law: T = Ts*y^d)
+    # Temperature Fit (1-parameter power law: T = Ts + (T_0 - Ts) * (1-y)^d)
     # Ts is not a PistonShock attribute; compute from EOS: T = P*V/r at shock boundary
     Es = float(solver.Ps * solver.Rs_or_Vs / solver.r)
     Ts = (Es * rho_valid[-1]**(0.14)/6730)**(1/1.6)
+    T_0 = T_valid[0]
     def power_law_T(y, d):
-        return Ts * (1-y)**d
+        return Ts + (T_0 - Ts) * (1.0 - y)**d
     print("T_s is ", Ts)
     print("T_val[0] is ", T_valid[0])
     print("T_val[-1] is ", T_valid[-1])
     
-    popt_T, _ = curve_fit(power_law_T, y_valid, T_valid, p0=[-0.3])
+    # Fit Temperature ONLY in the domain Y_FIT_MIN <= y <= 1.0
+    fit_mask_T = y_valid >= Y_FIT_MIN
+    y_fit_T = y_valid[fit_mask_T]
+    T_fit_data = T_valid[fit_mask_T]
+    popt_T, _ = curve_fit(power_law_T, y_fit_T, T_fit_data, p0=[1.0])
     
     # Velocity fits
     def fit_u_1(y, d): return U_0 - (U_0 - U_s) * (y**d)
@@ -482,8 +488,9 @@ def plot_and_fit_self_similar(
     Ts = float(solver.Ps * solver.Rs_or_Vs / solver.r)
     
     # Evaluate fits
+    T_0 = T_valid[0]
     P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
-    T_fit = Ts * y_valid**popt_T[0]
+    T_fit = Ts + (T_0 - Ts) * (1.0 - y_valid)**popt_T[0]
     rho_fit = P_fit / (solver.r * T_fit)
     U_fit = best_u["fit_val"]
     
@@ -492,7 +499,10 @@ def plot_and_fit_self_similar(
     err_P = np.abs((P_fit - P_valid) / P_valid) * 100
     err_U = np.abs((U_fit - U_valid) / (U_valid + 1e-15)) * 100
     
-    avg_T, max_T = np.mean(err_T), np.max(err_T)
+    # Restrict Temperature error computation only to the Y_FIT_MIN <= y <= 1.0 domain
+    err_T_filtered = err_T[y_valid >= Y_FIT_MIN]
+    avg_T, max_T = np.mean(err_T_filtered), np.max(err_T_filtered)
+    
     avg_rho, max_rho = np.mean(err_rho), np.max(err_rho)
     avg_P, max_P = np.mean(err_P), np.max(err_P)
     avg_U, max_U = np.mean(err_U), np.max(err_U)
@@ -505,8 +515,22 @@ def plot_and_fit_self_similar(
     ax.plot(y_valid, T_fit, 'r--', label='Analytical Fit', lw=1.5)
     ax.set_ylabel(r"Temperature $T(y)$ [dimensionless]", fontsize=12)
     ax.set_title("Shock: Temperature", fontsize=13, fontweight='bold')
-    lbl_T = f"$T(y) \\approx T_s y^{{{popt_T[0]:.5f}}}$\nAvg Err: {avg_T:.4f}%, Max Err: {max_T:.4f}%"
+    lbl_T = f"$T(y) \\approx T_s + (T_0 - T_s)(1-y)^{{{popt_T[0]:.5f}}}$\nAvg Err ({Y_FIT_MIN}<y<1): {avg_T:.4f}%\nMax Err ({Y_FIT_MIN}<y<1): {max_T:.4f}%"
     ax.text(0.05, 0.05, lbl_T, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=9.5)
+    
+    # Close-up inset around Y_FIT_MIN
+    ax_inset = ax.inset_axes([0.45, 0.45, 0.48, 0.48])
+    ax_inset.plot(y_valid, T_valid, 'b-', lw=1.5)
+    ax_inset.plot(y_valid, T_fit, 'r--', lw=1.2)
+    inset_min = max(0.0, Y_FIT_MIN - 0.15)
+    inset_max = min(1.0, Y_FIT_MIN + 0.15)
+    ax_inset.set_xlim(inset_min, inset_max)
+    idx_inset = (y_valid >= inset_min) & (y_valid <= inset_max)
+    if np.any(idx_inset):
+        ax_inset.set_ylim(np.min(T_valid[idx_inset]) * 0.9, np.max(T_valid[idx_inset]) * 1.1)
+    ax_inset.grid(True, alpha=0.3)
+    ax_inset.set_title(f"Close-up at y={Y_FIT_MIN}", fontsize=8)
+    ax_inset.tick_params(labelsize=8)
     
     # Panel (0,1): Density
     ax = axes[0, 1]
@@ -601,8 +625,10 @@ def plot_relative_errors(
     popt_P, popt_T, best_u, relative_errors_path, case_title
 ):
     print("Generating shock relative error plots...")
+    Ts = float(solver.Ps * solver.Rs_or_Vs / solver.r)
+    T_0 = T_valid[0]
     P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
-    T_fit = 1 * y_valid**popt_T[0]
+    T_fit = Ts + (T_0 - Ts) * (1.0 - y_valid)**popt_T[0]
     R_fit = P_fit / (solver.r * T_fit)
     U_fit = best_u["fit_val"]
     
@@ -611,13 +637,18 @@ def plot_relative_errors(
     err_P = np.abs((P_fit - P_valid) / P_valid) * 100
     err_U = np.abs((U_fit - U_valid) / (U_valid + 1e-15)) * 100
     
-    avg_T, max_T = np.mean(err_T), np.max(err_T)
+    # Filter Temperature error to Y_FIT_MIN <= y <= 1.0
+    fit_mask_T = y_valid >= Y_FIT_MIN
+    y_valid_T = y_valid[fit_mask_T]
+    err_T_filtered = err_T[fit_mask_T]
+    
+    avg_T, max_T = np.mean(err_T_filtered), np.max(err_T_filtered)
     avg_R, max_R = np.mean(error_rho), np.max(error_rho)
     avg_P, max_P = np.mean(err_P), np.max(err_P)
     avg_U, max_U = best_u["avg_err"], best_u["max_err"]
     
     fig_err, ax_err = plt.subplots(figsize=(10, 7.5))
-    ax_err.plot(y_valid, err_T, label=f'Temperature $T(y)$ (Avg: {avg_T:.4f}%, Max: {max_T:.4f}%)', lw=2.0)
+    ax_err.plot(y_valid_T, err_T_filtered, label=f'Temperature $T(y)$ (Avg ({Y_FIT_MIN}<y<1): {avg_T:.4f}%, Max ({Y_FIT_MIN}<y<1): {max_T:.4f}%)', lw=2.0)
     ax_err.plot(y_valid, error_rho, label=f'Density $\\rho(y)$ (Avg: {avg_R:.4f}%, Max: {max_R:.4f}%)', lw=2.0)
     ax_err.plot(y_valid, err_P, label=f'Pressure $P(y)$ (Avg: {avg_P:.4f}%, Max: {max_P:.4f}%)', lw=2.0)
     ax_err.plot(y_valid, err_U, label=f'Velocity $U(y)$ (Avg: {avg_U:.4f}%, Max: {max_U:.4f}%)', lw=2.0)
@@ -711,7 +742,7 @@ def generate_verification_plots(
     # Compute fit arrays
     Ts = float(solver.Ps * solver.Rs_or_Vs / solver.r)
     P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
-    T_fit = Ts * y_valid**popt_T[0]
+    T_fit = Ts + (T_valid[0] - Ts) * (1.0 - y_valid)**popt_T[0]
     U_fit = best_u["fit_val"]
 
     # 1) Self-similar profiles and fits

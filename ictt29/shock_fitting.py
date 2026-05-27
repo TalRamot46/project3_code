@@ -342,7 +342,10 @@ def evaluate_shock_fits_arrays(mass_grid, time, solver, case, y_valid, P_fit, T_
 
     # Dimensionless shock-front boundary values
     Ps = solver.Ps
-    Ts = float(solver.Ps * solver.Rs_or_Vs / solver.r)   # EOS: T = P*V/r at shock
+    Es = float(solver.Ps * solver.Rs_or_Vs / solver.r)
+    # rho_s is 1/V_s = 1/Rs_or_Vs
+    rho_s = 1.0 / solver.Rs_or_Vs
+    Ts = (Es * rho_s**(0.14)/6730)**(1/1.6)
     Us_dim = solver.Us
 
     # Initialise output arrays
@@ -484,8 +487,8 @@ def plot_and_fit_self_similar(
 ):
     print("Generating shock 2x2 self-similar fitting plots...")
     
-    # Compute Ts from EOS (not a PistonShock attribute)
-    Ts = float(solver.Ps * solver.Rs_or_Vs / solver.r)
+    # Exact shock boundary temperature
+    Ts = T_valid[-1]
     
     # Evaluate fits
     T_0 = T_valid[0]
@@ -625,7 +628,7 @@ def plot_relative_errors(
     popt_P, popt_T, best_u, relative_errors_path, case_title
 ):
     print("Generating shock relative error plots...")
-    Ts = float(solver.Ps * solver.Rs_or_Vs / solver.r)
+    Ts = T_valid[-1]
     T_0 = T_valid[0]
     P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
     T_fit = Ts + (T_0 - Ts) * (1.0 - y_valid)**popt_T[0]
@@ -740,7 +743,7 @@ def generate_verification_plots(
     y_grid, y_valid, T_valid, P_valid, U_valid, R_valid, popt_P, popt_T, best_u, fits_u = perform_shock_fitting(solver)
 
     # Compute fit arrays
-    Ts = float(solver.Ps * solver.Rs_or_Vs / solver.r)
+    Ts = T_valid[-1]
     P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
     T_fit = Ts + (T_valid[0] - Ts) * (1.0 - y_valid)**popt_T[0]
     U_fit = best_u["fit_val"]

@@ -219,7 +219,7 @@ def perform_shock_fitting(solver):
             # Derive derived Temperature or Density for error computation
             if FITTING_OPTION == "FIT_TEMP_AROUND_FRONT":
                 T_fit = fit_val
-                rho_fit = (P_fit / (6730.0 * solver.r * T_fit**1.6))**(1.0/0.86)
+                rho_fit = (P_fit / (6730.0 * solver.r * T_fit**1.6))**(1.0/1.14)
             elif FITTING_OPTION == "FIT_RHO_ALL_AROUND":
                 rho_fit = fit_val
                 T_fit = (P_fit / (6730.0 * solver.r * rho_fit**0.86))**(1.0/1.6)
@@ -889,7 +889,7 @@ def generate_verification_plots(
     relative_errors_path = str(ss_dir / f"{case_label}_relative_errors.png")
     dimensional_fit_path = str(dv_dir / f"{case_label}_dimensional_fit_comparison.png")
 
-    y_grid, y_valid, T_valid, P_valid, U_valid, R_valid, popt_P, best_T, fits_T, best_u, fits_u = perform_shock_fitting(solver)
+    y_grid, y_valid, T_valid, P_valid, U_valid, rho_valid, popt_P, best_T, fits_T, best_u, fits_u = perform_shock_fitting(solver)
 
     # Compute fit arrays
     P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
@@ -901,13 +901,13 @@ def generate_verification_plots(
     plot_standalone_temperature_fits(y_valid, T_valid, fits_T, best_T, standalone_T_path, case_title)
 
     # 2) Self-similar profiles and fits (using optimal models)
-    plot_and_fit_self_similar(solver, y_valid, T_valid, P_valid, U_valid, R_valid, popt_P, best_T, best_u, fits_u, self_similar_path, standalone_path, case_title)
+    plot_and_fit_self_similar(solver, y_valid, T_valid, P_valid, U_valid, rho_valid, popt_P, best_T, best_u, fits_u, self_similar_path, standalone_path, case_title)
 
     # 3) Dimensional fit comparison
     plot_dimensional_fit_comparison(history, solver, case, y_valid, P_fit, T_fit, rho_fit, U_fit, dimensional_fit_path, case_title)
 
     # 4) Relative errors of self-similar fits
-    plot_relative_errors(solver, y_valid, T_valid, P_valid, U_valid, R_valid, popt_P, best_T, best_u, relative_errors_path, case_title)
+    plot_relative_errors(solver, y_valid, T_valid, P_valid, U_valid, rho_valid, popt_P, best_T, best_u, relative_errors_path, case_title)
 
 
 def run_preset_workflow(preset_name: str, case_label: str, case_title: str):

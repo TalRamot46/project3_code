@@ -114,134 +114,6 @@ def get_cached_shock_solver(case, case_label):
 
 
 
-# =============================================================================
-# Helper functions for shock detection and rolling average
-# =============================================================================
-
-def find_shock_front(
-    rho: np.ndarray,
-    m_coordinate: np.ndarray,
-    *,
-    rho_unshocked: float,
-    gamma: float,
-    Hugoniot_threshold: float = 0.5,
-) -> tuple[int, float]:
-    """Detect the shock as the right edge of the compressed region."""
-    rho_arr = np.asarray(rho, dtype=float)
-    m_arr = np.asarray(m_coordinate, dtype=float)
-    n = rho_arr.size
-    if n < 3:
-        return -1, float("nan")
-
-    rho_thresh = float(rho_unshocked) * Hugoniot_threshold * (gamma + 1.0) / (gamma - 1.0)
-    compressed = rho_arr > rho_thresh
-    compressed_idx = np.flatnonzero(compressed)
-    if compressed_idx.size > 0:
-        i = int(compressed_idx[-1])
-        return i, float(rho_arr[i])
-
-    drho_dm = np.gradient(rho_arr, m_arr)
-    i_steep = int(np.argmin(drho_dm))
-    if np.isfinite(drho_dm[i_steep]):
-        return i_steep, float(rho_arr[i_steep])
-    return -1, float("nan")
-
-
-def _sim_piston_position(
-    x_cells: np.ndarray,
-    p_cells: np.ndarray,
-    p_drive: float,
-    rel_tol: float,
-) -> tuple[int, float]:
-    """First (leftmost) cell close enough to drive pressure; fallback to nearest."""
-    denom = max(abs(float(p_drive)), 1e-30)
-    rel_err = np.abs(np.asarray(p_cells, dtype=float) - float(p_drive)) / denom
-    close_idx = np.flatnonzero(rel_err <= rel_tol)
-    if close_idx.size > 0:
-        i = int(close_idx[0])
-        return i, float(x_cells[i])
-    i = int(np.argmin(rel_err))
-    return i, float(x_cells[i])
-
-
-def _rolling_mean(a: np.ndarray, window: int) -> np.ndarray:
-    if window <= 1:
-        return np.asarray(a, dtype=float)
-    w = int(max(1, window))
-    kernel = np.ones(w, dtype=float) / float(w)
-    return np.convolve(np.asarray(a, dtype=float), kernel, mode="same")
-
-
-def _get_equally_spaced_elements(times: np.ndarray, n: int) -> np.ndarray:
-    ideal_times = np.linspace(times.min(), times.max(), n)
-    indices = np.searchsorted(times, ideal_times)
-    indices = np.clip(indices, 0, len(times) - 1)
-    for i in range(len(indices)):
-        idx = indices[i]
-        if idx > 0 and abs(times[idx-1] - ideal_times[i]) < abs(times[idx] - ideal_times[i]):
-            indices[i] = idx - 1
-    unique_indices = np.unique(indices)
-    return times[unique_indices]
-
-
-# =============================================================================
-# Plotting functions
-# =============================================================================
-
-# (plot_xt_trajectories has been removed to focus exclusively on self-similar fits and relative errors)
-
-
-def evaluate_shock_fits(mass_grid, time, solver, case, popt_P, popt_T, best_u):
-    """Map self-similar fit parameters to dimensional (CGS) physical profiles on mass_grid at time."""
-    xsi_over_m_val = solver.xsi_over_m(time=time)
-    m_s = solver.xsi_s / xsi_over_m_val
-
-    # Dimensionless shock-front boundary values
-    Ps = solver.Ps
-    Ts = float(solver.Ps * solver.Rs_or_Vs / solver.r)   # EOS: T = P*V/r at shock
-    Us_dim = solver.Us
-
-    # Initialise output arrays
-    rho = np.zeros(len(mass_grid), dtype=float)
-    p   = np.zeros(len(mass_grid), dtype=float)
-    u   = np.zeros(len(mass_grid), dtype=float)
-    T   = np.zeros(len(mass_grid), dtype=float)
-
-    # Exact solver at this time to get dimensional scale factors at the shock front
-    sol_exact = solver.solve(mass=mass_grid, time=time)
-    p_s_cgs   = float(sol_exact["pressure"][-1])    # pressure at shock front [Barye]
-    rho_s_cgs = float(sol_exact["density"][-1])     # density at shock front [g/cm^3]
-    u_s_cgs   = float(sol_exact["velocity"][-1])    # velocity at shock front [cm/s]
-    e_s_cgs = p_s_cgs / (rho_s_cgs * float(case.r))          # specific internal energy at shock front [erg/g]
-    T_s_cgs = (e_s_cgs * rho_s_cgs**(0.14)/6730)**(1/1.6)  # temperature at shock front from EOS [K]
-
-    for i, m in enumerate(mass_grid):
-        if m >= m_s:
-            # Outside shock front (unshocked region)
-            rho[i] = float(case.rho0)
-            p[i]   = 1e-6   # tiny ambient pressure [Barye]
-            u[i]   = 0.0
-            T[i]   = 300.0  # ambient temperature [K]
-        else:
-            # y = normalised coordinate in [0, 1]
-            y = float(m) / m_s
-            y = max(y, 1e-10)
-
-            # Dimensionless fits
-            P_fit_y = 1.0 - (1.0 - Ps) * (y ** popt_P[0])
-            T_fit_y = Ts * (y ** popt_T[0])
-            U_fit_y = best_u["func"](np.array([y]), *best_u["popt"])[0]
-
-            # Scale to CGS via shock-front boundary values
-            p[i]   = P_fit_y * (p_s_cgs / max(Ps, 1e-30))
-            T[i]   = T_fit_y * (T_s_cgs / max(Ts, 1e-30))
-            u[i]   = U_fit_y * (u_s_cgs / max(abs(Us_dim), 1e-30))
-            # Density from ideal gas EOS: rho = p / (r * T_cgs)
-            rho[i] = p[i] / (float(case.r) * T[i]) if T[i] > 0 else rho_s_cgs
-
-    return {"density": rho, "pressure": p, "velocity": u, "temperature": T, "m_s": m_s}
-
-
 def perform_shock_fitting(solver):
     y_grid = np.linspace(0.0, 1.0, 500)
     xsi_vec = y_grid * solver.xsi_s
@@ -312,10 +184,10 @@ def perform_shock_fitting(solver):
             popt, _ = curve_fit(cand["func"], y_fit_T, T_fit_data, p0=cand["p0"], maxfev=10000)
             T_fit = cand["func"](y_valid, *popt)
             
-            # Calculate errors inside the dynamic fitting domain y >= Y_FIT_MIN
+            # Calculate errors inside the dynamic fitting domain y >= Y_FIT_MIN in absolute values (no percentages!)
             T_fit_domain = T_fit[fit_mask_T]
             T_valid_domain = T_valid[fit_mask_T]
-            rel_err_T = np.abs((T_fit_domain - T_valid_domain) / T_valid_domain) * 100
+            rel_err_T = np.abs((T_fit_domain - T_valid_domain) / T_valid_domain)
             
             avg_err = np.mean(rel_err_T)
             max_err = np.max(rel_err_T)
@@ -376,7 +248,7 @@ def perform_shock_fitting(solver):
         try:
             popt, _ = curve_fit(cand["func"], y_valid, U_valid, p0=cand["p0"], maxfev=10000)
             U_fit = cand["func"](y_valid, *popt)
-            rel_err_u = np.abs((U_fit - U_valid) / (U_valid + 1e-15)) * 100
+            rel_err_u = np.abs((U_fit - U_valid) / (U_valid + 1e-15))
             avg_err = np.mean(rel_err_u)
             max_err = np.max(rel_err_u)
             
@@ -398,10 +270,54 @@ def perform_shock_fitting(solver):
             print(f"Shock velocity fit {cand['id']} failed: {e}")
             fits_u[cand["id"]] = (None, None, 0.0, 0.0, cand["name"], cand["latex"])
             
-    return y_grid, y_valid, T_valid, P_valid, U_valid, rho_valid, popt_P, best_T, fits_T, best_u, fits_u
+    # Construct piecewise composite profiles for all Temperature candidates and the chosen best_T
+    low_mask = y_valid < Y_FIT_MIN
+    high_mask = y_valid >= Y_FIT_MIN
+    P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
+    
+    fits_T_composite = {}
+    for cand_id, (popt_cand, T_fit_cand, avg_err_cand, max_err_cand, name, latex_str) in fits_T.items():
+        if popt_cand is not None:
+            if np.any(low_mask) and Y_FIT_MIN > 0:
+                idx_mid = np.argmin(np.abs(y_valid - Y_FIT_MIN))
+                rho_fit_high_cand = (P_fit / (6730.0 * solver.r * T_fit_cand**1.6))**(1.0/0.86)
+                rho_fit_mid_cand = rho_fit_high_cand[idx_mid]
+                rho_0 = rho_valid[0]
+                
+                def fit_rho_low_cand(y, a):
+                    return rho_0 + (rho_fit_mid_cand - rho_0) * (y / Y_FIT_MIN)**a
+                    
+                popt_rho_low_cand, _ = curve_fit(fit_rho_low_cand, y_valid[low_mask], rho_valid[low_mask], p0=[1.0], maxfev=10000)
+                rho_fit_low_cand = fit_rho_low_cand(y_valid[low_mask], *popt_rho_low_cand)
+                T_fit_low_cand = (P_fit[low_mask] / (6730.0 * solver.r * rho_fit_low_cand**0.86))**(1.0/1.6)
+                
+                T_fit_comp_cand = np.zeros_like(y_valid)
+                T_fit_comp_cand[low_mask] = T_fit_low_cand
+                T_fit_comp_cand[high_mask] = T_fit_cand[high_mask]
+                
+                rho_fit_comp_cand = np.zeros_like(y_valid)
+                rho_fit_comp_cand[low_mask] = rho_fit_low_cand
+                rho_fit_comp_cand[high_mask] = rho_fit_high_cand[high_mask]
+                
+                fits_T_composite[cand_id] = (popt_cand, T_fit_comp_cand, rho_fit_comp_cand, avg_err_cand, max_err_cand, name, latex_str)
+            else:
+                rho_fit_cand = (P_fit / (6730.0 * solver.r * T_fit_cand**1.6))**(1.0/0.86)
+                fits_T_composite[cand_id] = (popt_cand, T_fit_cand, rho_fit_cand, avg_err_cand, max_err_cand, name, latex_str)
+        else:
+            fits_T_composite[cand_id] = (None, None, None, 0.0, 0.0, name, latex_str)
+            
+    # Also update best_T with its composite values
+    if best_T is not None and best_T["id"] in fits_T_composite:
+        popt_cand, T_fit_comp, rho_fit_comp, avg_err, max_err, name, latex_str = fits_T_composite[best_T["id"]]
+        best_T["fit_val"] = T_fit_comp
+        best_T["rho_fit"] = rho_fit_comp
+        best_T["avg_err"] = avg_err
+        best_T["max_err"] = max_err
+        
+    return y_grid, y_valid, T_valid, P_valid, U_valid, rho_valid, popt_P, best_T, fits_T_composite, best_u, fits_u
 
 
-def evaluate_shock_fits_arrays(mass_grid, time, solver, case, y_valid, P_fit, T_fit, U_fit):
+def evaluate_shock_fits_arrays(mass_grid, time, solver, case, y_valid, P_fit, T_fit, rho_fit, U_fit):
     """Map self-similar fit arrays to dimensional (CGS) physical profiles on mass_grid at time."""
     xsi_over_m_val = solver.xsi_over_m(time=time)
     m_s = solver.xsi_s / xsi_over_m_val
@@ -443,19 +359,26 @@ def evaluate_shock_fits_arrays(mass_grid, time, solver, case, y_valid, P_fit, T_
             # Interpolate from dimensionless fit arrays
             P_fit_y = np.interp(y, y_valid, P_fit)
             T_fit_y = np.interp(y, y_valid, T_fit)
+            rho_fit_y = np.interp(y, y_valid, rho_fit)
             U_fit_y = np.interp(y, y_valid, U_fit)
 
             # Scale to CGS via shock-front boundary values
             p[i]   = P_fit_y * (p_s_cgs / max(Ps, 1e-30))
-            T[i]   = T_fit_y * (T_s_cgs / max(Ts, 1e-30))
             u[i]   = U_fit_y * (u_s_cgs / max(abs(Us_dim), 1e-30))
-            # Density derived from non-ideal EOS: rho = (p / (6730 * r * T^1.6))^(1/0.86)
-            rho[i] = (p[i] / (6730.0 * float(case.r) * T[i]**1.6))**(1.0/0.86) if T[i] > 0 else rho_s_cgs
+            
+            if y < Y_FIT_MIN:
+                # Density from fit, Temp derived from EOS
+                rho[i] = rho_fit_y * (rho_s_cgs / max(rho_s, 1e-30))
+                T[i]   = (p[i] / (6730.0 * float(case.r) * rho[i]**0.86))**(1.0/1.6) if rho[i] > 0 else T_s_cgs
+            else:
+                # Temp from fit, Density derived from EOS
+                T[i]   = T_fit_y * (T_s_cgs / max(Ts, 1e-30))
+                rho[i] = (p[i] / (6730.0 * float(case.r) * T[i]**1.6))**(1.0/0.86) if T[i] > 0 else rho_s_cgs
 
     return {"density": rho, "pressure": p, "velocity": u, "temperature": T}
 
 
-def plot_dimensional_fit_comparison(history, solver, case, y_valid, P_fit, T_fit, U_fit, material_hydro_path, case_title):
+def plot_dimensional_fit_comparison(history, solver, case, y_valid, P_fit, T_fit, rho_fit, U_fit, material_hydro_path, case_title):
     """Plot overlay profiles of T, rho, P, u vs m comparing Simulation, Exact Solver, and Analytic fits."""
     print(f"Generating physical shock profiles comparison for {case_title}...")
     fig, axes = plt.subplots(2, 2, figsize=(14, 11))
@@ -501,7 +424,7 @@ def plot_dimensional_fit_comparison(history, solver, case, y_valid, P_fit, T_fit
             beta = 1.6
             exact_T = (exact_e / (f * exact_rho**(-mu)))**(1/beta)
         # 3) Analytical fits mapped to CGS via array interpolation
-        fits = evaluate_shock_fits_arrays(mass_exact, t_actual, solver, case, y_valid, P_fit, T_fit, U_fit)
+        fits = evaluate_shock_fits_arrays(mass_exact, t_actual, solver, case, y_valid, P_fit, T_fit, rho_fit, U_fit)
         fit_rho = fits["density"]
         fit_p = fits["pressure"] / p_scale
         fit_u = fits["velocity"] / u_scale
@@ -559,20 +482,28 @@ def plot_and_fit_self_similar(
     # Evaluate fits
     P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
     T_fit = best_T["fit_val"]
-    rho_fit = (P_fit / (6730.0 * solver.r * T_fit**1.6))**(1.0/0.86)
+    rho_fit = best_T["rho_fit"]
     U_fit = best_u["fit_val"]
     
-    err_T = np.abs((T_fit - T_valid) / T_valid) * 100
-    err_rho = np.abs((rho_fit - rho_valid) / rho_valid) * 100
-    err_P = np.abs((P_fit - P_valid) / P_valid) * 100
-    err_U = np.abs((U_fit - U_valid) / (U_valid + 1e-15)) * 100
+    err_T = np.abs((T_fit - T_valid) / T_valid)
+    err_rho = np.abs((rho_fit - rho_valid) / rho_valid)
+    err_P = np.abs((P_fit - P_valid) / P_valid)
+    err_U = np.abs((U_fit - U_valid) / (U_valid + 1e-15))
     
     # Restrict Temperature and Density error computation only to the Y_FIT_MIN <= y <= 1.0 domain
-    err_T_filtered = err_T[y_valid >= Y_FIT_MIN]
-    avg_T, max_T = np.mean(err_T_filtered), np.max(err_T_filtered)
+    low_mask = y_valid < Y_FIT_MIN
+    high_mask = y_valid >= Y_FIT_MIN
     
-    err_rho_filtered = err_rho[y_valid >= Y_FIT_MIN]
-    avg_rho, max_rho = np.mean(err_rho_filtered), np.max(err_rho_filtered)
+    err_T_high = err_T[high_mask]
+    avg_T_high, max_T_high = np.mean(err_T_high), np.max(err_T_high)
+    err_rho_high = err_rho[high_mask]
+    avg_rho_high, max_rho_high = np.mean(err_rho_high), np.max(err_rho_high)
+    
+    err_T_low = err_T[low_mask] if np.any(low_mask) else [0.0]
+    avg_T_low, max_T_low = np.mean(err_T_low), np.max(err_T_low)
+    err_rho_low = err_rho[low_mask] if np.any(low_mask) else [0.0]
+    avg_rho_low, max_rho_low = np.mean(err_rho_low), np.max(err_rho_low)
+    
     avg_P, max_P = np.mean(err_P), np.max(err_P)
     avg_U, max_U = np.mean(err_U), np.max(err_U)
     
@@ -581,16 +512,20 @@ def plot_and_fit_self_similar(
     # Panel (0,0): Temperature
     ax = axes[0, 0]
     ax.plot(y_valid, T_valid, 'b-', label='Numerical Solver', lw=2)
-    ax.plot(y_valid, T_fit, 'r--', label='Analytical Fit', lw=1.5)
+    if np.any(low_mask):
+        ax.plot(y_valid[low_mask], T_fit[low_mask], '--', color='darkorange', label=f'EOS Derived (y < {Y_FIT_MIN:.1f})', lw=1.5)
+    ax.plot(y_valid[high_mask], T_fit[high_mask], 'r--', label=f'Analytical Fit (y >= {Y_FIT_MIN:.1f})', lw=1.5)
     ax.set_ylabel(r"Temperature $T(y)$ [dimensionless]", fontsize=12)
     ax.set_title(f"Shock: Temperature ({best_T['name']})", fontsize=13, fontweight='bold')
-    lbl_T = f"${best_T['latex']}$\nAvg Err ({Y_FIT_MIN}<y<1): {avg_T:.4f}%\nMax Err ({Y_FIT_MIN}<y<1): {max_T:.4f}%"
+    lbl_T = f"${best_T['latex']}$\n(y >= {Y_FIT_MIN:.1f}) Avg: {avg_T_high:.4e}, Max: {max_T_high:.4e}\n(y < {Y_FIT_MIN:.1f}) Avg: {avg_T_low:.4e}, Max: {max_T_low:.4e}"
     ax.text(0.05, 0.05, lbl_T, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=9.5)
     
     # Close-up inset around Y_FIT_MIN
     ax_inset = ax.inset_axes([0.45, 0.45, 0.48, 0.48])
     ax_inset.plot(y_valid, T_valid, 'b-', lw=1.5)
-    ax_inset.plot(y_valid, T_fit, 'r--', lw=1.2)
+    if np.any(low_mask):
+        ax_inset.plot(y_valid[low_mask], T_fit[low_mask], '--', color='darkorange', lw=1.2)
+    ax_inset.plot(y_valid[high_mask], T_fit[high_mask], 'r--', lw=1.2)
     inset_min = max(0.0, Y_FIT_MIN - 0.15)
     inset_max = min(1.0, Y_FIT_MIN + 0.15)
     ax_inset.set_xlim(inset_min, inset_max)
@@ -604,10 +539,12 @@ def plot_and_fit_self_similar(
     # Panel (0,1): Density
     ax = axes[0, 1]
     ax.plot(y_valid, rho_valid, 'b-', label='Numerical Solver', lw=2)
-    ax.plot(y_valid, rho_fit, 'r--', label='EOS Derived Fit', lw=1.5)
+    if np.any(low_mask):
+        ax.plot(y_valid[low_mask], rho_fit[low_mask], '--', color='darkorange', label=f'Power Law Fit (y < {Y_FIT_MIN:.1f})', lw=1.5)
+    ax.plot(y_valid[high_mask], rho_fit[high_mask], 'r--', label=f'EOS Derived (y >= {Y_FIT_MIN:.1f})', lw=1.5)
     ax.set_ylabel(r"Density $\rho(y)$ [dimensionless]", fontsize=12)
     ax.set_title("Shock: Density", fontsize=13, fontweight='bold')
-    lbl_R = r"$\rho(y)$" + f"\nAvg Err ({Y_FIT_MIN}<y<1): {avg_rho:.4f}%\nMax Err ({Y_FIT_MIN}<y<1): {max_rho:.4f}%"
+    lbl_R = r"$\rho(y)$" + f"\n(y >= {Y_FIT_MIN:.1f}) Avg: {avg_rho_high:.4e}, Max: {max_rho_high:.4e}\n(y < {Y_FIT_MIN:.1f}) Avg: {avg_rho_low:.4e}, Max: {max_rho_low:.4e}"
     ax.text(0.05, 0.05, lbl_R, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=9.5)
     
     # Panel (1,0): Pressure
@@ -616,7 +553,7 @@ def plot_and_fit_self_similar(
     ax.plot(y_valid, P_fit, 'r--', label='Analytical Fit', lw=1.5)
     ax.set_ylabel(r"Pressure $P(y)$ [dimensionless]", fontsize=12)
     ax.set_title("Shock: Pressure", fontsize=13, fontweight='bold')
-    lbl_P = f"$P(y) \\approx 1.0 - (1.0 - P_s) y^{{{popt_P[0]:.5f}}}$\nAvg Err: {avg_P:.4f}%, Max Err: {max_P:.4f}%"
+    lbl_P = f"$P(y) \\approx 1.0 - (1.0 - P_s) y^{{{popt_P[0]:.5f}}}$\nAvg Err: {avg_P:.4e}, Max Err: {max_P:.4e}"
     ax.text(0.05, 0.05, lbl_P, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=9.5)
     
     # Panel (1,1): Velocity
@@ -640,7 +577,7 @@ def plot_and_fit_self_similar(
     elif best_u["id"] == 6:
         u_formula = f"$U(y) \\approx {best_u['popt'][0]:.5f} (1 - y^{{{best_u['popt'][1]:.5f}}})^{{{best_u['popt'][2]:.5f}}} + U_s y$"
         
-    lbl_U = u_formula + f"\nAvg Err: {avg_U:.4f}%, Max Err: {max_U:.4f}%"
+    lbl_U = u_formula + f"\nAvg Err: {avg_U:.4e}\nMax Err: {max_U:.4e}"
     ax.text(0.05, 0.05, lbl_U, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=9.5)
     
     for ax in axes.flat:
@@ -662,12 +599,12 @@ def plot_and_fit_self_similar(
     for i in range(1, 7):
         popt, U_fit_cand, avg_err, max_err, name, latex = fits_u[i]
         if popt is not None:
-            lbl = f"Fit {i}: {name}\nAvg Err: {avg_err:.3f}%, Max Err: {max_err:.3f}%"
+            lbl = f"Fit {i}: {name}\nAvg Err: {avg_err:.3e}, Max Err: {max_err:.3e}"
             lw = 2.2 if i == best_u["id"] else 1.5
             ax_sa1.plot(y_valid, U_fit_cand, colors_u[i], linestyle='--', label=lbl, lw=lw)
             
-            err_curve = np.abs((U_fit_cand - U_valid) / (U_valid + 1e-15)) * 100
-            ax_sa2.plot(y_valid, err_curve, colors_u[i], label=f"Fit {i} (Avg: {avg_err:.3f}%)", lw=lw)
+            err_curve = np.abs((U_fit_cand - U_valid) / (U_valid + 1e-15))
+            ax_sa2.plot(y_valid, err_curve, colors_u[i], label=f"Fit {i} (Avg: {avg_err:.3e})", lw=lw)
             
     ax_sa1.set_xlabel(r"Normalized coordinate $y = \xi / \xi_s$", fontsize=12)
     ax_sa1.set_ylabel(r"Velocity $U(y)$ [dimensionless]", fontsize=12)
@@ -676,7 +613,7 @@ def plot_and_fit_self_similar(
     ax_sa1.set_title("Dimensionless Velocity $U(y)$ vs 6 Candidates", fontsize=13, fontweight='bold')
     
     ax_sa2.set_xlabel(r"Normalized coordinate $y = \xi / \xi_s$", fontsize=12)
-    ax_sa2.set_ylabel(r"Relative Error [$\%$]", fontsize=12)
+    ax_sa2.set_ylabel(r"Relative Error", fontsize=12)
     ax_sa2.set_yscale('log')
     ax_sa2.set_ylim(bottom=1e-10)
     ax_sa2.legend(loc='best', fontsize=9.5)
@@ -701,21 +638,25 @@ def plot_standalone_temperature_fits(
     colors_T = {1: 'crimson', 2: 'darkorange', 3: 'forestgreen', 4: 'darkviolet', 5: 'deeppink'}
     
     # We only plot relative errors for the fitting domain y >= Y_FIT_MIN
-    fit_mask_T = y_valid >= Y_FIT_MIN
-    y_valid_T = y_valid[fit_mask_T]
-    T_valid_domain = T_valid[fit_mask_T]
+    low_mask = y_valid < Y_FIT_MIN
+    high_mask = y_valid >= Y_FIT_MIN
     
     for i in range(1, 6):
-        popt, T_fit_cand, avg_err, max_err, name, latex = fits_T[i]
+        popt, T_fit_cand, rho_fit_cand, avg_err, max_err, name, latex = fits_T[i]
         if popt is not None:
-            lbl = f"Fit {i}: {name}\nAvg Err ({Y_FIT_MIN}<y<1): {avg_err:.3f}%, Max: {max_err:.3f}%"
+            lbl = f"Fit {i}: {name}\nAvg Err ({Y_FIT_MIN:.1f}<=y<1): {avg_err:.3e}, Max: {max_err:.3e}"
             lw = 2.2 if i == best_T["id"] else 1.5
-            ax_sa1.plot(y_valid, T_fit_cand, colors_T[i], linestyle='--', label=lbl, lw=lw)
             
-            # Error only plotted inside fitting domain
-            T_fit_cand_domain = T_fit_cand[fit_mask_T]
-            err_curve = np.abs((T_fit_cand_domain - T_valid_domain) / T_valid_domain) * 100
-            ax_sa2.plot(y_valid_T, err_curve, colors_T[i], label=f"Fit {i} (Avg: {avg_err:.3f}%)", lw=lw)
+            # Plot Temperature piecewise
+            if np.any(low_mask):
+                ax_sa1.plot(y_valid[low_mask], T_fit_cand[low_mask], colors_T[i], linestyle=':', lw=lw*0.7)
+            ax_sa1.plot(y_valid[high_mask], T_fit_cand[high_mask], colors_T[i], linestyle='--', label=lbl, lw=lw)
+            
+            # Error only plotted inside fitting domain (y >= Y_FIT_MIN)
+            T_fit_cand_domain = T_fit_cand[high_mask]
+            T_valid_domain = T_valid[high_mask]
+            err_curve = np.abs((T_fit_cand_domain - T_valid_domain) / T_valid_domain)
+            ax_sa2.plot(y_valid[high_mask], err_curve, colors_T[i], label=f"Fit {i} (Avg: {avg_err:.3e})", lw=lw)
             
     ax_sa1.set_xlabel(r"Normalized coordinate $y = \xi / \xi_s$", fontsize=12)
     ax_sa1.set_ylabel(r"Temperature $T(y)$ [dimensionless]", fontsize=12)
@@ -724,12 +665,12 @@ def plot_standalone_temperature_fits(
     ax_sa1.set_title("Dimensionless Temperature $T(y)$ vs 5 Candidates", fontsize=13, fontweight='bold')
     
     ax_sa2.set_xlabel(r"Normalized coordinate $y = \xi / \xi_s$", fontsize=12)
-    ax_sa2.set_ylabel(r"Relative Error [$\%$]", fontsize=12)
+    ax_sa2.set_ylabel(r"Relative Error", fontsize=12)
     ax_sa2.set_yscale('log')
     ax_sa2.set_ylim(bottom=1e-10)
     ax_sa2.legend(loc='best', fontsize=9.5)
     ax_sa2.grid(True, which="both", ls=":", alpha=0.5)
-    ax_sa2.set_title(f"Relative Errors of Temperature Fits on fitting domain y >= {Y_FIT_MIN} (semi-log)", fontsize=13, fontweight='bold')
+    ax_sa2.set_title(f"Relative Errors of Temperature Fits on domain y >= {Y_FIT_MIN:.1f} (semi-log)", fontsize=13, fontweight='bold')
     
     fig_sa.suptitle(f"Shock Temperature Curve Fitting & Optimization\nChosen Formal Fit: Fit {best_T['id']} ({best_T['name']})", fontsize=15, fontweight='bold')
     plt.tight_layout()
@@ -745,35 +686,50 @@ def plot_relative_errors(
     print("Generating shock relative error plots...")
     P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
     T_fit = best_T["fit_val"]
-    R_fit = (P_fit / (6730.0 * solver.r * T_fit**1.6))**(1.0/0.86)
+    R_fit = best_T["rho_fit"]
     U_fit = best_u["fit_val"]
     
-    err_T = np.abs((T_fit - T_valid) / T_valid) * 100
-    error_rho = np.abs((R_fit - R_valid) / R_valid) * 100
-    err_P = np.abs((P_fit - P_valid) / P_valid) * 100
-    err_U = np.abs((U_fit - U_valid) / (U_valid + 1e-15)) * 100
+    err_T = np.abs((T_fit - T_valid) / T_valid)
+    err_rho = np.abs((R_fit - R_valid) / R_valid)
+    err_P = np.abs((P_fit - P_valid) / P_valid)
+    err_U = np.abs((U_fit - U_valid) / (U_valid + 1e-15))
     
-    # Filter Temperature and Density errors to Y_FIT_MIN <= y <= 1.0
-    fit_mask_T = y_valid >= Y_FIT_MIN
-    y_valid_T = y_valid[fit_mask_T]
-    err_T_filtered = err_T[fit_mask_T]
-    err_rho_filtered = error_rho[fit_mask_T]
+    low_mask = y_valid < Y_FIT_MIN
+    high_mask = y_valid >= Y_FIT_MIN
     
-    avg_T, max_T = np.mean(err_T_filtered), np.max(err_T_filtered)
-    avg_R, max_R = np.mean(err_rho_filtered), np.max(err_rho_filtered)
+    err_T_high = err_T[high_mask]
+    avg_T_high, max_T_high = np.mean(err_T_high), np.max(err_T_high)
+    err_rho_high = err_rho[high_mask]
+    avg_rho_high, max_rho_high = np.mean(err_rho_high), np.max(err_rho_high)
+    
+    err_T_low = err_T[low_mask] if np.any(low_mask) else [0.0]
+    avg_T_low, max_T_low = np.mean(err_T_low), np.max(err_T_low)
+    err_rho_low = err_rho[low_mask] if np.any(low_mask) else [0.0]
+    avg_rho_low, max_rho_low = np.mean(err_rho_low), np.max(err_rho_low)
+    
     avg_P, max_P = np.mean(err_P), np.max(err_P)
     avg_U, max_U = best_u["avg_err"], best_u["max_err"]
     
     fig_err, ax_err = plt.subplots(figsize=(10, 7.5))
-    ax_err.plot(y_valid_T, err_T_filtered, label=f'Temperature $T(y)$ (Avg ({Y_FIT_MIN}<y<1): {avg_T:.4f}%, Max ({Y_FIT_MIN}<y<1): {max_T:.4f}%)', lw=2.0)
-    ax_err.plot(y_valid_T, err_rho_filtered, label=f'Density $\\rho(y)$ (Avg ({Y_FIT_MIN}<y<1): {avg_R:.4f}%, Max ({Y_FIT_MIN}<y<1): {max_R:.4f}%)', lw=2.0)
-    ax_err.plot(y_valid, err_P, label=f'Pressure $P(y)$ (Avg: {avg_P:.4f}%, Max: {max_P:.4f}%)', lw=2.0)
-    ax_err.plot(y_valid, err_U, label=f'Velocity $U(y)$ (Avg: {avg_U:.4f}%, Max: {max_U:.4f}%)', lw=2.0)
+    
+    # Plot Pressure and Velocity over full domain
+    ax_err.plot(y_valid, err_P, color='red', label=f'Pressure $P(y)$ (Avg: {avg_P:.3e}, Max: {max_P:.3e})', lw=2.0)
+    ax_err.plot(y_valid, err_U, color='purple', label=f'Velocity $U(y)$ (Avg: {avg_U:.3e}, Max: {max_U:.3e})', lw=2.0)
+    
+    # Plot Temperature piecewise
+    ax_err.plot(y_valid[high_mask], err_T_high, color='blue', label=f'Temperature $T(y)$ (y >= {Y_FIT_MIN:.1f}, Avg: {avg_T_high:.3e}, Max: {max_T_high:.3e})', lw=2.0)
+    if np.any(low_mask):
+        ax_err.plot(y_valid[low_mask], err_T_low, color='darkorange', linestyle=':', label=f'Temperature $T(y)$ (y < {Y_FIT_MIN:.1f}, Avg: {avg_T_low:.3e}, Max: {max_T_low:.3e})', lw=2.0)
+        
+    # Plot Density piecewise
+    ax_err.plot(y_valid[high_mask], err_rho_high, color='green', label=f'Density $\\rho(y)$ (y >= {Y_FIT_MIN:.1f}, Avg: {avg_rho_high:.3e}, Max: {max_rho_high:.3e})', lw=2.0)
+    if np.any(low_mask):
+        ax_err.plot(y_valid[low_mask], err_rho_low, color='orange', linestyle=':', label=f'Density $\\rho(y)$ (y < {Y_FIT_MIN:.1f}, Avg: {avg_rho_low:.3e}, Max: {max_rho_low:.3e})', lw=2.0)
     
     ax_err.set_xlabel(r"Normalized coordinate $y = \xi / \xi_s$", fontsize=12)
-    ax_err.set_ylabel(r"Relative Error [$\%$]", fontsize=12)
+    ax_err.set_ylabel(r"Relative Error", fontsize=12)
     ax_err.set_yscale('log')
-    ax_err.set_ylim(bottom=1e-10)
+    ax_err.set_ylim(bottom=1e-5)
     ax_err.grid(True, which="both", ls=":", alpha=0.5)
     ax_err.legend(loc="best", fontsize=10.5)
     ax_err.set_title(f"Relative Errors of Shock self-similar Fits (semi-log)\n{case_title}", fontsize=13, fontweight='bold')
@@ -861,6 +817,7 @@ def generate_verification_plots(
     # Compute fit arrays
     P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
     T_fit = best_T["fit_val"]
+    rho_fit = best_T["rho_fit"]
     U_fit = best_u["fit_val"]
 
     # 1) Standalone Temperature fits comparison and relative errors
@@ -870,7 +827,7 @@ def generate_verification_plots(
     plot_and_fit_self_similar(solver, y_valid, T_valid, P_valid, U_valid, R_valid, popt_P, best_T, best_u, fits_u, self_similar_path, standalone_path, case_title)
 
     # 3) Dimensional fit comparison
-    plot_dimensional_fit_comparison(history, solver, case, y_valid, P_fit, T_fit, U_fit, dimensional_fit_path, case_title)
+    plot_dimensional_fit_comparison(history, solver, case, y_valid, P_fit, T_fit, rho_fit, U_fit, dimensional_fit_path, case_title)
 
     # 4) Relative errors of self-similar fits
     plot_relative_errors(solver, y_valid, T_valid, P_valid, U_valid, R_valid, popt_P, best_T, best_u, relative_errors_path, case_title)

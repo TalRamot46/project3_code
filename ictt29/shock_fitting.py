@@ -63,8 +63,9 @@ from project3_code.hydro_sim.plotting.hydro_plots import _create_7panel_vertical
 
 from piston_shock import PistonShock
 
-USE_CACHE = False  # Set to True to use pre-saved pickle files, False to run again
-Y_FIT_MIN = 0.99   # Configure the lower bound for fitting Temperature T
+USE_CACHE = True  # Set to True to use pre-saved pickle files, False to run again
+Y_FIT_MIN = 0.1   # Configure the lower bound for fitting Temperature T
+FITTING_OPTION = "FIT_RHO_AROUND_FRONT"  # Literal["FIT_TEMP_AROUND_FRONT", "FIT_RHO_AROUND_FRONT", "FIT_RHO_ALL_AROUND"]
 
 def get_cached_shock_solver(case, case_label):
     """Solve shock similarity ODEs once and cache the solver object (with found xsi_s)."""
@@ -99,7 +100,7 @@ def get_cached_shock_solver(case, case_label):
     )
     
     # Save cache by removing ode_solver temporarily to avoid pickling issues
-    if USE_CACHE:
+    if not USE_CACHE:
         try:
             ode_solver = solver.ode_solver
             del solver.ode_solver
@@ -139,52 +140,96 @@ def perform_shock_fitting(solver):
         return 1.0 - (1.0 - solver.Ps) * (y**d)
         
     popt_P, _ = curve_fit(power_law_P, y_valid, P_valid, p0=[1.0])
+    P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
     
-    # Temperature Fit Candidate Selection and Optimization
-    # Ts is the true EOS temperature at the shock boundary
-    Es = float(solver.Ps * solver.Rs_or_Vs / solver.r)
+    # Temperature or Density Fit Candidate Selection and Optimization
     Ts = T_valid[-1]
     T_0 = T_valid[0]
+    rho_s = rho_valid[-1]
+    rho_0 = rho_valid[0]
     
-    # 5 Candidates
-    def fit_T_1(y, a):
-        return Ts + (T_0 - Ts) * (1.0 - y)**a
+    # Define candidates and mask based on FITTING_OPTION
+    if FITTING_OPTION == "FIT_TEMP_AROUND_FRONT":
+        def fit_cand_1(y, a):
+            return Ts + (T_0 - Ts) * (1.0 - y)**a
+            
+        def fit_cand_2(y, c, a, b):
+            return Ts + c * (1.0 - y)**a + (T_0 - Ts - c) * (1.0 - y)**b
+            
+        def fit_cand_3(y, a, b):
+            return Ts + (T_0 - Ts) * (1.0 - y)**a * np.exp(-b * y)
+            
+        def fit_cand_4(y, c1, c2, a, b):
+            return Ts + c1 * (1.0 - y)**a + c2 * (1.0 - y)**b
+            
+        def fit_cand_5(y, a, b):
+            return Ts + (T_0 - Ts) * (1.0 - y)**a / (1.0 + b * y)
+            
+        candidates_T = [
+            {"id": 1, "func": fit_cand_1, "name": "Single Power Law (BC)", "latex": r"T(y) \approx T_s + (T_0-T_s)(1-y)^{%.5f}", "p0": [1.0]},
+            {"id": 2, "func": fit_cand_2, "name": "Double Power Law (BC)", "latex": r"T(y) \approx T_s + %.5f (1-y)^{%.5f} + %.5f (1-y)^{%.5f}", "p0": [(T_0-Ts)/2.0, 1.0, 2.0]},
+            {"id": 3, "func": fit_cand_3, "name": "Exponential-Damped Power Law (BC)", "latex": r"T(y) \approx T_s + (T_0-T_s)(1-y)^{%.5f} e^{-%.5f y}", "p0": [1.0, 0.1]},
+            {"id": 4, "func": fit_cand_4, "name": "Linear Combo (Shock-Conforming)", "latex": r"T(y) \approx T_s + %.5f (1-y)^{%.5f} + %.5f (1-y)^{%.5f}", "p0": [(T_0-Ts)/2.0, (T_0-Ts)/2.0, 1.0, 2.0]},
+            {"id": 5, "func": fit_cand_5, "name": "Rational Power Law (BC)", "latex": r"T(y) \approx T_s + (T_0-T_s)\frac{(1-y)^{%.5f}}{1+%.5f y}", "p0": [1.0, 0.1]}
+        ]
         
-    def fit_T_2(y, c, a, b):
-        return Ts + c * (1.0 - y)**a + (T_0 - Ts - c) * (1.0 - y)**b
+        fit_mask_T = y_valid >= Y_FIT_MIN
+        y_fit_data = T_valid[fit_mask_T]
         
-    def fit_T_3(y, a, b):
-        return Ts + (T_0 - Ts) * (1.0 - y)**a * np.exp(-b * y)
+    else: # FIT_RHO_AROUND_FRONT or FIT_RHO_ALL_AROUND
+        def fit_cand_1(y, a):
+            return rho_s + (rho_0 - rho_s) * (1.0 - y)**a
+            
+        def fit_cand_2(y, c, a, b):
+            return rho_s + c * (1.0 - y)**a + (rho_0 - rho_s - c) * (1.0 - y)**b
+            
+        def fit_cand_3(y, a, b):
+            return rho_s + (rho_0 - rho_s) * (1.0 - y)**a * np.exp(-b * y)
+            
+        def fit_cand_4(y, c1, c2, a, b):
+            return rho_s + c1 * (1.0 - y)**a + c2 * (1.0 - y)**b
+            
+        def fit_cand_5(y, a, b):
+            return rho_s + (rho_0 - rho_s) * (1.0 - y)**a / (1.0 + b * y)
+            
+        candidates_T = [
+            {"id": 1, "func": fit_cand_1, "name": "Single Power Law (BC)", "latex": r"\rho(y) \approx \rho_s + (\rho_0-\rho_s)(1-y)^{%.5f}", "p0": [1.0]},
+            {"id": 2, "func": fit_cand_2, "name": "Double Power Law (BC)", "latex": r"\rho(y) \approx \rho_s + %.5f (1-y)^{%.5f} + %.5f (1-y)^{%.5f}", "p0": [(rho_0-rho_s)/2.0, 1.0, 2.0]},
+            {"id": 3, "func": fit_cand_3, "name": "Exponential-Damped Power Law (BC)", "latex": r"\rho(y) \approx \rho_s + (\rho_0-\rho_s)(1-y)^{%.5f} e^{-%.5f y}", "p0": [1.0, 0.1]},
+            {"id": 4, "func": fit_cand_4, "name": "Linear Combo (Shock-Conforming)", "latex": r"\rho(y) \approx \rho_s + %.5f (1-y)^{%.5f} + %.5f (1-y)^{%.5f}", "p0": [(rho_0-rho_s)/2.0, (rho_0-rho_s)/2.0, 1.0, 2.0]},
+            {"id": 5, "func": fit_cand_5, "name": "Rational Power Law (BC)", "latex": r"\rho(y) \approx \rho_s + (\rho_0-\rho_s)\frac{(1-y)^{%.5f}}{1+%.5f y}", "p0": [1.0, 0.1]}
+        ]
         
-    def fit_T_4(y, c1, c2, a, b):
-        return Ts + c1 * (1.0 - y)**a + c2 * (1.0 - y)**b
+        if FITTING_OPTION == "FIT_RHO_AROUND_FRONT":
+            fit_mask_T = y_valid >= Y_FIT_MIN
+        else: # FIT_RHO_ALL_AROUND
+            fit_mask_T = np.ones_like(y_valid, dtype=bool)
+            
+        y_fit_data = rho_valid[fit_mask_T]
         
-    def fit_T_5(y, a, b):
-        return Ts + (T_0 - Ts) * (1.0 - y)**a / (1.0 + b * y)
-        
-    candidates_T = [
-        {"id": 1, "func": fit_T_1, "name": "Single Power Law (BC)", "latex": r"T(y) \approx T_s + (T_0-T_s)(1-y)^{%.5f}", "p0": [1.0]},
-        {"id": 2, "func": fit_T_2, "name": "Double Power Law (BC)", "latex": r"T(y) \approx T_s + %.5f (1-y)^{%.5f} + %.5f (1-y)^{%.5f}", "p0": [(T_0-Ts)/2.0, 1.0, 2.0]},
-        {"id": 3, "func": fit_T_3, "name": "Exponential-Damped Power Law (BC)", "latex": r"T(y) \approx T_s + (T_0-T_s)(1-y)^{%.5f} e^{-%.5f y}", "p0": [1.0, 0.1]},
-        {"id": 4, "func": fit_T_4, "name": "Linear Combo (Shock-Conforming)", "latex": r"T(y) \approx T_s + %.5f (1-y)^{%.5f} + %.5f (1-y)^{%.5f}", "p0": [(T_0-Ts)/2.0, (T_0-Ts)/2.0, 1.0, 2.0]},
-        {"id": 5, "func": fit_T_5, "name": "Rational Power Law (BC)", "latex": r"T(y) \approx T_s + (T_0-T_s)\frac{(1-y)^{%.5f}}{1+%.5f y}", "p0": [1.0, 0.1]}
-    ]
-    
-    # We will perform fitting only in the Y_FIT_MIN <= y <= 1.0 domain
-    fit_mask_T = y_valid >= Y_FIT_MIN
-    y_fit_T = y_valid[fit_mask_T]
-    T_fit_data = T_valid[fit_mask_T]
-    
     best_T = None
     min_avg_err_T = float("inf")
     fits_T = {}
     
     for cand in candidates_T:
         try:
-            popt, _ = curve_fit(cand["func"], y_fit_T, T_fit_data, p0=cand["p0"], maxfev=10000)
-            T_fit = cand["func"](y_valid, *popt)
+            popt, _ = curve_fit(cand["func"], y_valid[fit_mask_T], y_fit_data, p0=cand["p0"], maxfev=10000)
+            fit_val = cand["func"](y_valid, *popt)
             
-            # Calculate errors inside the dynamic fitting domain y >= Y_FIT_MIN in absolute values (no percentages!)
+            # Derive derived Temperature or Density for error computation
+            if FITTING_OPTION == "FIT_TEMP_AROUND_FRONT":
+                T_fit = fit_val
+                rho_fit = (P_fit / (6730.0 * solver.r * T_fit**1.6))**(1.0/0.86)
+            elif FITTING_OPTION == "FIT_RHO_ALL_AROUND":
+                rho_fit = fit_val
+                T_fit = (P_fit / (6730.0 * solver.r * rho_fit**0.86))**(1.0/1.6)
+            else: # FIT_RHO_AROUND_FRONT
+                rho_fit_high = fit_val[fit_mask_T]
+                T_fit_high = (P_fit[fit_mask_T] / (6730.0 * solver.r * rho_fit_high**0.86))**(1.0/1.6)
+                T_fit = np.zeros_like(y_valid)
+                T_fit[fit_mask_T] = T_fit_high
+                
+            # Calculate errors inside the active fitting domain in absolute values
             T_fit_domain = T_fit[fit_mask_T]
             T_valid_domain = T_valid[fit_mask_T]
             rel_err_T = np.abs((T_fit_domain - T_valid_domain) / T_valid_domain)
@@ -192,20 +237,35 @@ def perform_shock_fitting(solver):
             avg_err = np.mean(rel_err_T)
             max_err = np.max(rel_err_T)
             
-            if cand["id"] == 1:
-                latex_str = r"T(y) \approx T_s + (T_0-T_s)(1-y)^{%.5f}" % tuple(popt)
-            elif cand["id"] == 2:
-                c, a, b = popt
-                latex_str = r"T(y) \approx T_s + %.5f (1-y)^{%.5f} + %.5f (1-y)^{%.5f}" % (c, a, T_0 - Ts - c, b)
-            elif cand["id"] == 3:
-                latex_str = r"T(y) \approx T_s + (T_0-T_s)(1-y)^{%.5f} e^{-%.5f y}" % tuple(popt)
-            elif cand["id"] == 4:
-                c1, c2, a, b = popt
-                latex_str = r"T(y) \approx T_s + %.5f (1-y)^{%.5f} + %.5f (1-y)^{%.5f}" % (c1, a, c2, b)
-            elif cand["id"] == 5:
-                latex_str = r"T(y) \approx T_s + (T_0-T_s)\frac{(1-y)^{%.5f}}{1+%.5f y}" % tuple(popt)
-                
-            fits_T[cand["id"]] = (popt, T_fit, avg_err, max_err, cand["name"], latex_str)
+            # Format the latex_str
+            if FITTING_OPTION == "FIT_TEMP_AROUND_FRONT":
+                if cand["id"] == 1:
+                    latex_str = r"T(y) \approx T_s + (T_0-T_s)(1-y)^{%.5f}" % tuple(popt)
+                elif cand["id"] == 2:
+                    c, a, b = popt
+                    latex_str = r"T(y) \approx T_s + %.5f (1-y)^{%.5f} + %.5f (1-y)^{%.5f}" % (c, a, T_0 - Ts - c, b)
+                elif cand["id"] == 3:
+                    latex_str = r"T(y) \approx T_s + (T_0-T_s)(1-y)^{%.5f} e^{-%.5f y}" % tuple(popt)
+                elif cand["id"] == 4:
+                    c1, c2, a, b = popt
+                    latex_str = r"T(y) \approx T_s + %.5f (1-y)^{%.5f} + %.5f (1-y)^{%.5f}" % (c1, a, c2, b)
+                elif cand["id"] == 5:
+                    latex_str = r"T(y) \approx T_s + (T_0-T_s)\frac{(1-y)^{%.5f}}{1+%.5f y}" % tuple(popt)
+            else:
+                if cand["id"] == 1:
+                    latex_str = r"\rho(y) \approx \rho_s + (\rho_0-\rho_s)(1-y)^{%.5f}" % tuple(popt)
+                elif cand["id"] == 2:
+                    c, a, b = popt
+                    latex_str = r"\rho(y) \approx \rho_s + %.5f (1-y)^{%.5f} + %.5f (1-y)^{%.5f}" % (c, a, rho_0 - rho_s - c, b)
+                elif cand["id"] == 3:
+                    latex_str = r"\rho(y) \approx \rho_s + (\rho_0-\rho_s)(1-y)^{%.5f} e^{-%.5f y}" % tuple(popt)
+                elif cand["id"] == 4:
+                    c1, c2, a, b = popt
+                    latex_str = r"\rho(y) \approx \rho_s + %.5f (1-y)^{%.5f} + %.5f (1-y)^{%.5f}" % (c1, a, c2, b)
+                elif cand["id"] == 5:
+                    latex_str = r"\rho(y) \approx \rho_s + (\rho_0-\rho_s)\frac{(1-y)^{%.5f}}{1+%.5f y}" % tuple(popt)
+                    
+            fits_T[cand["id"]] = (popt, fit_val, avg_err, max_err, cand["name"], latex_str)
             
             if avg_err < min_avg_err_T:
                 min_avg_err_T = avg_err
@@ -217,10 +277,10 @@ def perform_shock_fitting(solver):
                     "latex": latex_str,
                     "avg_err": avg_err,
                     "max_err": max_err,
-                    "fit_val": T_fit
+                    "fit_val": fit_val
                 }
         except Exception as e:
-            print(f"Shock temperature fit {cand['id']} failed: {e}")
+            print(f"Shock temperature/density fit {cand['id']} failed: {e}")
             fits_T[cand["id"]] = (None, None, 0.0, 0.0, cand["name"], cand["latex"])
             
     # Velocity fits
@@ -270,43 +330,56 @@ def perform_shock_fitting(solver):
             print(f"Shock velocity fit {cand['id']} failed: {e}")
             fits_u[cand["id"]] = (None, None, 0.0, 0.0, cand["name"], cand["latex"])
             
-    # Construct piecewise composite profiles for all Temperature candidates and the chosen best_T
-    low_mask = y_valid < Y_FIT_MIN
-    high_mask = y_valid >= Y_FIT_MIN
+    # Construct piecewise composite profiles for all candidates and the chosen best_T
+    if FITTING_OPTION == "FIT_RHO_ALL_AROUND":
+        low_mask = y_valid < 0.0 # empty
+        high_mask = np.ones_like(y_valid, dtype=bool) # full
+    else:
+        low_mask = y_valid < Y_FIT_MIN
+        high_mask = y_valid >= Y_FIT_MIN
+        
     P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
     
     fits_T_composite = {}
-    for cand_id, (popt_cand, T_fit_cand, avg_err_cand, max_err_cand, name, latex_str) in fits_T.items():
+    for cand_id, (popt_cand, fit_val_cand, avg_err_cand, max_err_cand, name, latex_str) in fits_T.items():
         if popt_cand is not None:
-            if np.any(low_mask) and Y_FIT_MIN > 0:
-                idx_mid = np.argmin(np.abs(y_valid - Y_FIT_MIN))
-                rho_fit_high_cand = (P_fit / (6730.0 * solver.r * T_fit_cand**1.6))**(1.0/0.86)
-                rho_fit_mid_cand = rho_fit_high_cand[idx_mid]
+            if FITTING_OPTION == "FIT_RHO_ALL_AROUND":
+                rho_fit_comp_cand = fit_val_cand
+                T_fit_comp_cand = (P_fit / (6730.0 * solver.r * rho_fit_comp_cand**0.86))**(1.0/1.6)
+                fits_T_composite[cand_id] = (popt_cand, T_fit_comp_cand, rho_fit_comp_cand, avg_err_cand, max_err_cand, name, latex_str)
+            else:
                 rho_0 = rho_valid[0]
                 rho_s = rho_valid[-1]
                 
-                def fit_rho_low_cand(y, a):
-                    return rho_0 + (rho_fit_mid_cand - rho_0) * (y / Y_FIT_MIN)**a
-
+                # Fit density in low domain: fit_rho_around_zero
                 def fit_rho_around_zero(y, a, d):
                     return rho_s + (rho_0 - rho_s)*(1-(y**d))**a
-
+                    
                 popt_rho_low_cand, _ = curve_fit(fit_rho_around_zero, y_valid[low_mask], rho_valid[low_mask], p0=[1.0, 1.0], maxfev=10000)
                 rho_fit_low_cand = fit_rho_around_zero(y_valid[low_mask], *popt_rho_low_cand)
                 T_fit_low_cand = (P_fit[low_mask] / (6730.0 * solver.r * rho_fit_low_cand**0.86))**(1.0/1.6)
                 
+                if FITTING_OPTION == "FIT_TEMP_AROUND_FRONT":
+                    T_fit_high_cand = fit_val_cand[high_mask]
+                    rho_fit_high_cand = (P_fit[high_mask] / (6730.0 * solver.r * T_fit_high_cand**1.6))**(1.0/0.86)
+                else: # FIT_RHO_AROUND_FRONT
+                    rho_fit_high_cand = fit_val_cand[high_mask]
+                    T_fit_high_cand = (P_fit[high_mask] / (6730.0 * solver.r * rho_fit_high_cand**0.86))**(1.0/1.6)
+                    
                 T_fit_comp_cand = np.zeros_like(y_valid)
                 T_fit_comp_cand[low_mask] = T_fit_low_cand
-                T_fit_comp_cand[high_mask] = T_fit_cand[high_mask]
+                T_fit_comp_cand[high_mask] = T_fit_high_cand
                 
                 rho_fit_comp_cand = np.zeros_like(y_valid)
                 rho_fit_comp_cand[low_mask] = rho_fit_low_cand
-                rho_fit_comp_cand[high_mask] = rho_fit_high_cand[high_mask]
+                rho_fit_comp_cand[high_mask] = rho_fit_high_cand
                 
-                fits_T_composite[cand_id] = (popt_cand, T_fit_comp_cand, rho_fit_comp_cand, avg_err_cand, max_err_cand, name, latex_str)
-            else:
-                rho_fit_cand = (P_fit / (6730.0 * solver.r * T_fit_cand**1.6))**(1.0/0.86)
-                fits_T_composite[cand_id] = (popt_cand, T_fit_cand, rho_fit_cand, avg_err_cand, max_err_cand, name, latex_str)
+                # Recalculate average and max error on derived temperature over the fitting mask for consistency
+                rel_err_cand = np.abs((T_fit_comp_cand[high_mask] - T_valid[high_mask]) / T_valid[high_mask])
+                avg_err_comp = np.mean(rel_err_cand)
+                max_err_comp = np.max(rel_err_cand)
+                
+                fits_T_composite[cand_id] = (popt_cand, T_fit_comp_cand, rho_fit_comp_cand, avg_err_comp, max_err_comp, name, latex_str)
         else:
             fits_T_composite[cand_id] = (None, None, None, 0.0, 0.0, name, latex_str)
             

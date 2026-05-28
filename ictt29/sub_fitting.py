@@ -145,10 +145,25 @@ def perform_subsonic_fitting(solver):
     # Velocity fits
     def fit_u_1(y, c, d): return c * (1.0 - y)**d
     def fit_u_2(y, c, b): return c * (1.0 - y) / (1.0 + b * y)
-    def fit_u_3(y, c, b): return c * (1.0 - y) * (y**(-b))
-    def fit_u_4(y, c, a, b): return c * (1.0 - y**a) * (y**(-b))
-    def fit_u_5(y, c, a, b): return c * (1.0 - y) * (y**a + y**(-b))
-    def fit_u_6(y, c, a, b): return c * (1.0 - y**a) / (1.0 + b * y)
+    def fit_u_3(y, a, b, epsilon=1e-5):
+        y = np.asarray(y)
+        # Ensures smooth singularity at 0, while perfectly striking u_f at 1
+        return u_f + (u_0 - u_f) * ((1.0 - y) ** a) * ((y + epsilon) ** (-b))
+    def fit_u_4(y, c, a, b): 
+        y = np.asarray(y)
+        return c * (1.0 - y**a) * (y**(-b))
+    def fit_u_5(y, c, a, b, epsilon=1e-5): 
+        y = np.asarray(y)
+        # The clamp (1-y)**a forces the right boundary to match u_f exactly
+        # The ln(y) provides the steep vertical plunge at the origin
+        return u_f + (u_0 - u_f) * ((1.0 - y) ** a) * (1.0 - c * np.log(y + epsilon))
+    def fit_u_6(y, c, a, b): 
+        y = np.asarray(y)
+        # Clip to avoid negative roots if solver searches weird parameter spaces
+        y_clipped = np.clip(y, 1e-10, 1.0)
+        numerator = 1.0 - y_clipped**a
+        denominator = 1.0 + c * (y_clipped**b)
+        return u_f + (u_0 - u_f) * (numerator / denominator)
     
     
     # Custom front velocity Candidates requested by user
@@ -166,17 +181,47 @@ def perform_subsonic_fitting(solver):
         res[left_mask] = u_0 + a * y[left_mask]**b
         res[~left_mask] = u_f + c * (1.0 - y[~left_mask])**d
         return res
+        
+    def fit_u_10(y, a1, a2, alpha, b1, b2, y0):
+        y = np.asarray(y, dtype=float)
+        y_clipped = np.clip(y, 1e-12, 1.0)
+        u_left = u_0 + a1 * (y_clipped ** alpha) + a2 * (y_clipped ** (2.0 * alpha))
+        dx = 1.0 - y_clipped
+        u_right = u_f + b1 * dx + b2 * (dx ** 2)
+        weight = (1.0 - y_clipped) / (1.0 + (y_clipped / y0) ** 4)
+        return weight * u_left + (1.0 - weight) * u_right
+        
+    def fit_u_11(y, a1, a2, a3, alpha, b1, b2, b3, y0):
+        y = np.asarray(y, dtype=float)
+        y_clipped = np.clip(y, 1e-12, 1.0)
+        u_left = u_0 + a1 * (y_clipped ** alpha) + a2 * (y_clipped ** (2.0 * alpha)) + a3 * (y_clipped ** (3.0 * alpha))
+        dx = 1.0 - y_clipped
+        u_right = u_f + b1 * dx + b2 * (dx ** 2) + b3 * (dx ** 3)
+        weight = (1.0 - y_clipped) / (1.0 + (y_clipped / y0) ** 4)
+        return weight * u_left + (1.0 - weight) * u_right
+        
+    def fit_u_12(y, a1, a2, a3, a4, alpha, b1, b2, b3, b4, y0):
+        y = np.asarray(y, dtype=float)
+        y_clipped = np.clip(y, 1e-12, 1.0)
+        u_left = u_0 + a1 * (y_clipped ** alpha) + a2 * (y_clipped ** (2.0 * alpha)) + a3 * (y_clipped ** (3.0 * alpha)) + a4 * (y_clipped ** (4.0 * alpha))
+        dx = 1.0 - y_clipped
+        u_right = u_f + b1 * dx + b2 * (dx ** 2) + b3 * (dx ** 3) + b4 * (dx ** 4)
+        weight = (1.0 - y_clipped) / (1.0 + (y_clipped / y0) ** 4)
+        return weight * u_left + (1.0 - weight) * u_right
     
     candidates = [
         {"id": 1, "func": fit_u_1, "name": "Power Law: $c(1-y)^d$", "latex": r"U(y) \approx %.5f (1 - y)^{%.5f}", "p0": [u_0, 0.5], "bounds": (-np.inf, np.inf)},
         {"id": 2, "func": fit_u_2, "name": "Rational: $c(1-y)/(1+b y)$", "latex": r"U(y) \approx \frac{%.5f (1 - y)}{1 + %.5f y}", "p0": [u_0, 0.5], "bounds": (-np.inf, np.inf)},
-        {"id": 3, "func": fit_u_3, "name": "Singular 2P: $c(1-y)y^{-b}$", "latex": r"U(y) \approx %.5f (1 - y) y^{-%.5f}", "p0": [-1.0, 0.3], "bounds": (-np.inf, np.inf)},
+        {"id": 3, "func": fit_u_3, "name": r"Singular Front 3P: $u_f + (u_0-u_f)(1-y)^a y^{-b}$", "latex": r"U(y) \approx u_f + (u_0 - u_f)(1-y)^{%.5f}y^{-%.5f}", "p0": [1.0, 0.3], "bounds": (0.0, np.inf)},
         {"id": 4, "func": fit_u_4, "name": "Singular 3P: $c(1-y^a)y^{-b}$", "latex": r"U(y) \approx %.5f (1 - y^{%.5f}) y^{-%.5f}", "p0": [-1.0, 1.0, 0.3], "bounds": (-np.inf, np.inf)},
-        {"id": 5, "func": fit_u_5, "name": "User 3P: $c(1-y)(y^a + y^{-b})$", "latex": r"U(y) \approx %.5f (1 - y) (y^{%.5f} + y^{-%.5f)}", "p0": [-1.0, 1.0, 0.3], "bounds": (-np.inf, np.inf)},
-        {"id": 6, "func": fit_u_6, "name": "Rational Frac: $c(1-y^a)/(1+b y)$", "latex": r"U(y) \approx \frac{%.5f (1 - y^{%.5f})}{1 + %.5f y}", "p0": [u_0, 1.0, 1.0], "bounds": (-np.inf, np.inf)},
+        {"id": 5, "func": fit_u_5, "name": r"Log Front 3P: $u_f + (u_0-u_f)(1-y)^a(1-c\ln(y))$", "latex": r"U(y) \approx u_f + (u_0 - u_f)(1-y)^{%.5f}(1 - %.5f \ln(y))", "p0": [-1.0, 1.0, 0.3], "bounds": (-np.inf, np.inf)},
+        {"id": 6, "func": fit_u_6, "name": r"Rational Frac Front 3P: $u_f + (u_0-u_f)(1-y^a)/(1+cy^b)$", "latex": r"U(y) \approx u_f + (u_0 - u_f) \frac{1 - y^{%.5f}}{1 + %.5f y^{%.5f}}", "p0": [u_0, 1.0, 1.0], "bounds": (-np.inf, np.inf)},
         {"id": 7, "func": fit_u_7, "name": "Power Law Front: $u_f + (u_0-u_f)(1-y^a)^b$", "latex": r"U(y) \approx u_f + (u_0 - u_f)(1 - y^{%.5f})^{%.5f}", "p0": [1.0, 1.0], "bounds": (0.0, np.inf)},
         {"id": 8, "func": fit_u_8, "name": "Rational Front: $u_f + (u_0-u_f)(1-y)/(1+cy)$", "latex": r"U(y) \approx u_f + \frac{(u_0 - u_f)(1 - y)}{1 + %.5f y}", "p0": [1.0], "bounds": (-0.99, np.inf)},
-        {"id": 9, "func": fit_u_9, "name": "Piecewise Power-Law (y=0.2)", "latex": r"U(y) \approx Piecewise", "p0": [1.0, 0.5, 0.5], "bounds": (0.0, np.inf)}
+        {"id": 9, "func": fit_u_9, "name": "Piecewise Power-Law (y=0.2)", "latex": r"U(y) \approx Piecewise", "p0": [1.0, 0.5, 0.5], "bounds": (0.0, np.inf)},
+        {"id": 10, "func": fit_u_10, "name": "Asymptotic Blend 6P", "latex": r"U(y) \approx W U_{left} + (1-W) U_{right}", "p0": [-5.0, -2.0, 0.25, 2.0, 0.5, 0.2], "bounds": ([-50.0, -50.0, 0.01, -20.0, -20.0, 0.05], [50.0, 50.0, 0.99, 20.0, 20.0, 0.50])},
+        {"id": 11, "func": fit_u_11, "name": "Asymptotic Blend 8P (3 Pow)", "latex": r"U(y) \approx W U_{left,3} + (1-W) U_{right,3}", "p0": [-5.0, -2.0, -0.5, 0.25, 2.0, 0.5, 0.1, 0.2], "bounds": ([-50.0, -50.0, -50.0, 0.01, -20.0, -20.0, -20.0, 0.05], [50.0, 50.0, 50.0, 0.99, 20.0, 20.0, 20.0, 0.50])},
+        {"id": 12, "func": fit_u_12, "name": "Asymptotic Blend 10P (4 Pow)", "latex": r"U(y) \approx W U_{left,4} + (1-W) U_{right,4}", "p0": [-5.0, -2.0, -0.5, -0.1, 0.25, 2.0, 0.5, 0.1, 0.05, 0.2], "bounds": ([-50.0, -50.0, -50.0, -50.0, 0.01, -20.0, -20.0, -20.0, -20.0, 0.05], [50.0, 50.0, 50.0, 50.0, 0.99, 20.0, 20.0, 20.0, 20.0, 0.50])}
     ]
     
     y_valid_u = y_valid
@@ -194,7 +239,7 @@ def perform_subsonic_fitting(solver):
             rel_err_u = np.abs((U_fit_u - U_valid_u) / (U_valid_u + 1e-15))  # Absolute error
             avg_err = np.mean(rel_err_u)
             max_err = np.max(rel_err_u)
-            
+            print(f"  Candidate {cand['id']} ({cand['name']}): Avg Err: {avg_err:.3e}, Max Err: {max_err:.3e}")
             fits_u[cand["id"]] = (popt, U_fit, avg_err, max_err, cand["name"], cand["latex"])
             
             if avg_err < min_avg_err:
@@ -432,23 +477,29 @@ def plot_and_fit_self_similar(
     # Format the dynamic velocity formula in latex
     u_0_val, u_f_val = U_valid[0], U_valid[-1]
     if best_u["id"] == 1:
-        u_formula = f"$U(y) \\approx {best_u['popt'][0]:.5f} (1-y)^{{{best_u['popt'][1]:.5f}}}$"
+        u_formula = r"$U(y) \approx {:.5f} (1-y)^{{{:.5f}}}$".format(best_u['popt'][0], best_u['popt'][1])
     elif best_u["id"] == 2:
-        u_formula = f"$U(y) \\approx \\frac{{{best_u['popt'][0]:.5f} (1-y)}}{{1 + {best_u['popt'][1]:.5f} y}}$"
+        u_formula = r"$U(y) \approx \frac{{{:.5f} (1-y)}}{{1 + {:.5f} y}}$".format(best_u['popt'][0], best_u['popt'][1])
     elif best_u["id"] == 3:
-        u_formula = f"$U(y) \\approx {best_u['popt'][0]:.5f} (1-y) y^{{-{best_u['popt'][1]:.5f}}}$"
+        u_formula = r"$U(y) \approx {:.4f} + ({:.4f}) (1-y)^{{{:.4f}}} y^{{-{:.4f}}}$".format(u_f_val, u_0_val - u_f_val, best_u['popt'][0], best_u['popt'][1])
     elif best_u["id"] == 4:
-        u_formula = f"$U(y) \\approx {best_u['popt'][0]:.5f} (1-y^{{{best_u['popt'][1]:.5f}}}) y^{{-{best_u['popt'][2]:.5f}}}$"
+        u_formula = r"$U(y) \approx {:.5f} (1-y^{{{:.5f}}}) y^{{-{:.5f}}}$".format(best_u['popt'][0], best_u['popt'][1], best_u['popt'][2])
     elif best_u["id"] == 5:
-        u_formula = f"$U(y) \\approx {best_u['popt'][0]:.5f} (1-y) (y^{{{best_u['popt'][1]:.5f}}} + y^{{-{best_u['popt'][2]:.5f}}})$"
+        u_formula = r"$U(y) \approx {:.4f} + ({:.4f}) (1-y)^{{{:.4f}}} (1 - {:.4f}\ln(y))$".format(u_f_val, u_0_val - u_f_val, best_u['popt'][1], best_u['popt'][0])
     elif best_u["id"] == 6:
-        u_formula = f"$U(y) \\approx \\frac{{{best_u['popt'][0]:.5f} (1-y^{{{best_u['popt'][1]:.5f}}} )}}{{1 + {best_u['popt'][2]:.5f} y}}$"
+        u_formula = r"$U(y) \approx {:.4f} + ({:.4f}) \frac{{1 - y^{{{:.4f}}}}}{{1 + {:.4f} y^{{{:.4f}}}}}$".format(u_f_val, u_0_val - u_f_val, best_u['popt'][1], best_u['popt'][0], best_u['popt'][2])
     elif best_u["id"] == 7:
-        u_formula = f"$U(y) \\approx {u_f_val:.4f} + ({u_0_val - u_f_val:.4f})(1 - y^{{{best_u['popt'][0]:.4f}}})^{{{best_u['popt'][1]:.4f}}}$"
+        u_formula = r"$U(y) \approx {:.4f} + ({:.4f})(1 - y^{{{:.4f}}})^{{{:.4f}}}$".format(u_f_val, u_0_val - u_f_val, best_u['popt'][0], best_u['popt'][1])
     elif best_u["id"] == 8:
-        u_formula = f"$U(y) \\approx {u_f_val:.4f} + \\frac{{{u_0_val - u_f_val:.4f}(1 - y)}}{{1 + {best_u['popt'][0]:.4f} y}}$"
+        u_formula = r"$U(y) \approx {:.4f} + \frac{{{:.4f}(1 - y)}}{{1 + {:.4f} y}}$".format(u_f_val, u_0_val - u_f_val, best_u['popt'][0])
     elif best_u["id"] == 9:
-        u_formula = f"$U(y) \\approx Piecewise Power-Law$"
+        u_formula = r"$U(y) \approx Piecewise\ Power-Law$"
+    elif best_u["id"] == 10:
+        u_formula = r"$U(y) \approx W U_{left} + (1-W) U_{right}$"
+    elif best_u["id"] == 11:
+        u_formula = r"$U(y) \approx W U_{left,3} + (1-W) U_{right,3}$"
+    elif best_u["id"] == 12:
+        u_formula = r"$U(y) \approx W U_{left,4} + (1-W) U_{right,4}$"
         
     lbl_U = u_formula + f"\nAvg Err: {avg_U:.4e}, Max Err: {max_U:.4e}"
     ax.text(0.05, 0.70, lbl_U, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=9.5)
@@ -476,10 +527,11 @@ def plot_standalone_velocity_fits(y_valid, U_valid, fits_u, best_u, standalone_p
     ax_sa1.plot(y_valid, U_valid, 'b-', label='Numerical Solver', lw=3.0)
     colors_u = {
         1: 'crimson', 2: 'darkorange', 3: 'forestgreen', 4: 'darkviolet', 
-        5: 'deeppink', 6: 'teal', 7: 'chocolate', 8: 'navy', 9: 'black'
+        5: 'deeppink', 6: 'teal', 7: 'chocolate', 8: 'navy', 9: 'black', 10: 'royalblue',
+        11: 'brown', 12: 'magenta'
     }
     
-    for i in range(1, 10):
+    for i in range(1, 13):
         style = '--' if i != best_u["id"] else '-' 
         popt, U_fit, avg_err, max_err, name, latex = fits_u[i]
         if popt is not None:
@@ -495,7 +547,7 @@ def plot_standalone_velocity_fits(y_valid, U_valid, fits_u, best_u, standalone_p
     ax_sa1.set_ylabel(r"Velocity $U(y)$ [dimensionless]", fontsize=12)
     ax_sa1.legend(loc='best', fontsize=9.0)
     ax_sa1.grid(True, alpha=0.3)
-    ax_sa1.set_title("Dimensionless Velocity $U(y)$ vs 9 Candidates", fontsize=13, fontweight='bold')
+    ax_sa1.set_title("Dimensionless Velocity $U(y)$ vs 12 Candidates", fontsize=13, fontweight='bold')
     
     ax_sa2.set_xlabel(r"Normalized coordinate $y = \xi / \xi_f$", fontsize=12)
     ax_sa2.set_ylabel(r"Relative Error", fontsize=12)

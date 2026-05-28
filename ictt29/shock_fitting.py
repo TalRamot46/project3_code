@@ -64,7 +64,7 @@ from project3_code.hydro_sim.plotting.hydro_plots import _create_7panel_vertical
 from piston_shock import PistonShock
 
 USE_CACHE = False  # Set to True to use pre-saved pickle files, False to run again
-Y_FIT_MIN = 0.2   # Configure the lower bound for fitting Temperature T
+Y_FIT_MIN = 0.99   # Configure the lower bound for fitting Temperature T
 
 def get_cached_shock_solver(case, case_label):
     """Solve shock similarity ODEs once and cache the solver object (with found xsi_s)."""
@@ -283,12 +283,16 @@ def perform_shock_fitting(solver):
                 rho_fit_high_cand = (P_fit / (6730.0 * solver.r * T_fit_cand**1.6))**(1.0/0.86)
                 rho_fit_mid_cand = rho_fit_high_cand[idx_mid]
                 rho_0 = rho_valid[0]
+                rho_s = rho_valid[-1]
                 
                 def fit_rho_low_cand(y, a):
                     return rho_0 + (rho_fit_mid_cand - rho_0) * (y / Y_FIT_MIN)**a
-                    
-                popt_rho_low_cand, _ = curve_fit(fit_rho_low_cand, y_valid[low_mask], rho_valid[low_mask], p0=[1.0], maxfev=10000)
-                rho_fit_low_cand = fit_rho_low_cand(y_valid[low_mask], *popt_rho_low_cand)
+
+                def fit_rho_around_zero(y, a, d):
+                    return rho_s + (rho_0 - rho_s)*(1-(y**d))**a
+
+                popt_rho_low_cand, _ = curve_fit(fit_rho_around_zero, y_valid[low_mask], rho_valid[low_mask], p0=[1.0, 1.0], maxfev=10000)
+                rho_fit_low_cand = fit_rho_around_zero(y_valid[low_mask], *popt_rho_low_cand)
                 T_fit_low_cand = (P_fit[low_mask] / (6730.0 * solver.r * rho_fit_low_cand**0.86))**(1.0/1.6)
                 
                 T_fit_comp_cand = np.zeros_like(y_valid)

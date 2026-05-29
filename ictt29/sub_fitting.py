@@ -302,7 +302,8 @@ def fit_by_params(y: np.ndarray, params: dict):
 def calculate_dimensional_fits(mass_grid, t_actual, solver, params):
     """Map subsonic self-similar fit arrays to dimensional (CGS) physical profiles on mass_grid at time t_actual."""
     xsi_vec = mass_grid * solver.xsi_over_m(time=t_actual)
-    T_fit, P_fit, U_fit, rho_fit = fit_by_params(xsi_vec, params)
+    y = xsi_vec / solver.xsi_f
+    T_fit, P_fit, U_fit, rho_fit = fit_by_params(y, params)
     
     rho_fit_dimensional = rho_fit * (-solver.A**solver.a1) * (-solver.B**solver.b1) * (t_actual ** solver.c1)    
     p_fit_dimensional = P_fit * (solver.A**solver.a3) * (solver.B**solver.b3) * (t_actual ** solver.c3)

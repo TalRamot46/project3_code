@@ -103,7 +103,7 @@ def run_simulation_and_references(preset_name: str, case_label: str):
     return case, history, solver
 
 def dimensionless_density_from_eos(T, P, beta=1.6, mu=0.14):
-    return (T**beta/P)**(1/(1-mu))
+    return (T**beta/P)**(1/(mu-1))
 
 def dimensional_temperature_from_eos(P, V, beta=1.6, mu=0.14, r=0.25, f=6730.91):
     return (P * V**(1-mu) / (r*f))**(1./beta)
@@ -264,28 +264,78 @@ def perform_subsonic_fitting(solver):
             fits_u[cand["id"]] = (None, None, 0.0, 0.0, cand["name"], cand["latex"])
             
     print(f"Optimal Velocity Candidate: Fit {best_u['id']} ({best_u['name']}) - Avg Err: {best_u['avg_err']:.3e}, Max Err: {best_u['max_err']:.3e}")
-    return y_valid, T_valid, P_valid, U_valid, rho_valid, popt_T, popt_P, best_u, fits_u
-
-
-def calculate_dimensional_fits(mass_grid, t_actual, solver, y_valid, P_fit, T_fit, rho_fit, U_fit):
-    """Map subsonic self-similar fit arrays to dimensional (CGS) physical profiles on mass_grid at time t_actual."""
     
-    # Scaling coefficients
+    params = {
+        "y_valid": y_valid,
+        "T_valid": T_valid,
+        "P_valid": P_valid,
+        "U_valid": U_valid,
+        "rho_valid": rho_valid,
+        "popt_T": popt_T,
+        "popt_P": popt_P,
+        "best_u": best_u,
+        "fits_u": fits_u,
+        "solver": solver
+    }
+    return params
+
+
+def fit_by_params(xsi_vec: np.ndarray, params: dict):
+    """Compute the self-similar fit profiles (T, P, U, rho) on the similarity coordinate xsi_vec."""
+    solver = params["solver"]
+    popt_T = params["popt_T"]
+    popt_P = params["popt_P"]
+    best_u = params["best_u"]
+    
+    y = xsi_vec
+    
+    # Temperature fit
+    T_fit = ((1.0 - y) * (1.0 + popt_T[0] * y)) ** (10.0 / 39.0)
+    
+    # Pressure fit
+    P_0 = solver.P0
+    P_fit = P_0 + popt_P[0] * y**popt_P[2] + popt_P[1] * y**(popt_P[2] + popt_P[3])
+    
+    # Velocity fit (evaluated on y)
+    U_fit = best_u["func"](y, *best_u["popt"])
+    
+    # Density fit (represents specific volume in the self-similar EOS context)
+    rho_fit = dimensionless_density_from_eos(T_fit, P_fit)
+    
+    return T_fit, P_fit, U_fit, rho_fit
+
+
+def calculate_dimensional_fits(mass_grid, t_actual, solver, params):
+    """Map subsonic self-similar fit arrays to dimensional (CGS) physical profiles on mass_grid at time t_actual."""
+    xsi_vec = mass_grid * solver.xsi_over_m(time=t_actual)
+    T_fit, P_fit, U_fit, rho_fit = fit_by_params(xsi_vec, params)
+    
+    rho_fit_dimensional = rho_fit * (-solver.A**solver.a1) * (-solver.B**solver.b1) * (t_actual ** solver.c1)    
     p_fit_dimensional = P_fit * (solver.A**solver.a3) * (solver.B**solver.b3) * (t_actual ** solver.c3)
     u_fit_dimensional = U_fit * (solver.A**solver.a2) * (solver.B**solver.b2) * (t_actual ** solver.c2)
-    rho_fit_dimensional = rho_fit * (solver.A)**(-solver.a1) * (solver.B)**(-solver.b1) * (t_actual)**(-solver.c1)
-    T_fit_dimensional = dimensional_temperature_from_eos(p_fit_dimensional, rho_fit_dimensional)
-    return {"density": rho_fit_dimensional, "pressure": p_fit_dimensional, "velocity": u_fit_dimensional, "temperature": T_fit_dimensional}
+    T_fit_dimensional = dimensional_temperature_from_eos(
+        p_fit_dimensional, 
+        1.0/rho_fit_dimensional, 
+        beta=solver.beta, 
+        mu=solver.mu, 
+        r=solver.r, 
+        f=solver.f
+    )
+    return {
+        "density": rho_fit_dimensional, 
+        "pressure": p_fit_dimensional, 
+        "velocity": u_fit_dimensional, 
+        "temperature": T_fit_dimensional
+    }
 
 
-def plot_dimensional_fit_comparison(history, solver, case, y_valid, P_fit, T_fit, rho_fit, U_fit, dimensional_fit_path, case_title):
+def plot_dimensional_fit_comparison(history, solver, case, params, dimensional_fit_path, case_title):
     """Plot overlay profiles of T, rho, P, u vs m comparing Simulation, Exact Solver, and Analytic fits."""
     print(f"Generating physical subsonic profiles comparison for {case_title}...")
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     
-    target_times = [1.0, 1.5, 2.0]
+    target_times = [1.0e-9, 1.5e-9, 2.0e-9]
     colors = ["red", "green", "blue"]
-    p_scale, u_scale = 1e12, 1e5
     
     ax_rho = axes[0, 0]
     ax_p = axes[0, 1]
@@ -315,22 +365,23 @@ def plot_dimensional_fit_comparison(history, solver, case, y_valid, P_fit, T_fit
         # 2) Exact Solver Lagrangian Grid
         mass_solver = np.linspace(1e-12, m_f_val, 300)
         sol_hs = solver.solve(mass=mass_solver, time=t_actual)
-        
         exact_rho = sol_hs["density"]
         exact_p = sol_hs["pressure"]
         exact_u = sol_hs["velocity"]
         exact_T = sol_hs["temperature"]
         
-        # 3) Analytical fits mapped to CGS
-        fits = calculate_dimensional_fits(m_sim_sub, t_actual, solver, y_valid, P_fit, T_fit, rho_fit, U_fit)
+        # 3) Analytical fits mapped from dimensionless to CGS
+        fits = calculate_dimensional_fits(mass_solver, t_actual, solver, params)
+        
         fit_rho = fits["density"]
+        fit_p = fits["pressure"]
         fit_u = fits["velocity"]
         fit_T = fits["temperature"]
         
         # Plot Density
         ax_rho.plot(m_sim_sub * 1e3, sim_rho, 'o', color=color, markersize=3, alpha=0.5, label=f"Simulation ({t_target*1e9:.1f} ns)" if color=='red' else None)
         ax_rho.plot(mass_solver * 1e3, exact_rho, '-', color=color, lw=2.0, label=f"Exact Solver ({t_target*1e9:.1f} ns)" if color=='red' else None)
-        ax_rho.plot(m_sim_sub * 1e3, fit_rho, '--', color=color, lw=1.5, label=f"Analytic Fit ({t_target*1e9:.1f} ns)" if color=='red' else None)
+        ax_rho.plot(mass_solver * 1e3, fit_rho, '--', color=color, lw=1.5, label=f"Analytic Fit ({t_target*1e9:.1f} ns)" if color=='red' else None)
         
         # Zoomed inset density plot near front (y in [0.8, 0.99])
         y_sim = m_sim_sub / m_f_val
@@ -340,22 +391,22 @@ def plot_dimensional_fit_comparison(history, solver, case, y_valid, P_fit, T_fit
         
         axins.plot(m_sim_sub[zoom_mask] * 1e3, sim_rho[zoom_mask], 'o', color=color, markersize=2, alpha=0.5)
         axins.plot(mass_solver[sol_zoom_mask] * 1e3, exact_rho[sol_zoom_mask], '-', color=color, lw=1.5)
-        axins.plot(m_sim_sub[zoom_mask] * 1e3, fit_rho[zoom_mask], '--', color=color, lw=1.2)
+        axins.plot(mass_solver[sol_zoom_mask] * 1e3, fit_rho[sol_zoom_mask], '--', color=color, lw=1.2)
         
         # Plot Pressure
         ax_p.plot(m_sim_sub * 1e3, sim_p, 'o', color=color, markersize=3, alpha=0.5)
         ax_p.plot(mass_solver * 1e3, exact_p, '-', color=color, lw=2.0)
-        ax_p.plot(m_sim_sub * 1e3, P_fit, '--', color=color, lw=1.5)
+        ax_p.plot(mass_solver * 1e3, fit_p, '--', color=color, lw=1.5)
         
         # Plot Velocity
         ax_u.plot(m_sim_sub * 1e3, sim_u, 'o', color=color, markersize=3, alpha=0.5)
         ax_u.plot(mass_solver * 1e3, exact_u, '-', color=color, lw=2.0)
-        ax_u.plot(m_sim_sub * 1e3, fit_u, '--', color=color, lw=1.5)
+        ax_u.plot(mass_solver * 1e3, fit_u, '--', color=color, lw=1.5)
         
         # Plot Temperature
         ax_T.plot(m_sim_sub * 1e3, sim_T, 'o', color=color, markersize=3, alpha=0.5)
         ax_T.plot(mass_solver * 1e3, exact_T, '-', color=color, lw=2.0)
-        ax_T.plot(m_sim_sub * 1e3, fit_T, '--', color=color, lw=1.5)
+        ax_T.plot(mass_solver * 1e3, fit_T, '--', color=color, lw=1.5)
 
     # Styling
     labels = ["Density [g/cm$^3$]", "Pressure [MBar]", "Velocity [km/s]", "Temperature [HeV]"]
@@ -378,18 +429,20 @@ def plot_dimensional_fit_comparison(history, solver, case, y_valid, P_fit, T_fit
     plt.close(fig)
 
 
-def plot_and_fit_self_similar(
-    solver, y_valid, T_valid, P_valid, U_valid, rho_valid, 
-    popt_T, popt_P, best_u, self_similar_path, case_title
-):
+def plot_and_fit_self_similar(solver, params, self_similar_path, case_title):
     print("Generating subsonic 2x2 self-similar fitting plots...")
+    y_valid = params["y_valid"]
+    T_valid = params["T_valid"]
+    P_valid = params["P_valid"]
+    U_valid = params["U_valid"]
+    rho_valid = params["rho_valid"]
+    popt_T = params["popt_T"]
+    popt_P = params["popt_P"]
+    best_u = params["best_u"]
     
-    # Evaluate chosen fits
-    T_fit = ((1.0 - y_valid) * (1.0 + popt_T[0] * y_valid)) ** (10.0 / 39.0)
-    P_fit = P_valid[0] + popt_P[0] * y_valid**popt_P[2] + popt_P[1] * y_valid**(popt_P[2]+popt_P[3])
-    U_fit = best_u["fit_val"]
-    
-    rho_fit = dimensionless_density_from_eos(T_fit, P_fit)
+    # Compute chosen fit arrays via unified fit_by_params
+    xsi_vec = y_valid * solver.xsi_f
+    T_fit, P_fit, U_fit, rho_fit = fit_by_params(xsi_vec, params)
     
     # Evaluate errors on the full y_valid coordinate range (unmasked)
     err_T = np.abs((T_fit - T_valid) / T_valid)
@@ -480,8 +533,13 @@ def plot_and_fit_self_similar(
     print(f"Saved self-similar subsonic profiles to {self_similar_path}")
 
 
-def plot_standalone_velocity_fits(y_valid, U_valid, fits_u, best_u, standalone_path, case_title):
+def plot_standalone_velocity_fits(params, standalone_path, case_title):
     print("Generating standalone subsonic velocity fitting comparison plots...")
+    y_valid = params["y_valid"]
+    U_valid = params["U_valid"]
+    fits_u = params["fits_u"]
+    best_u = params["best_u"]
+    
     fig_sa, (ax_sa1, ax_sa2) = plt.subplots(1, 2, figsize=(18, 8.5))
     
     # Evaluate errors on the full y_valid coordinate range (unmasked)
@@ -527,21 +585,18 @@ def plot_standalone_velocity_fits(y_valid, U_valid, fits_u, best_u, standalone_p
     print(f"Saved standalone subsonic velocity fits to {standalone_path}")
 
 
-def plot_relative_errors(
-    solver, y_valid, T_valid, P_valid, U_valid, rho_valid, 
-    popt_T, popt_P, best_u, relative_errors_path, case_title
-):
+def plot_relative_errors(solver, params, relative_errors_path, case_title):
     print("Generating subsonic relative error plots...")
+    y_valid = params["y_valid"]
+    T_valid = params["T_valid"]
+    P_valid = params["P_valid"]
+    U_valid = params["U_valid"]
+    rho_valid = params["rho_valid"]
+    best_u = params["best_u"]
     
-    # Evaluate chosen fits
-    T_fit = ((1.0 - y_valid) * (1.0 + popt_T[0] * y_valid)) ** (10.0 / 39.0)
-    P_fit = P_valid[0] + popt_P[0] * y_valid**popt_P[2] + popt_P[1] * y_valid**(popt_P[2]+popt_P[3])
-    U_fit = best_u["fit_val"]
-    
-    r_val, beta_val, mu_val = 0.25, 1.6, 0.14
-    f_val = float(solver.f)
-    T_fit_safe = np.maximum(T_fit, 1e-12)
-    rho_fit = (P_fit / (r_val * f_val * T_fit_safe**beta_val)) ** (1.0 / (1.0 + mu_val))
+    # Call unified fit_by_params for dimensionless fits on y_valid
+    xsi_vec = y_valid
+    T_fit, P_fit, U_fit, rho_fit = fit_by_params(xsi_vec, params)
     
     # Evaluate errors on the full y_valid coordinate range (unmasked)
     y_bulk = y_valid
@@ -596,26 +651,19 @@ def generate_verification_plots(
     relative_errors_path = str(ss_dir / f"{case_label}_relative_errors.png")
     dimensional_fit_path = str(dv_dir / f"{case_label}_dimensional_fit_comparison.png")
     
-    y_valid, T_valid, P_valid, U_valid, rho_valid, popt_T, popt_P, best_u, fits_u = perform_subsonic_fitting(solver)
-    
-    # Compute chosen fit arrays
-    T_fit = ((1.0 - y_valid) * (1.0 + popt_T[0] * y_valid)) ** (10.0 / 39.0)
-    P_fit = P_valid[0] + popt_P[0] * y_valid**popt_P[2] + popt_P[1] * y_valid**(popt_P[2]+popt_P[3])
-    U_fit = best_u["fit_val"]
-    
-    rho_fit = dimensionless_density_from_eos(T_fit, P_fit)
-    
+    params = perform_subsonic_fitting(solver)
+        
     # 1) Standalone Velocity fits comparison
-    plot_standalone_velocity_fits(y_valid, U_valid, fits_u, best_u, standalone_path, case_title)
+    plot_standalone_velocity_fits(params, standalone_path, case_title)
     
     # 2) Self-similar profiles and fits
-    plot_and_fit_self_similar(solver, y_valid, T_valid, P_valid, U_valid, rho_valid, popt_T, popt_P, best_u, self_similar_path, case_title)
+    plot_and_fit_self_similar(solver, params, self_similar_path, case_title)
     
     # 3) Dimensional fit comparison
-    plot_dimensional_fit_comparison(history, solver, case, y_valid, P_fit, T_fit, rho_fit, U_fit, dimensional_fit_path, case_title)
+    plot_dimensional_fit_comparison(history, solver, case, params, dimensional_fit_path, case_title)
     
     # 4) Relative errors of self-similar fits
-    plot_relative_errors(solver, y_valid, T_valid, P_valid, U_valid, rho_valid, popt_T, popt_P, best_u, relative_errors_path, case_title)
+    plot_relative_errors(solver, params, relative_errors_path, case_title)
 
 
 def run_preset_workflow(preset_name: str, case_label: str, case_title: str):

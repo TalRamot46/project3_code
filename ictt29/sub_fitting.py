@@ -102,6 +102,11 @@ def run_simulation_and_references(preset_name: str, case_label: str):
 
     return case, history, solver
 
+def dimensionless_density_from_eos(T, P, beta=1.6, mu=0.14):
+    return (T**beta/P)**(1/(1-mu))
+
+def dimensional_temperature_from_eos(P, V, beta=1.6, mu=0.14, r=0.25, f=6730.91):
+    return (P * V**(1-mu) / (r*f))**(1./beta)
 
 def perform_subsonic_fitting(solver):
     y_grid = np.linspace(0.0, 1.0 - 1e-6, 500)
@@ -119,7 +124,7 @@ def perform_subsonic_fitting(solver):
     mu_val = float(solver.mu)
     
     # Calculate density using the exact uniform EOS formula requested by user
-    rho_val = (P_val / (r_val * f_val * T_val**beta_val)) ** (1.0 / (1.0 + mu_val))
+    rho_val = dimensionless_density_from_eos(T_val, P_val)
     
     valid_idx = np.isfinite(V_val) & np.isfinite(U_val) & np.isfinite(P_val) & np.isfinite(T_val)
     y_valid = y_grid[valid_idx]
@@ -259,55 +264,18 @@ def perform_subsonic_fitting(solver):
             fits_u[cand["id"]] = (None, None, 0.0, 0.0, cand["name"], cand["latex"])
             
     print(f"Optimal Velocity Candidate: Fit {best_u['id']} ({best_u['name']}) - Avg Err: {best_u['avg_err']:.3e}, Max Err: {best_u['max_err']:.3e}")
-    return y_grid, y_valid, T_valid, P_valid, U_valid, rho_valid, popt_T, popt_P, best_u, fits_u
+    return y_valid, T_valid, P_valid, U_valid, rho_valid, popt_T, popt_P, best_u, fits_u
 
 
-def evaluate_subsonic_fits_arrays(mass_grid, t_actual, solver, y_valid, P_fit, T_fit, rho_fit, U_fit):
+def calculate_dimensional_fits(mass_grid, t_actual, solver, y_valid, P_fit, T_fit, rho_fit, U_fit):
     """Map subsonic self-similar fit arrays to dimensional (CGS) physical profiles on mass_grid at time t_actual."""
-    t_ns = t_actual * 1e9
-    m_f = solver.ablated_mass(time=t_actual)
-    
-    rho = np.zeros(len(mass_grid), dtype=float)
-    p   = np.zeros(len(mass_grid), dtype=float)
-    u   = np.zeros(len(mass_grid), dtype=float)
-    T   = np.zeros(len(mass_grid), dtype=float)
-    
-    r_val = float(solver.r)
-    f_val = float(solver.f)
-    beta_val = float(solver.beta)
-    mu_val = float(solver.mu)
     
     # Scaling coefficients
-    p_scale = solver.Pf * (solver.A**solver.a3) * (solver.B**solver.b3) * (t_ns ** solver.c3)
-    u_scale = (solver.A**solver.a2) * (solver.B**solver.b2) * (t_ns ** solver.c2)
-    
-    for i, m in enumerate(mass_grid):
-        if m >= m_f:
-            # Outside subsonic front
-            rho[i] = 19.32
-            p[i]   = 1e-6
-            u[i]   = 0.0
-            T[i]   = 300.0
-        else:
-            y = float(m) / m_f
-            y = max(y, 1e-10)
-            
-            # Interpolate from dimensionless fit arrays
-            P_fit_y = np.interp(y, y_valid, P_fit)
-            T_fit_y = np.interp(y, y_valid, T_fit)
-            U_fit_y = np.interp(y, y_valid, U_fit)
-            
-            # Scale to CGS
-            p[i] = P_fit_y * p_scale
-            u[i] = U_fit_y * u_scale
-            T[i] = T_fit_y * KELVIN_PER_HEV
-            
-            # Density derived via uniform CGS EOS
-            T_hev = T[i] / KELVIN_PER_HEV
-            p_safe = max(p[i], 1e-15)
-            rho[i] = (p_safe / (r_val * f_val * T_hev**beta_val)) ** (1.0 / (1.0 + mu_val))
-            
-    return {"density": rho, "pressure": p, "velocity": u, "temperature": T}
+    p_fit_dimensional = P_fit * (solver.A**solver.a3) * (solver.B**solver.b3) * (t_actual ** solver.c3)
+    u_fit_dimensional = U_fit * (solver.A**solver.a2) * (solver.B**solver.b2) * (t_actual ** solver.c2)
+    rho_fit_dimensional = rho_fit * (solver.A)**(-solver.a1) * (solver.B)**(-solver.b1) * (t_actual)**(-solver.c1)
+    T_fit_dimensional = dimensional_temperature_from_eos(p_fit_dimensional, rho_fit_dimensional)
+    return {"density": rho_fit_dimensional, "pressure": p_fit_dimensional, "velocity": u_fit_dimensional, "temperature": T_fit_dimensional}
 
 
 def plot_dimensional_fit_comparison(history, solver, case, y_valid, P_fit, T_fit, rho_fit, U_fit, dimensional_fit_path, case_title):
@@ -315,7 +283,7 @@ def plot_dimensional_fit_comparison(history, solver, case, y_valid, P_fit, T_fit
     print(f"Generating physical subsonic profiles comparison for {case_title}...")
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     
-    target_times = [1e-9, 1.5e-9, 2e-9]
+    target_times = [1.0, 1.5, 2.0]
     colors = ["red", "green", "blue"]
     p_scale, u_scale = 1e12, 1e5
     
@@ -340,25 +308,24 @@ def plot_dimensional_fit_comparison(history, solver, case, y_valid, P_fit, T_fit
         m_sim_sub = m_sim[sub_mask]
         
         sim_rho = history.rho[idx_sim][sub_mask]
-        sim_p = history.p[idx_sim][sub_mask] / p_scale
-        sim_u = history.u[idx_sim][sub_mask] / u_scale
-        sim_T = history.T[idx_sim][sub_mask] / KELVIN_PER_HEV
+        sim_p = history.p[idx_sim][sub_mask]
+        sim_u = history.u[idx_sim][sub_mask] 
+        sim_T = history.T[idx_sim][sub_mask] 
         
         # 2) Exact Solver Lagrangian Grid
         mass_solver = np.linspace(1e-12, m_f_val, 300)
         sol_hs = solver.solve(mass=mass_solver, time=t_actual)
         
         exact_rho = sol_hs["density"]
-        exact_p = sol_hs["pressure"] / p_scale
-        exact_u = sol_hs["velocity"] / u_scale
-        exact_T = sol_hs["temperature"] / KELVIN_PER_HEV
+        exact_p = sol_hs["pressure"]
+        exact_u = sol_hs["velocity"]
+        exact_T = sol_hs["temperature"]
         
         # 3) Analytical fits mapped to CGS
-        fits = evaluate_subsonic_fits_arrays(m_sim_sub, t_actual, solver, y_valid, P_fit, T_fit, rho_fit, U_fit)
+        fits = calculate_dimensional_fits(m_sim_sub, t_actual, solver, y_valid, P_fit, T_fit, rho_fit, U_fit)
         fit_rho = fits["density"]
-        fit_p = fits["pressure"] / p_scale
-        fit_u = fits["velocity"] / u_scale
-        fit_T = fits["temperature"] / KELVIN_PER_HEV
+        fit_u = fits["velocity"]
+        fit_T = fits["temperature"]
         
         # Plot Density
         ax_rho.plot(m_sim_sub * 1e3, sim_rho, 'o', color=color, markersize=3, alpha=0.5, label=f"Simulation ({t_target*1e9:.1f} ns)" if color=='red' else None)
@@ -378,7 +345,7 @@ def plot_dimensional_fit_comparison(history, solver, case, y_valid, P_fit, T_fit
         # Plot Pressure
         ax_p.plot(m_sim_sub * 1e3, sim_p, 'o', color=color, markersize=3, alpha=0.5)
         ax_p.plot(mass_solver * 1e3, exact_p, '-', color=color, lw=2.0)
-        ax_p.plot(m_sim_sub * 1e3, fit_p, '--', color=color, lw=1.5)
+        ax_p.plot(m_sim_sub * 1e3, P_fit, '--', color=color, lw=1.5)
         
         # Plot Velocity
         ax_u.plot(m_sim_sub * 1e3, sim_u, 'o', color=color, markersize=3, alpha=0.5)
@@ -422,10 +389,7 @@ def plot_and_fit_self_similar(
     P_fit = P_valid[0] + popt_P[0] * y_valid**popt_P[2] + popt_P[1] * y_valid**(popt_P[2]+popt_P[3])
     U_fit = best_u["fit_val"]
     
-    r_val, beta_val, mu_val = 0.25, 1.6, 0.14
-    f_val = float(solver.f)
-    T_fit_safe = np.maximum(T_fit, 1e-12)
-    rho_fit = (P_fit / (r_val * f_val * T_fit_safe**beta_val)) ** (1.0 / (1.0 + mu_val))
+    rho_fit = dimensionless_density_from_eos(T_fit, P_fit)
     
     # Evaluate errors on the full y_valid coordinate range (unmasked)
     err_T = np.abs((T_fit - T_valid) / T_valid)
@@ -632,17 +596,14 @@ def generate_verification_plots(
     relative_errors_path = str(ss_dir / f"{case_label}_relative_errors.png")
     dimensional_fit_path = str(dv_dir / f"{case_label}_dimensional_fit_comparison.png")
     
-    y_grid, y_valid, T_valid, P_valid, U_valid, rho_valid, popt_T, popt_P, best_u, fits_u = perform_subsonic_fitting(solver)
+    y_valid, T_valid, P_valid, U_valid, rho_valid, popt_T, popt_P, best_u, fits_u = perform_subsonic_fitting(solver)
     
     # Compute chosen fit arrays
     T_fit = ((1.0 - y_valid) * (1.0 + popt_T[0] * y_valid)) ** (10.0 / 39.0)
     P_fit = P_valid[0] + popt_P[0] * y_valid**popt_P[2] + popt_P[1] * y_valid**(popt_P[2]+popt_P[3])
     U_fit = best_u["fit_val"]
     
-    r_val, beta_val, mu_val = 0.25, 1.6, 0.14
-    f_val = float(solver.f)
-    T_fit_safe = np.maximum(T_fit, 1e-12)
-    rho_fit = (P_fit / (r_val * f_val * T_fit_safe**beta_val)) ** (1.0 / (1.0 + mu_val))
+    rho_fit = dimensionless_density_from_eos(T_fit, P_fit)
     
     # 1) Standalone Velocity fits comparison
     plot_standalone_velocity_fits(y_valid, U_valid, fits_u, best_u, standalone_path, case_title)

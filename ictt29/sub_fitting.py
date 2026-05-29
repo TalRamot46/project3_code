@@ -110,19 +110,14 @@ def dimensional_temperature_from_eos(P, V, beta=1.6, mu=0.14, r=0.25, f=6730.91)
 
 def perform_subsonic_fitting(solver):
     y_grid = np.linspace(0.0, 1.0 - 1e-6, 500)
-    xsi_vec = y_grid * solver.xsi_f
+    xsi_vec = solver.xsi_f * y_grid
     profiles = solver.get_self_similar_profiles(xsi_vec=xsi_vec)
     
     P_val = profiles["P"]
     T_val = profiles["T"]
     U_val = profiles["U"]
     V_val = profiles["V"]
-    
-    r_val = float(solver.r)
-    f_val = float(solver.f)
-    beta_val = float(solver.beta)
-    mu_val = float(solver.mu)
-    
+        
     # Calculate density using the exact uniform EOS formula requested by user
     rho_val = dimensionless_density_from_eos(T_val, P_val)
     
@@ -138,7 +133,8 @@ def perform_subsonic_fitting(solver):
         return ((1.0 - y) * (1.0 + R * y))**(10.0 / 39.0)
         
     # Pressure Fit with a constant P_valid[0] offset
-    P_0 = P_valid[0]
+    P_0 = P_valid[0] 
+    solver.P0 = P_0 # important - the 
     def power_law_origin(y, a, b, c, d):
         return P_0 + a * y**c + b * y**(c+d)
         
@@ -280,14 +276,12 @@ def perform_subsonic_fitting(solver):
     return params
 
 
-def fit_by_params(xsi_vec: np.ndarray, params: dict):
+def fit_by_params(y: np.ndarray, params: dict):
     """Compute the self-similar fit profiles (T, P, U, rho) on the similarity coordinate xsi_vec."""
     solver = params["solver"]
     popt_T = params["popt_T"]
     popt_P = params["popt_P"]
     best_u = params["best_u"]
-    
-    y = xsi_vec
     
     # Temperature fit
     T_fit = ((1.0 - y) * (1.0 + popt_T[0] * y)) ** (10.0 / 39.0)
@@ -441,8 +435,7 @@ def plot_and_fit_self_similar(solver, params, self_similar_path, case_title):
     best_u = params["best_u"]
     
     # Compute chosen fit arrays via unified fit_by_params
-    xsi_vec = y_valid * solver.xsi_f
-    T_fit, P_fit, U_fit, rho_fit = fit_by_params(xsi_vec, params)
+    T_fit, P_fit, U_fit, rho_fit = fit_by_params(y_valid, params)
     
     # Evaluate errors on the full y_valid coordinate range (unmasked)
     err_T = np.abs((T_fit - T_valid) / T_valid)
@@ -595,11 +588,7 @@ def plot_relative_errors(solver, params, relative_errors_path, case_title):
     best_u = params["best_u"]
     
     # Call unified fit_by_params for dimensionless fits on y_valid
-    xsi_vec = y_valid
-    T_fit, P_fit, U_fit, rho_fit = fit_by_params(xsi_vec, params)
-    
-    # Evaluate errors on the full y_valid coordinate range (unmasked)
-    y_bulk = y_valid
+    T_fit, P_fit, U_fit, rho_fit = fit_by_params(y_valid, params)
     
     err_T = np.abs((T_fit - T_valid) / T_valid)
     err_rho = np.abs((rho_fit - rho_valid) / rho_valid)
@@ -613,10 +602,10 @@ def plot_relative_errors(solver, params, relative_errors_path, case_title):
     
     fig_err, ax_err = plt.subplots(figsize=(10, 7.5))
     
-    ax_err.plot(y_bulk, err_T, color='blue', label=f'Temperature $T(y)$ (Avg: {avg_T:.3e}, Max: {max_T:.3e})', lw=2.0)
-    ax_err.plot(y_bulk, err_rho, color='green', label=f'Density $\\rho(y)$ (Avg: {avg_rho:.3e}, Max: {max_rho:.3e})', lw=2.0)
+    ax_err.plot(y_valid, err_T, color='blue', label=f'Temperature $T(y)$ (Avg: {avg_T:.3e}, Max: {max_T:.3e})', lw=2.0)
+    ax_err.plot(y_valid, err_rho, color='green', label=f'Density $\\rho(y)$ (Avg: {avg_rho:.3e}, Max: {max_rho:.3e})', lw=2.0)
     ax_err.plot(y_valid, err_P, color='red', label=f'Pressure $P(y)$ (Avg: {avg_P:.3e}, Max: {max_P:.3e})', lw=2.0)
-    ax_err.plot(y_bulk, err_U, color='purple', label=f'Velocity $U(y)$ (Avg: {avg_U:.3e}, Max: {max_U:.3e})', lw=2.0)
+    ax_err.plot(y_valid, err_U, color='purple', label=f'Velocity $U(y)$ (Avg: {avg_U:.3e}, Max: {max_U:.3e})', lw=2.0)
     
     ax_err.set_xlabel(r"Normalized coordinate $y = \xi / \xi_f$", fontsize=12)
     ax_err.set_ylabel(r"Relative Error", fontsize=12)

@@ -305,7 +305,7 @@ def calculate_dimensional_fits(mass_grid, t_actual, solver, params):
     y = xsi_vec / solver.xsi_f
     T_fit, P_fit, U_fit, rho_fit = fit_by_params(y, params)
     
-    rho_fit_dimensional = rho_fit * (-solver.A**solver.a1) * (-solver.B**solver.b1) * (t_actual ** solver.c1)    
+    rho_fit_dimensional = rho_fit * (solver.A**(-solver.a1)) * (solver.B**(-solver.b1)) * (t_actual ** (-solver.c1))    
     p_fit_dimensional = P_fit * (solver.A**solver.a3) * (solver.B**solver.b3) * (t_actual ** solver.c3)
     u_fit_dimensional = U_fit * (solver.A**solver.a2) * (solver.B**solver.b2) * (t_actual ** solver.c2)
     T_fit_dimensional = dimensional_temperature_from_eos(

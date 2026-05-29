@@ -7,7 +7,7 @@ from dataclasses import replace
 import numpy as np
 from tqdm import tqdm
 
-from project3_code.menahem_new.subsonic_heat_wave_fixed import SubsonicHeatWave
+from project3_code.menahem_new.subsonic_heat_wave_og import SubsonicHeatWave
 from project3_code.hydro_sim.core.eos import internal_energy_from_prho
 from project3_code.hydro_sim.core.geometry import planar
 from project3_code.hydro_sim.core.grid import cell_volumes, masses_from_initial_rho
@@ -262,10 +262,10 @@ def simulate_rad_hydro(
 
             # Recalculate T_left for current time step for Marshak BC
             if rad_hydro_case.bc_type in ["Marshak", "Marshak_Menahem"]:
-                T_bath_ramot, boundary_flux1, boundary_flux2, A, aS, bS, cS, A_power_aS, B_power_bS, time_power_cS, dimensionless_boundary_flux1 = solver.calc_T_bath_from_dimensionless_boundary_flux(
-                    dimensionless_boundary_flux=dimensionless_boundary_flux,
-                    time=state.t,
-                )
+                # T_bath_ramot, boundary_flux1, boundary_flux2, A, aS, bS, cS, A_power_aS, B_power_bS, time_power_cS, dimensionless_boundary_flux1 = solver.calc_T_bath_from_dimensionless_boundary_flux(
+                #     dimensionless_boundary_flux=dimensionless_boundary_flux,
+                #     time=state.t,
+                # )
                 # T_surface_old = solver.Tb * (state.t / 1e-9) ** solver.tau
                 T_bath_menahem = solver.Tbath(time=state.t+1e-20)
                 T_surface = (state.E_rad[0] / a_Kelvin) ** 0.25 

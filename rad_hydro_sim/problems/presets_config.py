@@ -16,8 +16,8 @@ from project3_code.hydro_sim.core.geometry import planar
 # ---------------------------------------------------------------------------
 # Preset name constants = SIMPLE_TEST_CASES keys (physical case names)
 # ---------------------------------------------------------------------------
-PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE = "constant_pressure_drive"
-PRESET_CONSTANT_PRESSURE = "power_law_pressure_drive"
+PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE = "power_law_pressure_drive"
+PRESET_CONSTANT_PRESSURE = "constant_pressure_drive"
 PRESET_CONSTANT_T_RADIATION_ONLY = "constant_temperature_drive"
 PRESET_FIG_8_CONSTANT_TEMPERATURE = "fig_8_comparison"
 PRESET_FIG_9_CONSTANT_FLUX = "fig_9_comparison"
@@ -120,13 +120,12 @@ PRESET_TEST_CASES = {
     ),
     PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE: RadHydroCase(
         # Rosen's opacity parameters
-        # Rosen's opacity parameters
-        g_Kelvin = 1.0/7200,
+        g_Kelvin = 1.0 / (7200 * KELVIN_PER_HEV**1.5),
         alpha = 1.5,
         lambda_ = 0.2,
 
         # Rosen's specific energy parameters
-        f_Kelvin = 3.4e13,
+        f_Kelvin = 3.4e13 / (KELVIN_PER_HEV**1.6),
         beta_Rosen = 1.6,
         mu = 0.14,
 
@@ -152,8 +151,8 @@ PRESET_TEST_CASES = {
 
         # grid parameters
         x_min = 0.0,
-        x_max = 15e-3 / 19.32,
-        t_sec_end = 1e-9,
+        x_max = 25e-3 / 19.32,
+        t_sec_end = 2.0e-9, # should be 1ns to compare to fig7
 
         initial_condition="pressure, velocity, density",
         scenario="hydro_only",

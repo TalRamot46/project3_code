@@ -68,7 +68,7 @@ from project3_code.hydro_sim.plotting.hydro_plots import _create_7panel_vertical
 
 from project3_code.menahem_new.piston_shock_og import PistonShock
 
-USE_CACHE = True  # Set to True to use pre-saved pickle files, False to run again
+USE_CACHE = False  # Set to True to use pre-saved pickle files, False to run again
 Y_FIT_MIN = 0.1   # Configure the lower bound for fitting Temperature T
 FITTING_OPTION = "FIT_RHO_AROUND_FRONT"  # Literal["FIT_TEMP_AROUND_FRONT", "FIT_RHO_AROUND_FRONT", "FIT_RHO_ALL_AROUND"]
 
@@ -76,7 +76,7 @@ def get_cached_shock_solver(case, case_label):
     """Solve shock similarity ODEs once and cache the solver object (with found xsi_s)."""
     cache_dir = Path("results/ictt/cache")
     cache_dir.mkdir(parents=True, exist_ok=True)
-    solver_cache_path = cache_dir / f"{case_label}_similarity_solver.pkl"
+    solver_cache_path = cache_dir / f"{case_label}_shock_similarity_solver.pkl"
     
     if USE_CACHE and solver_cache_path.exists():
         print(f"Loading cached shock similarity solver from {solver_cache_path}...")
@@ -119,6 +119,9 @@ def get_cached_shock_solver(case, case_label):
 
 def dimensional_temperature_from_eos(P, V, beta=1.6, mu=0.14, r=0.25, f=6730.91):
     return (P * V**(1-mu) / (r*f))**(1./beta)
+
+def dimensionless_temperature_from_eos(P, V, beta=1.6, mu=0.14, r=0.25, f=6730.91):
+    return (P * V**(1-mu))**(1./beta)
 
 def perform_shock_fitting(solver):
     y_grid = np.linspace(0.0, 1.0, 500)
@@ -471,139 +474,121 @@ def fit_by_params(y, params):
     return T_fit, P_fit, U_fit, rho_fit
 
 
-def calculate_dimensional_fits(mass_grid, t_actual, solver, case, params):
-    """Map shock self-similar fit arrays to dimensional (CGS) physical profiles on mass_grid at time t_actual."""
+def calculate_dimensional_fits(mass_grid, t_actual, solver, params):
+    """Map shock self-similar fit arrays to dimensional (CGS) physical profiles on mass_grid at time t_actual.
+    
+    Uses the same analytical scaling factors as PistonShock.solve():
+        v = V * (v0*v0*(p0*t**(tau+2.))**omega)**(1./(2.-omega))
+        u = U * (v0*p0*t**(omega+tau))**(1./(2.-omega))
+        p = P * p0 * t**tau
+    Temperature is then derived from the CGS EOS.
+    """
     xsi_over_m_val = solver.xsi_over_m(time=t_actual)
     m_s = solver.xsi_s / xsi_over_m_val
 
-    # Initialize output arrays
-    rho = np.zeros(len(mass_grid), dtype=float)
-    p   = np.zeros(len(mass_grid), dtype=float)
-    u   = np.zeros(len(mass_grid), dtype=float)
-    T   = np.zeros(len(mass_grid), dtype=float)
-
-    # Exact solver at this time to get dimensional scale factors at the shock front
-    sol_exact = solver.solve(mass=mass_grid, time=t_actual)
-    p_s_cgs   = float(sol_exact["pressure"][-1])    # pressure at shock front [Barye]
-    rho_s_cgs = float(sol_exact["density"][-1])     # density at shock front [g/cm^3]
-    u_s_cgs   = float(sol_exact["velocity"][-1])    # velocity at shock front [cm/s]
-    e_s_cgs = p_s_cgs / (rho_s_cgs * float(case.r))          # specific internal energy at shock front [erg/g]
-    T_s_cgs = (e_s_cgs * rho_s_cgs**(0.14)/6730)**(1/1.6)  # temperature at shock front from EOS [K]
-
-    # Dimensionless shock-front boundary values from solver
-    Ps = solver.Ps
-    Rs_or_Vs = solver.Rs_or_Vs
-    rho_s = 1.0 / Rs_or_Vs
-    Es = Ps * Rs_or_Vs / solver.r
-    Ts = (Es * rho_s**(0.14)/6730)**(1/1.6)
-    Us_dim = solver.Us
-
     y = mass_grid / m_s
-    T_fit, P_fit, U_fit, rho_fit = fit_by_params(y, params)
+    T_fit_ss, P_fit_ss, U_fit_ss, rho_fit_ss = fit_by_params(y, params)
 
-    for i, m in enumerate(mass_grid):
-        if m >= m_s:
-            # Outside shock front (unshocked region)
-            rho[i] = float(case.rho0)
-            p[i]   = 1e-6   # tiny ambient pressure [Barye]
-            u[i]   = 0.0
-            T[i]   = 300.0  # ambient temperature [K]
-        else:
-            # Scale to CGS via shock-front boundary values
-            p[i]   = P_fit[i] * (p_s_cgs / max(Ps, 1e-30))
-            u[i]   = U_fit[i] * (u_s_cgs / max(abs(Us_dim), 1e-30))
-            
-            y_val = max(y[i], 1e-10)
-            if y_val < Y_FIT_MIN and FITTING_OPTION != "FIT_RHO_ALL_AROUND":
-                # Density from fit, Temp derived from EOS
-                rho[i] = rho_fit[i] * (rho_s_cgs / max(rho_s, 1e-30))
-                T[i]   = (p[i] / (6730.0 * float(case.r) * rho[i]**0.86))**(1.0/1.6) if rho[i] > 0 else T_s_cgs
-            else:
-                # Temp from fit, Density derived from EOS
-                T[i]   = T_fit[i] * (T_s_cgs / max(Ts, 1e-30))
-                rho[i] = (p[i] / (6730.0 * float(case.r) * T[i]**1.6))**(1.0/0.86) if T[i] > 0 else rho_s_cgs
+    # Analytical scaling factors (identical to PistonShock.solve() lines 258-260)
+    v0, p0, tau, omega = solver.v0, solver.p0, solver.tau, solver.omega
+    exp = 1.0 / (2.0 - omega)
+
+    v_scale = (v0 * v0 * (p0 * t_actual**(tau + 2.0))**omega) ** exp
+    u_scale = (v0 * p0 * t_actual**(omega + tau)) ** exp
+    p_scale = p0 * t_actual**tau
+
+    # Dimensionalize: V_fit = 1/rho_fit (specific volume), then scale to CGS
+    v_fit_ss = np.where(rho_fit_ss > 0, 1.0 / rho_fit_ss, np.nan)
+    rho = np.where(v_fit_ss > 0, 1.0 / (v_fit_ss * v_scale), np.nan)
+    u = U_fit_ss * u_scale
+    p = P_fit_ss * p_scale
+    T = dimensional_temperature_from_eos(p, 1.0 / rho, r=solver.r)
+
+    # Fill unshocked region (y >= 1)
+    outside = mass_grid >= m_s
+    rho[outside] = solver.rho0
+    p[outside]   = 1e-6
+    u[outside]   = 0.0
+    T[outside]   = 300.0
 
     return {"density": rho, "pressure": p, "velocity": u, "temperature": T}
 
 
-def plot_dimensional_fit_comparison(history, solver, case, params, material_hydro_path, case_title):
+def plot_dimensional_fit_comparison(history, solver, params, material_hydro_path, case_title):
     """Plot overlay profiles of T, rho, P, u vs m comparing Simulation, Exact Solver, and Analytic fits."""
     print(f"Generating physical shock profiles comparison for {case_title}...")
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     
-    target_times = [1e-9, 1.5e-9, 2e-9]
+    target_times = [1.0e-9, 1.5e-9, 2.0e-9]
     plasma = plt.get_cmap("plasma")
     sim_colors = [plasma(v) for v in np.linspace(0, 1, len(target_times))]
-    p_scale, u_scale = 1e12, 1e5
     
     ax_rho = axes[0, 0]
     ax_p = axes[0, 1]
     ax_u = axes[1, 0]
     ax_T = axes[1, 1]
     
-    # Add Zoomed Inset for Density near front (y in [0.8, 0.99])
-    axins = ax_rho.inset_axes([0.18, 0.48, 0.35, 0.35])
+    # Add Zoomed Inset for Temperature near piston (m ~ 0)
+    axins_T = ax_T.inset_axes([0.45, 0.45, 0.48, 0.48])
     
     for i, (t_target, sim_color) in enumerate(zip(target_times, sim_colors)):
         # 1) Simulation
         idx_sim = np.argmin(np.abs(np.array(history.t) - t_target))
         m_sim = history.m[idx_sim]
         t_actual = history.t[idx_sim]
-        
-        sim_rho = history.rho[idx_sim]
-        sim_p = history.p[idx_sim] / p_scale
-        sim_u = history.u[idx_sim] / u_scale
-        
-        # Temp from ideal gas relation
-        with np.errstate(divide='ignore', invalid='ignore'):
-            sim_T = np.where(sim_rho > 0, history.p[idx_sim] / (sim_rho * float(case.r)), 0.0)
-            
-        # 2) Exact Solver
+
+        # shock front for shock solver
         xsi_over_m_val = solver.xsi_over_m(time=t_actual)
         m_s_exact = solver.xsi_s / xsi_over_m_val
-        mass_exact = np.linspace(1e-12, m_s_exact, 200)
-        sol_exact = solver.solve(mass=mass_exact, time=t_actual)
-        
+        shock_mask = m_sim <= m_s_exact
+        m_sim_shock = m_sim[shock_mask][:-2]
+
+        sim_rho = history.rho[idx_sim][shock_mask][:-2]
+        sim_p = history.p[idx_sim][shock_mask] [:-2]
+        sim_u = history.u[idx_sim][shock_mask] [:-2]
+        sim_T = history.T[idx_sim][shock_mask][:-2]
+            
+        # 2) Exact Solver
+        mass_solver = np.linspace(1e-12, m_s_exact, 1000)
+        sol_exact = solver.solve(mass=mass_solver, time=t_actual)
         exact_rho = sol_exact["density"]
-        exact_p = sol_exact["pressure"] / p_scale
-        exact_u = sol_exact["velocity"] / u_scale
-        
-        # Exact Temp
-        with np.errstate(divide='ignore', invalid='ignore'):
-            exact_e = np.where(exact_rho > 0, sol_exact["pressure"] / (exact_rho * float(case.r)), 0.0)
-            f = 6711
-            mu = 0.14
-            beta = 1.6
-            exact_T = (exact_e / (f * exact_rho**(-mu)))**(1/beta)
+        exact_p = sol_exact["pressure"]
+        exact_u = sol_exact["velocity"]
+        exact_T = dimensional_temperature_from_eos(exact_p, 1./exact_rho)
 
         # 3) Analytical fits mapped to CGS
-        fits = calculate_dimensional_fits(mass_exact, t_actual, solver, case, params)
+        fits = calculate_dimensional_fits(mass_solver, t_actual, solver, params)
         fit_rho = fits["density"]
-        fit_p = fits["pressure"] / p_scale
-        fit_u = fits["velocity"] / u_scale
+        fit_p = fits["pressure"]
+        fit_u = fits["velocity"]
         fit_T = fits["temperature"]
         
         show_label = i == 0
         
         # Plot Density
-        ax_rho.plot(m_sim * 1e3, sim_rho, '-', color=sim_color, markersize=3, alpha=0.7, label=f"Simulation ({t_target*1e9:.1f} ns)" if show_label else None)
-        ax_rho.plot(mass_exact * 1e3, exact_rho, '--', color='black', lw=2.0, label="Exact Solver" if show_label else None)
-        ax_rho.plot(mass_exact * 1e3, fit_rho, '.', color='green', lw=0.5, alpha=0.5, label="Analytic Fit" if show_label else None)
+        ax_rho.plot(m_sim_shock * 1e3, sim_rho, '-', color=sim_color, markersize=3, alpha=0.7, label=f"Simulation ({t_target*1e9:.1f} ns)" if show_label else None)
+        ax_rho.plot(mass_solver * 1e3, exact_rho, '--', color='black', lw=2.0, label="Exact Solver" if show_label else None)
+        ax_rho.plot(mass_solver * 1e3, fit_rho, '.', color='green', lw=0.5, alpha=0.5, label="Analytic Fit" if show_label else None)
         
         # Plot Pressure
-        ax_p.plot(m_sim * 1e3, sim_p, '-', color=sim_color, markersize=3, alpha=0.7)
-        ax_p.plot(mass_exact * 1e3, exact_p, '--', color='black', lw=2.0)
-        ax_p.plot(mass_exact * 1e3, fit_p, '.', color='green', lw=0.5, alpha=0.5)
+        ax_p.plot(m_sim_shock * 1e3, sim_p, '-', color=sim_color, markersize=3, alpha=0.7)
+        ax_p.plot(mass_solver * 1e3, exact_p, '--', color='black', lw=2.0)
+        ax_p.plot(mass_solver * 1e3, fit_p, '.', color='green', lw=0.5, alpha=0.5)
         
         # Plot Velocity
-        ax_u.plot(m_sim * 1e3, sim_u, '-', color=sim_color, markersize=3, alpha=0.7)
-        ax_u.plot(mass_exact * 1e3, exact_u, '--', color='black', lw=2.0)
-        ax_u.plot(mass_exact * 1e3, fit_u, '.', color='green', lw=0.5, alpha=0.5)
+        ax_u.plot(m_sim_shock * 1e3, sim_u, '-', color=sim_color, markersize=3, alpha=0.7)
+        ax_u.plot(mass_solver * 1e3, exact_u, '--', color='black', lw=2.0)
+        ax_u.plot(mass_solver * 1e3, fit_u, '.', color='green', lw=0.5, alpha=0.5)
         
         # Plot Temperature
-        ax_T.plot(m_sim * 1e3, sim_T, '-', color=sim_color, markersize=3, alpha=0.7)
-        ax_T.plot(mass_exact * 1e3, exact_T, '--', color='black', lw=2.0)
-        ax_T.plot(mass_exact * 1e3, fit_T, '.', color='green', lw=0.5, alpha=0.5)
+        ax_T.plot(m_sim_shock * 1e3, sim_T, '-', color=sim_color, markersize=3, alpha=0.7)
+        ax_T.plot(mass_solver * 1e3, exact_T, '--', color='black', lw=2.0)
+        ax_T.plot(mass_solver * 1e3, fit_T, '.', color='green', lw=0.5, alpha=0.5)
+        
+        # Temperature inset near origin
+        axins_T.plot(m_sim_shock * 1e3, sim_T, '-', color=sim_color, markersize=2, alpha=0.7)
+        axins_T.plot(mass_solver * 1e3, exact_T, '--', color='black', lw=1.5)
+        axins_T.plot(mass_solver * 1e3, fit_T, '.', color='green', markersize=1, alpha=0.5)
         
     # Build time legend entries using plasma colors
     time_handles = [
@@ -624,10 +609,15 @@ def plot_dimensional_fit_comparison(history, solver, case, params, material_hydr
             ]
             ax.legend(handles=time_handles + style_handles, loc="upper left")
             
-    # Style inset
-    axins.grid(True, alpha=0.3)
-    axins.set_title("Zoom near front", fontsize=9)
-    ax_rho.indicate_inset_zoom(axins, edgecolor="black")
+    # Style temperature inset — zoom to first 20% of the mass range at the latest time
+    last_m_s = solver.xsi_s / solver.xsi_over_m(time=target_times[-1])
+    zoom_m_max = 0.05 * last_m_s * 1e3  # 20% of smallest shock-front mass, in mg/cm^2
+    axins_T.set_xlim(0, zoom_m_max)
+    axins_T.set_ylim(0, 1e6)
+    axins_T.grid(True, alpha=0.3)
+    axins_T.set_title("Zoom near piston", fontsize=9)
+    axins_T.tick_params(labelsize=8)
+    ax_T.indicate_inset_zoom(axins_T, edgecolor="black")
             
     plt.suptitle(f"Shock Region Verification\n{case_title}", fontsize=14, fontweight='bold')
     plt.tight_layout()
@@ -1006,7 +996,7 @@ def generate_verification_plots(
     plot_and_fit_self_similar(solver, params, paths["self_similar"], case_title)
 
     # 4) Dimensional fit comparison
-    plot_dimensional_fit_comparison(history, solver, case, params, paths["dimensional_comparison"], case_title)
+    plot_dimensional_fit_comparison(history, solver, params, paths["dimensional_comparison"], case_title)
 
     # 5) Relative errors of self-similar fits
     plot_relative_errors(solver, params, paths["relative_errors"], case_title)

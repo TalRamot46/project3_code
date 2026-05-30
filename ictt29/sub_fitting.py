@@ -60,7 +60,7 @@ def get_cached_sub_solver(case, case_label):
     """Solve subsonic similarity ODEs once and cache the solver object (with found xsi_f)."""
     cache_dir = Path("results/ictt/cache")
     cache_dir.mkdir(parents=True, exist_ok=True)
-    solver_cache_path = cache_dir / f"{case_label}_similarity_solver.pkl"
+    solver_cache_path = cache_dir / f"{case_label}_sub_similarity_solver.pkl"
 
     if USE_CACHE and solver_cache_path.exists():
         print(f"Loading cached subsonic similarity solver from {solver_cache_path}...")
@@ -426,17 +426,16 @@ def plot_dimensional_fit_comparison(history, solver, case, params, dimensional_f
         sim_T = history.T[idx_sim][sub_mask] 
         
         # 2) Exact Solver Lagrangian Grid
-        mass_solver = np.linspace(1e-12, m_f_val, 300)
+        mass_solver = np.linspace(1e-12, m_f_val, 1000)
         sol_exact = solver.solve(mass=mass_solver, time=t_actual)
         mass_exact_rho, exact_rho = trim_noisy_tail_with_coordinate(mass_solver, sol_exact["density"])
-
         exact_p = sol_exact["pressure"]
         exact_u = sol_exact["velocity"]
         exact_T = sol_exact["temperature"]
         
         # 3) Analytical fits mapped from dimensionless to CGS
         fits = calculate_dimensional_fits(mass_solver, t_actual, solver, params)
-        
+
         mass_fit_rho, fit_rho = trim_noisy_tail_with_coordinate(mass_solver, fits["density"])
         fit_p = fits["pressure"]
         fit_u = fits["velocity"]

@@ -51,9 +51,48 @@ from project3_code.rad_hydro_sim.verification.menahem_comparison import (
 from project3_code.rad_hydro_sim.simulation.radiation_step import KELVIN_PER_HEV
 from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
 
-from subsonic_heat_wave_og import SubsonicHeatWave
+from project3_code.menahem_new.subsonic_heat_wave_og import SubsonicHeatWave
 
 USE_CACHE = False  # Set to True to use pre-saved pickle files, False to run again
+
+
+def get_cached_sub_solver(case, case_label):
+    """Solve subsonic similarity ODEs once and cache the solver object (with found xsi_f)."""
+    cache_dir = Path("results/ictt/cache")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    solver_cache_path = cache_dir / f"{case_label}_similarity_solver.pkl"
+
+    if USE_CACHE and solver_cache_path.exists():
+        print(f"Loading cached subsonic similarity solver from {solver_cache_path}...")
+        try:
+            with open(solver_cache_path, "rb") as f:
+                solver = pickle.load(f)
+            # Re-bind the ODE solver which contains method callbacks
+            if solver is not None:
+                solver.ode_solver = scipy.integrate.ode(solver.fode).set_integrator(solver.ode_scheme)
+            print("Similarity solver loaded successfully.")
+            return solver
+        except Exception as e:
+            print(f"Failed to load solver cache: {e}. Re-solving subsonic ODEs...")
+
+    print("Solving subsonic similarity ODEs (finding xsi_f via shooting method)...")
+    heat_kwargs = _heat_kwargs_from_case(case)
+    solver = SubsonicHeatWave(**heat_kwargs).find_xsi_f()
+
+    # Save cache by removing ode_solver temporarily to avoid pickling issues
+    try:
+        ode_solver = getattr(solver, "ode_solver", None)
+        if hasattr(solver, "ode_solver"):
+            del solver.ode_solver
+        with open(solver_cache_path, "wb") as f:
+            pickle.dump(solver, f, protocol=pickle.HIGHEST_PROTOCOL)
+        if ode_solver is not None:
+            solver.ode_solver = ode_solver
+        print(f"Saved subsonic similarity solver to cache: {solver_cache_path}")
+    except Exception as e:
+        print(f"Failed to save solver cache: {e}")
+
+    return solver
 
 
 def run_simulation_and_references(preset_name: str, case_label: str):
@@ -82,9 +121,8 @@ def run_simulation_and_references(preset_name: str, case_label: str):
     print("Running simulation...")
     _, _, _, history = simulate_rad_hydro(rad_hydro_case=case, simulation_config=config)
 
-    print("Solving subsonic similarity ODEs (finding xsi_f via shooting method)...")
-    heat_kwargs = _heat_kwargs_from_case(case)
-    solver = SubsonicHeatWave(**heat_kwargs).find_xsi_f()
+    # Get subsonic solver
+    solver = get_cached_sub_solver(case, case_label)
 
     cache_data = {"case": case, "history": history, "solver": solver}
     print(f"Saving simulation and reference data cache to {cache_path}...")
@@ -664,38 +702,43 @@ def plot_relative_errors(solver, params, relative_errors_path, case_title):
     print(f"Saved subsonic relative errors to {relative_errors_path}")
 
 
-def generate_verification_plots(
-    history,
-    case,
-    solver,
-    case_label: str,
-    case_title: str,
-):
-    """Generate analytical self-similar fits, dimensional comparison, and relative error plots."""
+def get_plot_paths(case_label: str) -> dict[str, str]:
     out_dir = Path("results/ictt")
     ss_dir = out_dir / "self_similar"
     dv_dir = out_dir / "dimensional_verification"
     ss_dir.mkdir(parents=True, exist_ok=True)
     dv_dir.mkdir(parents=True, exist_ok=True)
-    
-    self_similar_path = str(ss_dir / f"{case_label}_self_similar.png")
-    standalone_path = str(ss_dir / f"{case_label}_velocity_fits_standalone.png")
-    relative_errors_path = str(ss_dir / f"{case_label}_relative_errors.png")
-    dimensional_fit_path = str(dv_dir / f"{case_label}_dimensional_fit_comparison.png")
-    
-    params = perform_subsonic_fitting(solver)
-        
+
+    return {
+        "self_similar": str(ss_dir / f"{case_label}_self_similar.png"),
+        "velocity_fits": str(ss_dir / f"{case_label}_velocity_fits_standalone.png"),
+        "relative_errors": str(ss_dir / f"{case_label}_relative_errors.png"),
+        "dimensional_comparison": str(dv_dir / f"{case_label}_dimensional_fit_comparison.png")
+    }
+
+
+def generate_verification_plots(
+    history,
+    case,
+    solver,
+    params: dict,
+    case_label: str,
+    case_title: str,
+):
+    """Generate analytical self-similar fits, dimensional comparison, and relative error plots."""
+    paths = get_plot_paths(case_label)
+
     # 1) Standalone Velocity fits comparison
-    plot_standalone_velocity_fits(params, standalone_path, case_title)
-    
+    plot_standalone_velocity_fits(params, paths["velocity_fits"], case_title)
+
     # 2) Self-similar profiles and fits
-    plot_and_fit_self_similar(solver, params, self_similar_path, case_title)
-    
+    plot_and_fit_self_similar(solver, params, paths["self_similar"], case_title)
+
     # 3) Dimensional fit comparison
-    plot_dimensional_fit_comparison(history, solver, case, params, dimensional_fit_path, case_title)
-    
+    plot_dimensional_fit_comparison(history, solver, case, params, paths["dimensional_comparison"], case_title)
+
     # 4) Relative errors of self-similar fits
-    plot_relative_errors(solver, params, relative_errors_path, case_title)
+    plot_relative_errors(solver, params, paths["relative_errors"], case_title)
 
 
 def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
@@ -705,11 +748,13 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
     print("=" * 80)
 
     case, history, solver = run_simulation_and_references(preset_name, case_label)
+    params = perform_subsonic_fitting(solver)
 
     generate_verification_plots(
         history=history,
         case=case,
         solver=solver,
+        params=params,
         case_label=case_label,
         case_title=case_title,
     )

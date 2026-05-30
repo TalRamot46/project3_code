@@ -100,16 +100,15 @@ def get_cached_shock_solver(case, case_label):
     )
     
     # Save cache by removing ode_solver temporarily to avoid pickling issues
-    if not USE_CACHE:
-        try:
-            ode_solver = solver.ode_solver
-            del solver.ode_solver
-            with open(solver_cache_path, "wb") as f:
-                pickle.dump(solver, f, protocol=pickle.HIGHEST_PROTOCOL)
-            solver.ode_solver = ode_solver
-            print(f"Saved shock similarity solver to cache: {solver_cache_path}")
-        except Exception as e:
-            print(f"Failed to save solver cache: {e}")
+    try:
+        ode_solver = solver.ode_solver
+        del solver.ode_solver
+        with open(solver_cache_path, "wb") as f:
+            pickle.dump(solver, f, protocol=pickle.HIGHEST_PROTOCOL)
+        solver.ode_solver = ode_solver
+        print(f"Saved shock similarity solver to cache: {solver_cache_path}")
+    except Exception as e:
+        print(f"Failed to save solver cache: {e}")
         
     return solver
 
@@ -382,43 +381,115 @@ def perform_shock_fitting(solver):
         else:
             fits_T_composite[cand_id] = (None, None, None, 0.0, 0.0, name, latex_str)
             
-    # Also update best_T with its composite values
-    if best_T is not None and best_T["id"] in fits_T_composite:
-        popt_cand, T_fit_comp, rho_fit_comp, avg_err, max_err, name, latex_str = fits_T_composite[best_T["id"]]
-        best_T["fit_val"] = T_fit_comp
-        best_T["rho_fit"] = rho_fit_comp
-        best_T["avg_err"] = avg_err
-        best_T["max_err"] = max_err
+    # Retrieve low-domain density fit parameters for the composite model
+    popt_rho_low = None
+    rho_0 = rho_valid[0]
+    if FITTING_OPTION != "FIT_RHO_ALL_AROUND" and np.any(low_mask):
+        rho_s = rho_valid[-1]
+        def fit_rho_around_zero(y_val, a, d):
+            return rho_s + (rho_0 - rho_s) * (1.0 - y_val**d)**a
+        popt_rho_low, _ = curve_fit(fit_rho_around_zero, y_valid[low_mask], rho_valid[low_mask], p0=[1.0, 1.0], maxfev=10000)
+
+    params = {
+        "y_grid": y_grid,
+        "y_valid": y_valid,
+        "T_valid": T_valid,
+        "P_valid": P_valid,
+        "U_valid": U_valid,
+        "rho_valid": rho_valid,
+        "popt_P": popt_P,
+        "best_T": best_T,
+        "fits_T": fits_T_composite,
+        "best_u": best_u,
+        "fits_u": fits_u,
+        "rho_0": rho_0,
+        "popt_rho_low": popt_rho_low,
+        "solver": solver
+    }
+    return params
+
+
+def fit_by_params(y, params):
+    """Compute the self-similar fit profiles (T, P, U, rho) on normalized coordinate y."""
+    y = np.asarray(y, dtype=float)
+    # Ensure y is clipped or handled appropriately (especially for boundary values)
+    y_clipped = np.clip(y, 1e-12, 1.0)
+    
+    solver = params["solver"]
+    popt_P = params["popt_P"]
+    best_T = params["best_T"]
+    best_u = params["best_u"]
+    popt_rho_low = params.get("popt_rho_low", None)
+    
+    # 1) Pressure fit
+    P_fit = 1.0 - (1.0 - solver.Ps) * y_clipped**popt_P[0]
+    
+    # 2) Velocity fit
+    U_fit = best_u["func"](y_clipped, *best_u["popt"])
+    
+    # 3) Temperature and Density fits (piecewise or global depending on FITTING_OPTION)
+    T_fit = np.zeros_like(y_clipped)
+    rho_fit = np.zeros_like(y_clipped)
+    
+    if FITTING_OPTION == "FIT_RHO_ALL_AROUND":
+        rho_fit = best_T["func"](y_clipped, *best_T["popt"])
+        T_fit = (P_fit / (6730.0 * solver.r * rho_fit**0.86))**(1.0/1.6)
+    else:
+        low_mask = y_clipped < Y_FIT_MIN
+        high_mask = ~low_mask
         
-    return y_grid, y_valid, T_valid, P_valid, U_valid, rho_valid, popt_P, best_T, fits_T_composite, best_u, fits_u
+        # Low domain (y < Y_FIT_MIN): Density fit, Temp derived from EOS
+        rho_s = 1.0 / solver.Rs_or_Vs
+        rho_0 = params["rho_0"]
+        def fit_rho_around_zero(y_val, a, d):
+            return rho_s + (rho_0 - rho_s) * (1.0 - y_val**d)**a
+            
+        if np.any(low_mask) and popt_rho_low is not None:
+            rho_fit[low_mask] = fit_rho_around_zero(y_clipped[low_mask], *popt_rho_low)
+            T_fit[low_mask] = (P_fit[low_mask] / (6730.0 * solver.r * rho_fit[low_mask]**0.86))**(1.0/1.6)
+            
+        # High domain (y >= Y_FIT_MIN)
+        if np.any(high_mask):
+            fit_val_high = best_T["func"](y_clipped[high_mask], *best_T["popt"])
+            if FITTING_OPTION == "FIT_TEMP_AROUND_FRONT":
+                T_fit[high_mask] = fit_val_high
+                rho_fit[high_mask] = (P_fit[high_mask] / (6730.0 * solver.r * T_fit[high_mask]**1.6))**(1.0/0.86)
+            else: # FIT_RHO_AROUND_FRONT
+                rho_fit[high_mask] = fit_val_high
+                T_fit[high_mask] = (P_fit[high_mask] / (6730.0 * solver.r * rho_fit[high_mask]**0.86))**(1.0/1.6)
+                
+    return T_fit, P_fit, U_fit, rho_fit
 
 
-def evaluate_shock_fits_arrays(mass_grid, time, solver, case, y_valid, P_fit, T_fit, rho_fit, U_fit):
-    """Map self-similar fit arrays to dimensional (CGS) physical profiles on mass_grid at time."""
-    xsi_over_m_val = solver.xsi_over_m(time=time)
+def calculate_dimensional_fits(mass_grid, t_actual, solver, case, params):
+    """Map shock self-similar fit arrays to dimensional (CGS) physical profiles on mass_grid at time t_actual."""
+    xsi_over_m_val = solver.xsi_over_m(time=t_actual)
     m_s = solver.xsi_s / xsi_over_m_val
 
-    # Dimensionless shock-front boundary values
-    Ps = solver.Ps
-    Es = float(solver.Ps * solver.Rs_or_Vs / solver.r)
-    # rho_s is 1/V_s = 1/Rs_or_Vs
-    rho_s = 1.0 / solver.Rs_or_Vs
-    Ts = (Es * rho_s**(0.14)/6730)**(1/1.6)
-    Us_dim = solver.Us
-
-    # Initialise output arrays
+    # Initialize output arrays
     rho = np.zeros(len(mass_grid), dtype=float)
     p   = np.zeros(len(mass_grid), dtype=float)
     u   = np.zeros(len(mass_grid), dtype=float)
     T   = np.zeros(len(mass_grid), dtype=float)
 
     # Exact solver at this time to get dimensional scale factors at the shock front
-    sol_exact = solver.solve(mass=mass_grid, time=time)
+    sol_exact = solver.solve(mass=mass_grid, time=t_actual)
     p_s_cgs   = float(sol_exact["pressure"][-1])    # pressure at shock front [Barye]
     rho_s_cgs = float(sol_exact["density"][-1])     # density at shock front [g/cm^3]
     u_s_cgs   = float(sol_exact["velocity"][-1])    # velocity at shock front [cm/s]
     e_s_cgs = p_s_cgs / (rho_s_cgs * float(case.r))          # specific internal energy at shock front [erg/g]
     T_s_cgs = (e_s_cgs * rho_s_cgs**(0.14)/6730)**(1/1.6)  # temperature at shock front from EOS [K]
+
+    # Dimensionless shock-front boundary values from solver
+    Ps = solver.Ps
+    Rs_or_Vs = solver.Rs_or_Vs
+    rho_s = 1.0 / Rs_or_Vs
+    Es = Ps * Rs_or_Vs / solver.r
+    Ts = (Es * rho_s**(0.14)/6730)**(1/1.6)
+    Us_dim = solver.Us
+
+    y = mass_grid / m_s
+    T_fit, P_fit, U_fit, rho_fit = fit_by_params(y, params)
 
     for i, m in enumerate(mass_grid):
         if m >= m_s:
@@ -428,47 +499,42 @@ def evaluate_shock_fits_arrays(mass_grid, time, solver, case, y_valid, P_fit, T_
             u[i]   = 0.0
             T[i]   = 300.0  # ambient temperature [K]
         else:
-            # y = normalised coordinate in [0, 1]
-            y = float(m) / m_s
-            y = max(y, 1e-10)
-
-            # Interpolate from dimensionless fit arrays
-            P_fit_y = np.interp(y, y_valid, P_fit)
-            T_fit_y = np.interp(y, y_valid, T_fit)
-            rho_fit_y = np.interp(y, y_valid, rho_fit)
-            U_fit_y = np.interp(y, y_valid, U_fit)
-
             # Scale to CGS via shock-front boundary values
-            p[i]   = P_fit_y * (p_s_cgs / max(Ps, 1e-30))
-            u[i]   = U_fit_y * (u_s_cgs / max(abs(Us_dim), 1e-30))
+            p[i]   = P_fit[i] * (p_s_cgs / max(Ps, 1e-30))
+            u[i]   = U_fit[i] * (u_s_cgs / max(abs(Us_dim), 1e-30))
             
-            if y < Y_FIT_MIN:
+            y_val = max(y[i], 1e-10)
+            if y_val < Y_FIT_MIN and FITTING_OPTION != "FIT_RHO_ALL_AROUND":
                 # Density from fit, Temp derived from EOS
-                rho[i] = rho_fit_y * (rho_s_cgs / max(rho_s, 1e-30))
+                rho[i] = rho_fit[i] * (rho_s_cgs / max(rho_s, 1e-30))
                 T[i]   = (p[i] / (6730.0 * float(case.r) * rho[i]**0.86))**(1.0/1.6) if rho[i] > 0 else T_s_cgs
             else:
                 # Temp from fit, Density derived from EOS
-                T[i]   = T_fit_y * (T_s_cgs / max(Ts, 1e-30))
+                T[i]   = T_fit[i] * (T_s_cgs / max(Ts, 1e-30))
                 rho[i] = (p[i] / (6730.0 * float(case.r) * T[i]**1.6))**(1.0/0.86) if T[i] > 0 else rho_s_cgs
 
     return {"density": rho, "pressure": p, "velocity": u, "temperature": T}
 
 
-def plot_dimensional_fit_comparison(history, solver, case, y_valid, P_fit, T_fit, rho_fit, U_fit, material_hydro_path, case_title):
+def plot_dimensional_fit_comparison(history, solver, case, params, material_hydro_path, case_title):
     """Plot overlay profiles of T, rho, P, u vs m comparing Simulation, Exact Solver, and Analytic fits."""
     print(f"Generating physical shock profiles comparison for {case_title}...")
-    fig, axes = plt.subplots(2, 2, figsize=(14, 11))
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     
     target_times = [1e-9, 1.5e-9, 2e-9]
-    colors = ["red", "green", "blue"]
+    plasma = plt.get_cmap("plasma")
+    sim_colors = [plasma(v) for v in np.linspace(0, 1, len(target_times))]
     p_scale, u_scale = 1e12, 1e5
     
-    ax_T = axes[0, 0]
-    ax_rho = axes[0, 1]
-    ax_p = axes[1, 0]
-    ax_u = axes[1, 1]
+    ax_rho = axes[0, 0]
+    ax_p = axes[0, 1]
+    ax_u = axes[1, 0]
+    ax_T = axes[1, 1]
     
-    for t_target, color in zip(target_times, colors):
+    # Add Zoomed Inset for Density near front (y in [0.8, 0.99])
+    axins = ax_rho.inset_axes([0.18, 0.48, 0.35, 0.35])
+    
+    for i, (t_target, sim_color) in enumerate(zip(target_times, sim_colors)):
         # 1) Simulation
         idx_sim = np.argmin(np.abs(np.array(history.t) - t_target))
         m_sim = history.m[idx_sim]
@@ -499,67 +565,80 @@ def plot_dimensional_fit_comparison(history, solver, case, y_valid, P_fit, T_fit
             mu = 0.14
             beta = 1.6
             exact_T = (exact_e / (f * exact_rho**(-mu)))**(1/beta)
-        # 3) Analytical fits mapped to CGS via array interpolation
-        fits = evaluate_shock_fits_arrays(mass_exact, t_actual, solver, case, y_valid, P_fit, T_fit, rho_fit, U_fit)
+
+        # 3) Analytical fits mapped to CGS
+        fits = calculate_dimensional_fits(mass_exact, t_actual, solver, case, params)
         fit_rho = fits["density"]
         fit_p = fits["pressure"] / p_scale
         fit_u = fits["velocity"] / u_scale
         fit_T = fits["temperature"]
         
-        # Plot Temperature (Kelvin / Energy Units)
-        ax_T.plot(m_sim * 1e3, sim_T, '.', color=color, alpha=0.3, markersize=3, label=f'Simulation ({t_target*1e9:.1f} ns)' if color=='red' else None)
-        ax_T.plot(mass_exact * 1e3, exact_T, '-', color=color, lw=2.0, label=f'Exact Solver ({t_target*1e9:.1f} ns)' if color=='red' else None)
-        ax_T.plot(mass_exact * 1e3, fit_T, '--', color=color, lw=1.5, label=f'Analytic Fit ({t_target*1e9:.1f} ns)' if color=='red' else None)
+        show_label = i == 0
         
-        # Plot Density (g/cm^3)
-        ax_rho.plot(m_sim * 1e3, sim_rho, '.', color=color, alpha=0.3, markersize=3)
-        ax_rho.plot(mass_exact * 1e3, exact_rho, '-', color=color, lw=2.0)
-        ax_rho.plot(mass_exact * 1e3, fit_rho, '--', color=color, lw=1.5)
+        # Plot Density
+        ax_rho.plot(m_sim * 1e3, sim_rho, '-', color=sim_color, markersize=3, alpha=0.7, label=f"Simulation ({t_target*1e9:.1f} ns)" if show_label else None)
+        ax_rho.plot(mass_exact * 1e3, exact_rho, '--', color='black', lw=2.0, label="Exact Solver" if show_label else None)
+        ax_rho.plot(mass_exact * 1e3, fit_rho, '.', color='green', lw=0.5, alpha=0.5, label="Analytic Fit" if show_label else None)
         
-        # Plot Pressure (MBar)
-        ax_p.plot(m_sim * 1e3, sim_p, '.', color=color, alpha=0.3, markersize=3)
-        ax_p.plot(mass_exact * 1e3, exact_p, '-', color=color, lw=2.0)
-        ax_p.plot(mass_exact * 1e3, fit_p, '--', color=color, lw=1.5)
+        # Plot Pressure
+        ax_p.plot(m_sim * 1e3, sim_p, '-', color=sim_color, markersize=3, alpha=0.7)
+        ax_p.plot(mass_exact * 1e3, exact_p, '--', color='black', lw=2.0)
+        ax_p.plot(mass_exact * 1e3, fit_p, '.', color='green', lw=0.5, alpha=0.5)
         
-        # Plot Velocity (km/s)
-        ax_u.plot(m_sim * 1e3, sim_u, '.', color=color, alpha=0.3, markersize=3)
-        ax_u.plot(mass_exact * 1e3, exact_u, '-', color=color, lw=2.0)
-        ax_u.plot(mass_exact * 1e3, fit_u, '--', color=color, lw=1.5)
+        # Plot Velocity
+        ax_u.plot(m_sim * 1e3, sim_u, '-', color=sim_color, markersize=3, alpha=0.7)
+        ax_u.plot(mass_exact * 1e3, exact_u, '--', color='black', lw=2.0)
+        ax_u.plot(mass_exact * 1e3, fit_u, '.', color='green', lw=0.5, alpha=0.5)
         
-    # Labels and Titles
-    ax_T.set_ylabel(r"$T$ [Kelvin equivalent]", fontsize=12)
-    ax_rho.set_ylabel(r"$\rho$ [g/cm³]", fontsize=12)
-    ax_p.set_ylabel(r"$P$ [MBar]", fontsize=12)
-    ax_u.set_ylabel(r"$u$ [km/s]", fontsize=12)
+        # Plot Temperature
+        ax_T.plot(m_sim * 1e3, sim_T, '-', color=sim_color, markersize=3, alpha=0.7)
+        ax_T.plot(mass_exact * 1e3, exact_T, '--', color='black', lw=2.0)
+        ax_T.plot(mass_exact * 1e3, fit_T, '.', color='green', lw=0.5, alpha=0.5)
+        
+    # Build time legend entries using plasma colors
+    time_handles = [
+        Line2D([0], [0], color=sim_colors[k], lw=2, label=f"{target_times[k]*1e9:.1f} ns")
+        for k in range(len(target_times))
+    ]
     
-    ax_T.legend(loc='best', fontsize=9)
-    
-    for ax in axes.flat:
-        ax.set_xlabel(r"Mass coordinate $m$ [mg/cm²]", fontsize=11)
-        ax.grid(True, alpha=0.25)
-        
-    fig.suptitle(f"Dimensional Shock Profiles Comparison\n{case_title}", fontsize=14, fontweight='bold')
+    # Styling
+    labels = ["Density [g/cm$^3$]", "Pressure [MBar]", "Velocity [km/s]", "Temperature [Kelvin equivalent]"]
+    for j, ax in enumerate([ax_rho, ax_p, ax_u, ax_T]):
+        ax.grid(True, alpha=0.3)
+        ax.set_ylabel(labels[j], fontsize=12)
+        ax.set_xlabel("Lagrangian Mass Coordinate $m$ [mg/cm$^2$]", fontsize=12)
+        if j == 0:
+            style_handles = [
+                Line2D([0], [0], color='black', lw=2, linestyle='--', label='Exact Solver'),
+                Line2D([0], [0], color='green', lw=2, linestyle='--', label='Analytic Fit'),
+            ]
+            ax.legend(handles=time_handles + style_handles, loc="upper left")
+            
+    # Style inset
+    axins.grid(True, alpha=0.3)
+    axins.set_title("Zoom near front", fontsize=9)
+    ax_rho.indicate_inset_zoom(axins, edgecolor="black")
+            
+    plt.suptitle(f"Shock Region Verification\n{case_title}", fontsize=14, fontweight='bold')
     plt.tight_layout()
     fig.savefig(material_hydro_path, dpi=200)
-    plt.close(fig)
     print(f"Saved dimensional shock profiles comparison to {material_hydro_path}")
+    plt.close(fig)
 
 
-def plot_and_fit_self_similar(
-    solver, y_valid, T_valid, P_valid, U_valid, rho_valid, 
-    popt_P, best_T, best_u, fits_u, 
-    self_similar_path, standalone_path, case_title
-):
+def plot_and_fit_self_similar(solver, params, self_similar_path, case_title):
     print("Generating shock 2x2 self-similar fitting plots...")
+    y_valid = params["y_valid"]
+    T_valid = params["T_valid"]
+    P_valid = params["P_valid"]
+    U_valid = params["U_valid"]
+    rho_valid = params["rho_valid"]
+    popt_P = params["popt_P"]
+    best_T = params["best_T"]
+    best_u = params["best_u"]
     
-    # Exact shock boundary temperature
-    Ts = T_valid[-1]
-    
-    # Evaluate fits
-    P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
-    T_fit = best_T["fit_val"]
-    rho_fit = best_T["rho_fit"]
-    U_fit = best_u["fit_val"]
+    # Compute chosen fit arrays via unified fit_by_params
+    T_fit, P_fit, U_fit, rho_fit = fit_by_params(y_valid, params)
     
     err_T = np.abs((T_fit - T_valid) / T_valid)
     err_rho = np.abs((rho_fit - rho_valid) / rho_valid)
@@ -666,8 +745,15 @@ def plot_and_fit_self_similar(
     fig.savefig(self_similar_path, dpi=200)
     plt.close(fig)
     print(f"Saved self-similar shock profiles to {self_similar_path}")
+
+
+def plot_standalone_velocity_fits(params, standalone_path, case_title):
+    print("Generating standalone shock velocity fitting comparison plots...")
+    y_valid = params["y_valid"]
+    U_valid = params["U_valid"]
+    fits_u = params["fits_u"]
+    best_u = params["best_u"]
     
-    # Standalone velocity comparisons plot
     fig_sa, (ax_sa1, ax_sa2) = plt.subplots(1, 2, figsize=(18, 8.5))
     ax_sa1.plot(y_valid, U_valid, 'b-', label='Numerical Solver', lw=3.0)
     colors_u = {1: 'crimson', 2: 'darkorange', 3: 'forestgreen', 4: 'darkviolet', 5: 'deeppink', 6: 'teal'}
@@ -703,10 +789,13 @@ def plot_and_fit_self_similar(
     print(f"Saved standalone shock velocity fits to {standalone_path}")
 
 
-def plot_standalone_temperature_fits(
-    y_valid, T_valid, fits_T, best_T, standalone_path, case_title
-):
+def plot_standalone_temperature_fits(params, standalone_T_path, case_title):
     print("Generating standalone temperature fitting comparison plots...")
+    y_valid = params["y_valid"]
+    T_valid = params["T_valid"]
+    fits_T = params["fits_T"]
+    best_T = params["best_T"]
+    
     fig_sa, (ax_sa1, ax_sa2) = plt.subplots(2, 1, figsize=(11, 10))
     
     ax_sa1.plot(y_valid, T_valid, 'b-', label='Numerical Solver', lw=3.0)
@@ -750,23 +839,26 @@ def plot_standalone_temperature_fits(
     
     fig_sa.suptitle(f"Shock Temperature Curve Fitting & Optimization\nChosen Formal Fit: Fit {best_T['id']} ({best_T['name']})", fontsize=15, fontweight='bold')
     plt.tight_layout()
-    fig_sa.savefig(standalone_path, dpi=200, bbox_inches='tight')
+    fig_sa.savefig(standalone_T_path, dpi=200, bbox_inches='tight')
     plt.close(fig_sa)
-    print(f"Saved standalone shock temperature fits to {standalone_path}")
+    print(f"Saved standalone shock temperature fits to {standalone_T_path}")
 
 
-def plot_relative_errors(
-    solver, y_valid, T_valid, P_valid, U_valid, R_valid, 
-    popt_P, best_T, best_u, relative_errors_path, case_title
-):
+def plot_relative_errors(solver, params, relative_errors_path, case_title):
     print("Generating shock relative error plots...")
-    P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
-    T_fit = best_T["fit_val"]
-    R_fit = best_T["rho_fit"]
-    U_fit = best_u["fit_val"]
+    y_valid = params["y_valid"]
+    T_valid = params["T_valid"]
+    P_valid = params["P_valid"]
+    U_valid = params["U_valid"]
+    rho_valid = params["rho_valid"]
+    best_T = params["best_T"]
+    best_u = params["best_u"]
+    
+    # Compute chosen fit arrays via unified fit_by_params
+    T_fit, P_fit, U_fit, rho_fit = fit_by_params(y_valid, params)
     
     err_T = np.abs((T_fit - T_valid) / T_valid)
-    err_rho = np.abs((R_fit - R_valid) / R_valid)
+    err_rho = np.abs((rho_fit - rho_valid) / rho_valid)
     err_P = np.abs((P_fit - P_valid) / P_valid)
     err_U = np.abs((U_fit - U_valid) / (U_valid + 1e-15))
     
@@ -822,7 +914,6 @@ def plot_relative_errors(
 
 def run_simulation_and_references(preset_name: str, case_label: str):
     """Run full simulation and build PistonShock reference solver, or load from cache."""
-    from dataclasses import replace as dc_replace
     cache_dir = Path("results/ictt/cache")
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_path = cache_dir / f"{case_label}_cache.pkl"
@@ -868,45 +959,47 @@ def run_simulation_and_references(preset_name: str, case_label: str):
     return case, history, solver
 
 
-def generate_verification_plots(
-    history,
-    case,
-    solver,
-    case_label: str,
-    case_title: str,
-):
-    """Generate analytical self-similar fits, dimensional comparison, and relative error plots."""
+def get_plot_paths(case_label: str) -> dict[str, str]:
     out_dir = Path("results/ictt")
     ss_dir = out_dir / "self_similar"
     dv_dir = out_dir / "dimensional_verification"
     ss_dir.mkdir(parents=True, exist_ok=True)
     dv_dir.mkdir(parents=True, exist_ok=True)
 
-    self_similar_path = str(ss_dir / f"{case_label}_self_similar.png")
-    standalone_path = str(ss_dir / f"{case_label}_velocity_fits_standalone.png")
-    standalone_T_path = str(ss_dir / f"{case_label}_temperature_fits_standalone.png")
-    relative_errors_path = str(ss_dir / f"{case_label}_relative_errors.png")
-    dimensional_fit_path = str(dv_dir / f"{case_label}_dimensional_fit_comparison.png")
+    return {
+        "self_similar": str(ss_dir / f"{case_label}_self_similar.png"),
+        "velocity_fits": str(ss_dir / f"{case_label}_velocity_fits_standalone.png"),
+        "temperature_fits": str(ss_dir / f"{case_label}_temperature_fits_standalone.png"),
+        "relative_errors": str(ss_dir / f"{case_label}_relative_errors.png"),
+        "dimensional_comparison": str(dv_dir / f"{case_label}_dimensional_fit_comparison.png")
+    }
 
-    y_grid, y_valid, T_valid, P_valid, U_valid, rho_valid, popt_P, best_T, fits_T, best_u, fits_u = perform_shock_fitting(solver)
 
-    # Compute fit arrays
-    P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
-    T_fit = best_T["fit_val"]
-    rho_fit = best_T["rho_fit"]
-    U_fit = best_u["fit_val"]
+def generate_verification_plots(
+    history,
+    case,
+    solver,
+    params: dict,
+    case_label: str,
+    case_title: str,
+):
+    """Generate analytical self-similar fits, dimensional comparison, and relative error plots."""
+    paths = get_plot_paths(case_label)
 
     # 1) Standalone Temperature fits comparison and relative errors
-    plot_standalone_temperature_fits(y_valid, T_valid, fits_T, best_T, standalone_T_path, case_title)
+    plot_standalone_temperature_fits(params, paths["temperature_fits"], case_title)
 
-    # 2) Self-similar profiles and fits (using optimal models)
-    plot_and_fit_self_similar(solver, y_valid, T_valid, P_valid, U_valid, rho_valid, popt_P, best_T, best_u, fits_u, self_similar_path, standalone_path, case_title)
+    # 2) Standalone Velocity fits comparison
+    plot_standalone_velocity_fits(params, paths["velocity_fits"], case_title)
 
-    # 3) Dimensional fit comparison
-    plot_dimensional_fit_comparison(history, solver, case, y_valid, P_fit, T_fit, rho_fit, U_fit, dimensional_fit_path, case_title)
+    # 3) Self-similar profiles and fits (using optimal models)
+    plot_and_fit_self_similar(solver, params, paths["self_similar"], case_title)
 
-    # 4) Relative errors of self-similar fits
-    plot_relative_errors(solver, y_valid, T_valid, P_valid, U_valid, rho_valid, popt_P, best_T, best_u, relative_errors_path, case_title)
+    # 4) Dimensional fit comparison
+    plot_dimensional_fit_comparison(history, solver, case, params, paths["dimensional_comparison"], case_title)
+
+    # 5) Relative errors of self-similar fits
+    plot_relative_errors(solver, params, paths["relative_errors"], case_title)
 
 
 def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
@@ -916,11 +1009,13 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
     print("=" * 80)
 
     case, history, solver = run_simulation_and_references(preset_name, case_label)
+    params = perform_shock_fitting(solver)
 
     generate_verification_plots(
         history=history,
         case=case,
         solver=solver,
+        params=params,
         case_label=case_label,
         case_title=case_title,
     )
@@ -928,12 +1023,6 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
 
 
 def main():
-    # Process only the power-law drive piston shock matching the boundary condition (tau=-43/96)
-    # run_preset_workflow(
-    #     PRESET_CONSTANT_PRESSURE,
-    #     "constant_pressure_drive",
-    #     "Constant Pressure Drive (tau=0)"
-    # )
     run_preset_workflow(
         PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE,
         "power_law_pressure_drive",

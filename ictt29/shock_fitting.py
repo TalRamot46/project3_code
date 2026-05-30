@@ -67,8 +67,13 @@ from project3_code.rad_hydro_sim.verification.menahem_comparison import (
 from project3_code.hydro_sim.plotting.hydro_plots import _create_7panel_vertical_figure
 
 from project3_code.menahem_new.piston_shock_og import PistonShock
-
-USE_CACHE = False  # Set to True to use pre-saved pickle files, False to run again
+'''
+DONT CHANGE USE_CACHE!!!
+'''
+USE_CACHE = False #TODO MAKE IT POSSIBLE TO CHANG # Set to True to use pre-saved pickle files, False to run again
+'''
+DONT CHANGE USE_CACHE!!!
+'''
 Y_FIT_MIN = 0.1   # Configure the lower bound for fitting Temperature T
 FITTING_OPTION = "FIT_RHO_AROUND_FRONT"  # Literal["FIT_TEMP_AROUND_FRONT", "FIT_RHO_AROUND_FRONT", "FIT_RHO_ALL_AROUND"]
 

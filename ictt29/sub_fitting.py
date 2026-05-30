@@ -53,7 +53,7 @@ from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
 
 from subsonic_heat_wave_og import SubsonicHeatWave
 
-USE_CACHE = True  # Set to True to use pre-saved pickle files, False to run again
+USE_CACHE = False  # Set to True to use pre-saved pickle files, False to run again
 
 
 def run_simulation_and_references(preset_name: str, case_label: str):
@@ -126,7 +126,7 @@ def trim_noisy_tail_with_coordinate(x, values, rel_err_threshold=0.5, eps=1e-15)
     return x[:cut_idx], values[:cut_idx]
 
 def perform_subsonic_fitting(solver):
-    y_grid = np.linspace(0.0, 1.0 - 1e-4, 1000)
+    y_grid = np.linspace(0.0, 1.0 - 1e-10, 2000)
     xsi_vec = solver.xsi_f * y_grid
     profiles = solver.get_self_similar_profiles(xsi_vec=xsi_vec)
     
@@ -352,8 +352,8 @@ def plot_dimensional_fit_comparison(history, solver, case, params, dimensional_f
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     
     target_times = [1.0e-9, 1.5e-9, 2.0e-9]
-    viridis = plt.get_cmap("plasma")
-    sim_colors = [viridis(v) for v in np.linspace(0, 1, len(target_times))]
+    plasma = plt.get_cmap("plasma")
+    sim_colors = [plasma(v) for v in np.linspace(0, 1, len(target_times))]
     
     ax_rho = axes[0, 0]
     ax_p = axes[0, 1]
@@ -402,36 +402,36 @@ def plot_dimensional_fit_comparison(history, solver, case, params, dimensional_f
         # Plot Density
         ax_rho.plot(m_sim_sub * 1e3, sim_rho, '-', color=sim_color, markersize=3, alpha=0.7, label=f"Simulation ({t_target*1e9:.1f} ns)" if show_label else None)
         ax_rho.plot(mass_exact_rho * 1e3, exact_rho, '--', color='black', lw=2.0, label="Exact Solver" if show_label else None)
-        ax_rho.plot(mass_fit_rho * 1e3, fit_rho, '--', color='green', lw=1.5, label="Analytic Fit" if show_label else None)
+        ax_rho.plot(mass_fit_rho * 1e3, fit_rho, '.', color='green', lw=0.5, alpha=0.5, label="Analytic Fit" if show_label else None)
         
-        # Zoomed inset density plot near front (y in [0.8, 0.99])
-        y_sim = m_sim_sub / m_f_val
-        y_sol_exact = mass_exact_rho / m_f_val
-        y_sol_fit = mass_fit_rho / m_f_val
-        zoom_mask = (y_sim >= 0.8) & (y_sim <= 0.99)
-        sol_zoom_mask_exact = (y_sol_exact >= 0.8) & (y_sol_exact <= 0.99)
-        sol_zoom_mask_fit = (y_sol_fit >= 0.8) & (y_sol_fit <= 0.99)
+        # # Zoomed inset density plot near front (y in [0.8, 0.99])
+        # y_sim = m_sim_sub / m_f_val
+        # y_sol_exact = mass_exact_rho / m_f_val
+        # y_sol_fit = mass_fit_rho / m_f_val
+        # zoom_mask = (y_sim >= 0.8) & (y_sim <= 0.99)
+        # sol_zoom_mask_exact = (y_sol_exact >= 0.8) & (y_sol_exact <= 0.99)
+        # sol_zoom_mask_fit = (y_sol_fit >= 0.8) & (y_sol_fit <= 0.99)
         
-        axins.plot(m_sim_sub[zoom_mask] * 1e3, sim_rho[zoom_mask], '-', color=sim_color, markersize=2, alpha=0.7)
-        axins.plot(mass_exact_rho[sol_zoom_mask_exact] * 1e3, exact_rho[sol_zoom_mask_exact], '--', color='black', lw=1.5)
-        axins.plot(mass_fit_rho[sol_zoom_mask_fit] * 1e3, fit_rho[sol_zoom_mask_fit], '--', color='green', lw=1.2)
+        # axins.plot(m_sim_sub[zoom_mask] * 1e3, sim_rho[zoom_mask], '-', color=sim_color, markersize=2, alpha=0.7)
+        # axins.plot(mass_exact_rho[sol_zoom_mask_exact] * 1e3, exact_rho[sol_zoom_mask_exact], '--', color='black', lw=1.5)
+        # axins.plot(mass_fit_rho[sol_zoom_mask_fit] * 1e3, fit_rho[sol_zoom_mask_fit], '--', color='green', lw=1.2)
         
         # Plot Pressure
         ax_p.plot(m_sim_sub * 1e3, sim_p, '-', color=sim_color, markersize=3, alpha=0.7)
         ax_p.plot(mass_solver * 1e3, exact_p, '--', color='black', lw=2.0)
-        ax_p.plot(mass_solver * 1e3, fit_p, '--', color='green', lw=1.5)
+        ax_p.plot(mass_solver * 1e3, fit_p, '.', color='green', lw=0.5, alpha=0.5)
         
         # Plot Velocity
         ax_u.plot(m_sim_sub * 1e3, sim_u, '-', color=sim_color, markersize=3, alpha=0.7)
         ax_u.plot(mass_solver * 1e3, exact_u, '--', color='black', lw=2.0)
-        ax_u.plot(mass_solver * 1e3, fit_u, '--', color='green', lw=1.5)
+        ax_u.plot(mass_solver * 1e3, fit_u, '.', color='green', lw=0.5, alpha=0.5)
         
         # Plot Temperature
         ax_T.plot(m_sim_sub * 1e3, sim_T, '-', color=sim_color, markersize=3, alpha=0.7)
         ax_T.plot(mass_solver * 1e3, exact_T, '--', color='black', lw=2.0)
-        ax_T.plot(mass_solver * 1e3, fit_T, '--', color='green', lw=1.5)
+        ax_T.plot(mass_solver * 1e3, fit_T, '.', color='green', lw=0.5, alpha=0.5)
 
-    # Build time legend entries using viridis colors
+    # Build time legend entries using plasma colors
     time_handles = [
         Line2D([0], [0], color=sim_colors[k], lw=2, label=f"{target_times[k]*1e9:.1f} ns")
         for k in range(len(target_times))

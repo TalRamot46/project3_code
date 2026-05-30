@@ -53,7 +53,7 @@ from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
 
 from project3_code.menahem_new.subsonic_heat_wave_og import SubsonicHeatWave
 
-USE_CACHE = False  # Set to True to use pre-saved pickle files, False to run again
+USE_CACHE = True  # Set to True to use pre-saved pickle files, False to run again
 
 
 def get_cached_sub_solver(case, case_label):
@@ -106,6 +106,11 @@ def run_simulation_and_references(preset_name: str, case_label: str):
     if USE_CACHE and cache_path.exists():
         print(f"Loading cached simulation and reference data from {cache_path}...")
         try:
+            import sys
+            import numpy.core
+            sys.modules['numpy._core'] = sys.modules.get('numpy.core')
+            sys.modules['numpy._core.numeric'] = sys.modules.get('numpy.core.numeric')
+            sys.modules['numpy._core.multiarray'] = sys.modules.get('numpy.core.multiarray')
             with open(cache_path, "rb") as f:
                 data = pickle.load(f)
             solver = data["solver"]
@@ -398,9 +403,6 @@ def plot_dimensional_fit_comparison(history, solver, case, params, dimensional_f
     ax_u = axes[1, 0]
     ax_T = axes[1, 1]
     
-    # Add Zoomed Inset for Density near front (y in [0.8, 0.99])
-    axins = ax_rho.inset_axes([0.18, 0.48, 0.35, 0.35])
-    
     for i, (t_target, sim_color) in enumerate(zip(target_times, sim_colors)):
         # 1) Simulation
         idx_sim = np.argmin(np.abs(np.array(history.t) - t_target))
@@ -489,9 +491,9 @@ def plot_dimensional_fit_comparison(history, solver, case, params, dimensional_f
             ax.legend(handles=time_handles + style_handles, loc="upper left")
             
     # Style inset
-    axins.grid(True, alpha=0.3)
-    axins.set_title("Zoom near front", fontsize=9)
-    ax_rho.indicate_inset_zoom(axins, edgecolor="black")
+    # axins.grid(True, alpha=0.3)
+    # axins.set_title("Zoom near front", fontsize=9)
+    # ax_rho.indicate_inset_zoom(axins, edgecolor="black")
             
     plt.suptitle(f"Subsonic Ablation Region Verification\n{case_title}", fontsize=14, fontweight='bold')
     plt.tight_layout()

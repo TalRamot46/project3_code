@@ -22,6 +22,11 @@ import time
 from pathlib import Path
 from dataclasses import replace
 import numpy as np
+import sys
+import numpy.core
+sys.modules['numpy._core'] = sys.modules.get('numpy.core')
+sys.modules['numpy._core.numeric'] = sys.modules.get('numpy.core.numeric')
+sys.modules['numpy._core.multiarray'] = sys.modules.get('numpy.core.multiarray')
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from scipy.optimize import curve_fit

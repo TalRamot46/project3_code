@@ -5,7 +5,7 @@ fonttools==4.62.1
 iniconfig==2.3.0
 kiwisolver==1.5.0
 matplotlib==3.10.8
-numpy==2.4.3
+numpy==1.26.4
 packaging==26.0
 pandas==3.0.1
 patsy==1.0.2
@@ -16,9 +16,8 @@ pyparsing==3.3.2
 pytest==9.0.2
 python-dateutil==2.9.0.post0
 ruff==0.15.7
-scipy==1.17.1
+scipy==1.11.4
 six==1.17.0
 statsmodels==0.14.6
 tqdm==4.67.3
 tzdata==2025.3
--e .

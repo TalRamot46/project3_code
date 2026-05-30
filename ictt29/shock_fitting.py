@@ -114,7 +114,6 @@ def get_cached_shock_solver(case, case_label):
     return solver
 
 
-
 def perform_shock_fitting(solver):
     y_grid = np.linspace(0.0, 1.0, 500)
     xsi_vec = y_grid * solver.xsi_s

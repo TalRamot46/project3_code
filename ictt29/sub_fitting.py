@@ -51,9 +51,9 @@ from project3_code.rad_hydro_sim.verification.menahem_comparison import (
 from project3_code.rad_hydro_sim.simulation.radiation_step import KELVIN_PER_HEV
 from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
 
-from subsonic_heat_wave import SubsonicHeatWave
+from subsonic_heat_wave_og import SubsonicHeatWave
 
-USE_CACHE = True  # Set to True to use pre-saved pickle files, False to run again
+USE_CACHE = False  # Set to True to use pre-saved pickle files, False to run again
 
 
 def run_simulation_and_references(preset_name: str, case_label: str):
@@ -108,8 +108,25 @@ def dimensionless_density_from_eos(T, P, beta=1.6, mu=0.14):
 def dimensional_temperature_from_eos(P, V, beta=1.6, mu=0.14, r=0.25, f=6730.91):
     return (P * V**(1-mu) / (r*f))**(1./beta)
 
-def perform_ablation_fitting(solver):
-    y_grid = np.linspace(0.0, 1.0 - 1e-6, 500)
+
+def trim_noisy_tail_with_coordinate(x, values, rel_err_threshold=0.5, eps=1e-15):
+    """Trim profile tail based on point-to-point relative error and keep coordinate aligned."""
+    x = np.asarray(x)
+    values = np.asarray(values)
+    if x.shape != values.shape:
+        raise ValueError("x and values must have the same shape")
+
+    cut_idx = len(values)
+    for i in range(len(values) - 1, 0, -1):
+        rel_err = np.abs((values[i] - values[i - 1]) / (values[i - 1] + eps))
+        if rel_err < rel_err_threshold:
+            cut_idx = i + 1
+            break
+
+    return x[:cut_idx], values[:cut_idx]
+
+def perform_subsonic_fitting(solver):
+    y_grid = np.linspace(0.0, 1.0 - 1e-10, 2000)
     xsi_vec = solver.xsi_f * y_grid
     profiles = solver.get_self_similar_profiles(xsi_vec=xsi_vec)
     
@@ -120,13 +137,17 @@ def perform_ablation_fitting(solver):
         
     # Calculate density using the exact uniform EOS formula requested by user
     rho_val = dimensionless_density_from_eos(T_val, P_val)
-    
+    y_rho, rho_val = trim_noisy_tail_with_coordinate(y_grid, rho_val)
+
+    print(rho_val[-10:])
     valid_idx = np.isfinite(V_val) & np.isfinite(U_val) & np.isfinite(P_val) & np.isfinite(T_val)
     y_valid = y_grid[valid_idx]
     T_valid = T_val[valid_idx]
     P_valid = P_val[valid_idx]
     U_valid = U_val[valid_idx]
-    rho_valid = rho_val[valid_idx]
+    rho_valid_idx = np.isfinite(rho_val)
+    y_rho_valid = y_rho[rho_valid_idx]
+    rho_valid = rho_val[rho_valid_idx]
     
     # Fits
     def smith_approximation(y, R):
@@ -263,6 +284,7 @@ def perform_ablation_fitting(solver):
     
     params = {
         "y_valid": y_valid,
+        "y_rho": y_rho_valid,
         "T_valid": T_valid,
         "P_valid": P_valid,
         "U_valid": U_valid,
@@ -274,6 +296,7 @@ def perform_ablation_fitting(solver):
         "solver": solver
     }
     return params
+
 
 def fit_by_params(y: np.ndarray, params: dict):
     """Compute the self-similar fit profiles (T, P, U, rho) on the similarity coordinate xsi_vec."""
@@ -329,7 +352,8 @@ def plot_dimensional_fit_comparison(history, solver, case, params, dimensional_f
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     
     target_times = [1.0e-9, 1.5e-9, 2.0e-9]
-    colors = ["red", "green", "blue"]
+    plasma = plt.get_cmap("plasma")
+    sim_colors = [plasma(v) for v in np.linspace(0, 1, len(target_times))]
     
     ax_rho = axes[0, 0]
     ax_p = axes[0, 1]
@@ -339,7 +363,7 @@ def plot_dimensional_fit_comparison(history, solver, case, params, dimensional_f
     # Add Zoomed Inset for Density near front (y in [0.8, 0.99])
     axins = ax_rho.inset_axes([0.18, 0.48, 0.35, 0.35])
     
-    for t_target, color in zip(target_times, colors):
+    for i, (t_target, sim_color) in enumerate(zip(target_times, sim_colors)):
         # 1) Simulation
         idx_sim = np.argmin(np.abs(np.array(history.t) - t_target))
         m_sim = history.m[idx_sim]
@@ -359,7 +383,8 @@ def plot_dimensional_fit_comparison(history, solver, case, params, dimensional_f
         # 2) Exact Solver Lagrangian Grid
         mass_solver = np.linspace(1e-12, m_f_val, 300)
         sol_hs = solver.solve(mass=mass_solver, time=t_actual)
-        exact_rho = sol_hs["density"]
+        mass_exact_rho, exact_rho = trim_noisy_tail_with_coordinate(mass_solver, sol_hs["density"])
+
         exact_p = sol_hs["pressure"]
         exact_u = sol_hs["velocity"]
         exact_T = sol_hs["temperature"]
@@ -367,40 +392,50 @@ def plot_dimensional_fit_comparison(history, solver, case, params, dimensional_f
         # 3) Analytical fits mapped from dimensionless to CGS
         fits = calculate_dimensional_fits(mass_solver, t_actual, solver, params)
         
-        fit_rho = fits["density"]
+        mass_fit_rho, fit_rho = trim_noisy_tail_with_coordinate(mass_solver, fits["density"])
         fit_p = fits["pressure"]
         fit_u = fits["velocity"]
         fit_T = fits["temperature"]
         
+        show_label = i == 0
+        
         # Plot Density
-        ax_rho.plot(m_sim_sub * 1e3, sim_rho, 'o', color=color, markersize=3, alpha=0.5, label=f"Simulation ({t_target*1e9:.1f} ns)" if color=='red' else None)
-        ax_rho.plot(mass_solver * 1e3, exact_rho, '-', color=color, lw=2.0, label=f"Exact Solver ({t_target*1e9:.1f} ns)" if color=='red' else None)
-        ax_rho.plot(mass_solver * 1e3, fit_rho, '--', color=color, lw=1.5, label=f"Analytic Fit ({t_target*1e9:.1f} ns)" if color=='red' else None)
+        ax_rho.plot(m_sim_sub * 1e3, sim_rho, '-', color=sim_color, markersize=3, alpha=0.7, label=f"Simulation ({t_target*1e9:.1f} ns)" if show_label else None)
+        ax_rho.plot(mass_exact_rho * 1e3, exact_rho, '--', color='black', lw=2.0, label="Exact Solver" if show_label else None)
+        ax_rho.plot(mass_fit_rho * 1e3, fit_rho, '.', color='green', lw=0.5, alpha=0.3, label="Analytic Fit" if show_label else None)
         
-        # Zoomed inset density plot near front (y in [0.8, 0.99])
-        y_sim = m_sim_sub / m_f_val
-        y_sol = mass_solver / m_f_val
-        zoom_mask = (y_sim >= 0.8) & (y_sim <= 0.99)
-        sol_zoom_mask = (y_sol >= 0.8) & (y_sol <= 0.99)
+        # # Zoomed inset density plot near front (y in [0.8, 0.99])
+        # y_sim = m_sim_sub / m_f_val
+        # y_sol_exact = mass_exact_rho / m_f_val
+        # y_sol_fit = mass_fit_rho / m_f_val
+        # zoom_mask = (y_sim >= 0.8) & (y_sim <= 0.99)
+        # sol_zoom_mask_exact = (y_sol_exact >= 0.8) & (y_sol_exact <= 0.99)
+        # sol_zoom_mask_fit = (y_sol_fit >= 0.8) & (y_sol_fit <= 0.99)
         
-        axins.plot(m_sim_sub[zoom_mask] * 1e3, sim_rho[zoom_mask], 'o', color=color, markersize=2, alpha=0.5)
-        axins.plot(mass_solver[sol_zoom_mask] * 1e3, exact_rho[sol_zoom_mask], '-', color=color, lw=1.5)
-        axins.plot(mass_solver[sol_zoom_mask] * 1e3, fit_rho[sol_zoom_mask], '--', color=color, lw=1.2)
+        # axins.plot(m_sim_sub[zoom_mask] * 1e3, sim_rho[zoom_mask], '-', color=sim_color, markersize=2, alpha=0.7)
+        # axins.plot(mass_exact_rho[sol_zoom_mask_exact] * 1e3, exact_rho[sol_zoom_mask_exact], '--', color='black', lw=1.5)
+        # axins.plot(mass_fit_rho[sol_zoom_mask_fit] * 1e3, fit_rho[sol_zoom_mask_fit], '--', color='green', lw=1.2)
         
         # Plot Pressure
-        ax_p.plot(m_sim_sub * 1e3, sim_p, 'o', color=color, markersize=3, alpha=0.5)
-        ax_p.plot(mass_solver * 1e3, exact_p, '-', color=color, lw=2.0)
-        ax_p.plot(mass_solver * 1e3, fit_p, '--', color=color, lw=1.5)
+        ax_p.plot(m_sim_sub * 1e3, sim_p, '-', color=sim_color, markersize=3, alpha=0.7)
+        ax_p.plot(mass_solver * 1e3, exact_p, '--', color='black', lw=2.0)
+        ax_p.plot(mass_solver * 1e3, fit_p, '.', color='green', lw=0.5, alpha=0.3)
         
         # Plot Velocity
-        ax_u.plot(m_sim_sub * 1e3, sim_u, 'o', color=color, markersize=3, alpha=0.5)
-        ax_u.plot(mass_solver * 1e3, exact_u, '-', color=color, lw=2.0)
-        ax_u.plot(mass_solver * 1e3, fit_u, '--', color=color, lw=1.5)
+        ax_u.plot(m_sim_sub * 1e3, sim_u, '-', color=sim_color, markersize=3, alpha=0.7)
+        ax_u.plot(mass_solver * 1e3, exact_u, '--', color='black', lw=2.0)
+        ax_u.plot(mass_solver * 1e3, fit_u, '.', color='green', lw=0.5, alpha=0.3)
         
         # Plot Temperature
-        ax_T.plot(m_sim_sub * 1e3, sim_T, '-', color=color, markersize=3, alpha=0.5)
-        ax_T.plot(mass_solver * 1e3, exact_T, '-', color=color, lw=2.0)
-        ax_T.plot(mass_solver * 1e3, fit_T, '--', color=color, lw=1.5)
+        ax_T.plot(m_sim_sub * 1e3, sim_T, '-', color=sim_color, markersize=3, alpha=0.7)
+        ax_T.plot(mass_solver * 1e3, exact_T, '--', color='black', lw=2.0)
+        ax_T.plot(mass_solver * 1e3, fit_T, '.', color='green', lw=0.5, alpha=0.3)
+
+    # Build time legend entries using plasma colors
+    time_handles = [
+        Line2D([0], [0], color=sim_colors[k], lw=2, label=f"{target_times[k]*1e9:.1f} ns")
+        for k in range(len(target_times))
+    ]
 
     # Styling
     labels = ["Density [g/cm$^3$]", "Pressure [MBar]", "Velocity [km/s]", "Temperature [HeV]"]
@@ -409,7 +444,11 @@ def plot_dimensional_fit_comparison(history, solver, case, params, dimensional_f
         ax.set_ylabel(labels[j], fontsize=12)
         ax.set_xlabel("Lagrangian Mass Coordinate $m$ [mg/cm$^2$]", fontsize=12)
         if j == 0:
-            ax.legend(loc="upper left")
+            style_handles = [
+                Line2D([0], [0], color='black', lw=2, linestyle='--', label='Exact Solver'),
+                Line2D([0], [0], color='green', lw=2, linestyle='--', label='Analytic Fit'),
+            ]
+            ax.legend(handles=time_handles + style_handles, loc="upper left")
             
     # Style inset
     axins.grid(True, alpha=0.3)
@@ -426,6 +465,7 @@ def plot_dimensional_fit_comparison(history, solver, case, params, dimensional_f
 def plot_and_fit_self_similar(solver, params, self_similar_path, case_title):
     print("Generating subsonic 2x2 self-similar fitting plots...")
     y_valid = params["y_valid"]
+    y_rho = params["y_rho"]
     T_valid = params["T_valid"]
     P_valid = params["P_valid"]
     U_valid = params["U_valid"]
@@ -435,7 +475,8 @@ def plot_and_fit_self_similar(solver, params, self_similar_path, case_title):
     best_u = params["best_u"]
     
     # Compute chosen fit arrays via unified fit_by_params
-    T_fit, P_fit, U_fit, rho_fit = fit_by_params(y_valid, params)
+    T_fit, P_fit, U_fit, _ = fit_by_params(y_valid, params)
+    _, _, _, rho_fit = fit_by_params(y_rho, params)
     
     # Evaluate errors on the full y_valid coordinate range (unmasked)
     err_T = np.abs((T_fit - T_valid) / T_valid)
@@ -461,8 +502,8 @@ def plot_and_fit_self_similar(solver, params, self_similar_path, case_title):
     
     # Panel (0,1): Density
     ax = axes[0, 1]
-    ax.plot(y_valid, rho_valid, 'b-', label='Numerical Solver', lw=2)
-    ax.plot(y_valid, rho_fit, 'r--', label='EOS Derived Fit', lw=1.5)
+    ax.plot(y_rho, rho_valid, 'b-', label='Numerical Solver', lw=2)
+    ax.plot(y_rho, rho_fit, 'r--', label='EOS Derived Fit', lw=1.5)
     ax.set_ylabel(r"Density $\rho(y)$ [dimensionless]", fontsize=12)
     ax.set_title("Subsonic: Density", fontsize=13, fontweight='bold')
     lbl_rho = r"$\rho(y) \approx \left(\frac{P(y)}{rfT(y)^{\beta}}\right)^{\frac{1}{1+\mu}}$" + f"\nAvg Err: {avg_rho:.4e}, Max Err: {max_rho:.4e}"
@@ -581,6 +622,7 @@ def plot_standalone_velocity_fits(params, standalone_path, case_title):
 def plot_relative_errors(solver, params, relative_errors_path, case_title):
     print("Generating subsonic relative error plots...")
     y_valid = params["y_valid"]
+    y_rho = params["y_rho"]
     T_valid = params["T_valid"]
     P_valid = params["P_valid"]
     U_valid = params["U_valid"]
@@ -588,7 +630,8 @@ def plot_relative_errors(solver, params, relative_errors_path, case_title):
     best_u = params["best_u"]
     
     # Call unified fit_by_params for dimensionless fits on y_valid
-    T_fit, P_fit, U_fit, rho_fit = fit_by_params(y_valid, params)
+    T_fit, P_fit, U_fit, _ = fit_by_params(y_valid, params)
+    _, _, _, rho_fit = fit_by_params(y_rho, params)
     
     err_T = np.abs((T_fit - T_valid) / T_valid)
     err_rho = np.abs((rho_fit - rho_valid) / rho_valid)
@@ -603,7 +646,7 @@ def plot_relative_errors(solver, params, relative_errors_path, case_title):
     fig_err, ax_err = plt.subplots(figsize=(10, 7.5))
     
     ax_err.plot(y_valid, err_T, color='blue', label=f'Temperature $T(y)$ (Avg: {avg_T:.3e}, Max: {max_T:.3e})', lw=2.0)
-    ax_err.plot(y_valid, err_rho, color='green', label=f'Density $\\rho(y)$ (Avg: {avg_rho:.3e}, Max: {max_rho:.3e})', lw=2.0)
+    ax_err.plot(y_rho, err_rho, color='green', label=f'Density $\\rho(y)$ (Avg: {avg_rho:.3e}, Max: {max_rho:.3e})', lw=2.0)
     ax_err.plot(y_valid, err_P, color='red', label=f'Pressure $P(y)$ (Avg: {avg_P:.3e}, Max: {max_P:.3e})', lw=2.0)
     ax_err.plot(y_valid, err_U, color='purple', label=f'Velocity $U(y)$ (Avg: {avg_U:.3e}, Max: {max_U:.3e})', lw=2.0)
     
@@ -640,7 +683,7 @@ def generate_verification_plots(
     relative_errors_path = str(ss_dir / f"{case_label}_relative_errors.png")
     dimensional_fit_path = str(dv_dir / f"{case_label}_dimensional_fit_comparison.png")
     
-    params = perform_ablation_fitting(solver)
+    params = perform_subsonic_fitting(solver)
         
     # 1) Standalone Velocity fits comparison
     plot_standalone_velocity_fits(params, standalone_path, case_title)

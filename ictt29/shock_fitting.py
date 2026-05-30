@@ -66,7 +66,7 @@ from project3_code.rad_hydro_sim.verification.menahem_comparison import (
 )
 from project3_code.hydro_sim.plotting.hydro_plots import _create_7panel_vertical_figure
 
-from piston_shock import PistonShock
+from project3_code.menahem_new.piston_shock_og import PistonShock
 
 USE_CACHE = True  # Set to True to use pre-saved pickle files, False to run again
 Y_FIT_MIN = 0.1   # Configure the lower bound for fitting Temperature T
@@ -117,6 +117,8 @@ def get_cached_shock_solver(case, case_label):
         
     return solver
 
+def dimensional_temperature_from_eos(P, V, beta=1.6, mu=0.14, r=0.25, f=6730.91):
+    return (P * V**(1-mu) / (r*f))**(1./beta)
 
 def perform_shock_fitting(solver):
     y_grid = np.linspace(0.0, 1.0, 500)
@@ -125,9 +127,11 @@ def perform_shock_fitting(solver):
     
     V_val, U_val, P_val = solver.get_self_similar_profiles(xsi_vec=xsi_vec)
     rho_val = np.where(V_val > 0, 1.0 / V_val, np.nan)
-    e_val = P_val * V_val / solver.r
-    T_val = (e_val * (rho_val**(0.14))/6730)**(1/1.6)
+
+    # calculate temperature using the exact uniform EOS formula
+    T_val = dimensional_temperature_from_eos(P_val, V_val)
     
+    # making sure to bypass cells with inf value
     valid_idx = np.isfinite(V_val) & np.isfinite(U_val) & np.isfinite(P_val) & np.isfinite(T_val)
     y_valid = y_grid[valid_idx]
     T_valid = T_val[valid_idx]
@@ -135,6 +139,7 @@ def perform_shock_fitting(solver):
     U_valid = U_val[valid_idx]
     rho_valid = rho_val[valid_idx]
     
+    # Fits:
     U_0 = U_valid[0]
     U_s = U_valid[-1]
     

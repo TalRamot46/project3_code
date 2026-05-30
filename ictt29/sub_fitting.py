@@ -178,11 +178,16 @@ def perform_subsonic_fitting(solver):
     U_val = profiles["U"]
     V_val = profiles["V"]
         
-    # Calculate density using the exact uniform EOS formula requested by user
+    # Calculate density using the exact uniform EOS formula
     rho_val = dimensionless_density_from_eos(T_val, P_val)
+    
+    # trim noisy tail outputted by the solver (Fri 29.5)
     y_rho, rho_val = trim_noisy_tail_with_coordinate(y_grid, rho_val)
+    
+    # # for debugging purpose
+    # print(rho_val[-10:])
 
-    print(rho_val[-10:])
+    # making sure to bypass cells with inf value
     valid_idx = np.isfinite(V_val) & np.isfinite(U_val) & np.isfinite(P_val) & np.isfinite(T_val)
     y_valid = y_grid[valid_idx]
     T_valid = T_val[valid_idx]
@@ -192,7 +197,7 @@ def perform_subsonic_fitting(solver):
     y_rho_valid = y_rho[rho_valid_idx]
     rho_valid = rho_val[rho_valid_idx]
     
-    # Fits
+    # Fits:
     def smith_approximation(y, R):
         return ((1.0 - y) * (1.0 + R * y))**(10.0 / 39.0)
         
@@ -422,12 +427,12 @@ def plot_dimensional_fit_comparison(history, solver, case, params, dimensional_f
         
         # 2) Exact Solver Lagrangian Grid
         mass_solver = np.linspace(1e-12, m_f_val, 300)
-        sol_hs = solver.solve(mass=mass_solver, time=t_actual)
-        mass_exact_rho, exact_rho = trim_noisy_tail_with_coordinate(mass_solver, sol_hs["density"])
+        sol_exact = solver.solve(mass=mass_solver, time=t_actual)
+        mass_exact_rho, exact_rho = trim_noisy_tail_with_coordinate(mass_solver, sol_exact["density"])
 
-        exact_p = sol_hs["pressure"]
-        exact_u = sol_hs["velocity"]
-        exact_T = sol_hs["temperature"]
+        exact_p = sol_exact["pressure"]
+        exact_u = sol_exact["velocity"]
+        exact_T = sol_exact["temperature"]
         
         # 3) Analytical fits mapped from dimensionless to CGS
         fits = calculate_dimensional_fits(mass_solver, t_actual, solver, params)

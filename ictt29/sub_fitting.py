@@ -53,7 +53,7 @@ from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
 
 from project3_code.menahem_new.subsonic_heat_wave_og import SubsonicHeatWave
 
-USE_CACHE = True  # Set to True to use pre-saved pickle files, False to run again
+USE_CACHE = False  # Set to True to use pre-saved pickle files, False to run again
 
 
 def get_cached_sub_solver(case, case_label):
@@ -93,7 +93,6 @@ def get_cached_sub_solver(case, case_label):
         print(f"Failed to save solver cache: {e}")
 
     return solver
-
 
 def run_simulation_and_references(preset_name: str, case_label: str):
     """Run full simulation and build SubsonicHeatWave reference solver, or load from cache."""

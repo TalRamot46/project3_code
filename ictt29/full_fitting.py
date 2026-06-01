@@ -40,7 +40,7 @@ from project3_code.rad_hydro_sim.verification.menahem_comparison import (
     _ablation_kwargs_from_case,
     _build_mass_grid,
 )
-from ablation_solver import AblationSolver
+from project3_code.menahem_new.ablation_solver_og import AblationSolver
 
 def _get_equally_spaced_elements(times: np.ndarray, n: int) -> np.ndarray:
     ideal_times = np.linspace(times.min(), times.max(), n)

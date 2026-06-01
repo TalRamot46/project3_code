@@ -51,7 +51,7 @@ def main():
 
     print("2) Solving shock similarity ODEs (finding xsi_s)...")
     case_shock, _ = get_preset(PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE)
-    shock_kwargs = _shock_kwargs_from_case(case_shock)
+    shock_kwargs = _shock_kwargs_from_case(case_shock) # TODO: Make P0=2.71 more accurate in the preset
     solver_shock = PistonShock(
         rho0=float(case_shock.rho0),
         omega=0.0,
@@ -62,7 +62,7 @@ def main():
 
     # 2. RUN GRIDS & EXTRACT PROFILES
     # Subsonic Ablation Regime
-    y_grid_h = np.linspace(0.0, 1.0 - 1e-10, 2000)
+    y_grid_h = np.linspace(0.0, 1.0 - 1e-10, 2000) # TODO: Define some general N here instead of 2000.
     xsi_vec_h = y_grid_h * solver_heat.xsi_f
     profiles_heat = solver_heat.get_self_similar_profiles(xsi_vec=xsi_vec_h)
     imin = profiles_heat.get("imin", 0)
@@ -75,13 +75,14 @@ def main():
     rho_valid_h = 1.0 / V_valid_h
 
     # Shock compressed Regime
-    y_grid_s = np.linspace(0.0, 1.0, 2000)
+    y_grid_s = np.linspace(0.0, 1.0, 2000) #TODO: The same here.
     xsi_vec_s = y_grid_s * solver_shock.xsi_s
     xsi_vec_s[0] = 1e-10
     V_valid_s, U_valid_s, P_valid_s = solver_shock.get_self_similar_profiles(xsi_vec=xsi_vec_s)
     rho_valid_s = 1.0 / V_valid_s
     T_valid_s = P_valid_s * V_valid_s / solver_shock.r
 
+    # TODO: Make sure that it's OK here.
     mask_s = (y_grid_s > 0.005) & np.isfinite(V_valid_s) & np.isfinite(U_valid_s) & np.isfinite(P_valid_s)
     y_valid_s = y_grid_s[mask_s]
     U_valid_s = U_valid_s[mask_s]
@@ -92,6 +93,9 @@ def main():
     # 3. DYNAMICAL CURVE FITTING
     print("3) Running curve fits on self-similar profiles...")
     
+    # TODO: Extract all those fitting formula definition to one function that imports the appropriate functions (some chosen as best from the options defined there) and return the coefficients.
+
+
     # Subsonic Ablation Fits
     # Temperature fit: Smith approximation
     def smith_approximation(y, R):
@@ -152,6 +156,8 @@ def main():
     B_h = solver_heat.B
     t_ns_h = 1e-9
 
+    # TODO: Rename _frac to _str
+
     # Exponents fractions
     a_v_frac, b_v_frac, c_v_frac = r"-\frac{115}{96}", r"-\frac{25}{48}", r"\frac{25}{48}"
     a_u_frac, b_u_frac, c_u_frac = r"\frac{275}{384}", r"-\frac{7}{192}", r"\frac{7}{192}"
@@ -172,6 +178,16 @@ def main():
     # Specific volume scale and lead coeff
     v_scale_h = A_h**a_v * B_h**b_v * t_ns_h**c_v
     lead_coeff_v_h = V0_h * v_scale_h
+
+    # Subsonic Density CGS conversions from EOS
+    rho_scale_h = 1.0 / v_scale_h
+    r_val = 0.25
+    mu_val = 0.14
+    T0 = 1.0
+    beta = 1.6
+    lead_rho_scale_h = rho_scale_h * (r_val * T0**beta)**(-1.0 / (1.0 - mu_val))
+    power_rho_t_numer = r"\frac{16}{39}"
+    power_rho_out = f"{-1.0 / (1.0 - mu_val):.5f}"
 
     # Velocity scale in km/s (10^-5 factor) and lead coeff
     u_scale_h_kms = A_h**a_u * B_h**b_u * t_ns_h**c_u * 1e-5
@@ -225,10 +241,16 @@ def main():
     p_scale_barye = p_scale_s_mbar * 1e12
     v_scale_eos = 1.0 / (solver_shock.rho0 * rho_s_s)
     
+    # TODO: Super important (written also in the notion) - 
+    # As opposed to the ablation region, in ht eshock region the fit of the density wasn't made through EOS over T (in the ablation region T was completely regular and rho was fitted accordingly with some problems around the ablation front), but rather there is a region where rho is fitted (neat the piston) and T is derived from the EOS, and a region where T is fitted (near the ablation front).
+
     # T_scale_s CGS prefactor from EOS in Kelvin
     T_coeff_cgs = ( (p_scale_barye * (v_scale_eos ** 1.14)) / (solver_shock.r * solver_heat.f) ) ** 0.625
     T_coeff_hev = T_coeff_cgs / KELVIN_PER_HEV
     
+    # TODO: Extract the 149/192 factor to some general power of T.
+    # Big TODO: Make sure that the language of exponents of each profile is adopted both in the latex file and in the code here accordingly.
+
     # Temperature Level 3 Multiplied Coefficients
     lead_T_mult_s = T_coeff_hev * inv_ms**(-0.7125 * d_rho_s)
     lead_T_diff_mult_s = lead_p_diff * inv_ms**d_P_s
@@ -239,6 +261,7 @@ def main():
     doc_dir = Path("c:/Users/TLP-001/Documents/GitHub/project3_docs/fitting")
     template_path = doc_dir / "piecewise_analytic_formulas_template.tex"
     
+    # TODO: Extract all this logic into compile_tex() function that will also receive the dynamic variables in a comfortable fashion that will actually help me in case of a necessity to switch the fitting formula for some of the profiles.
     if not template_path.exists():
         print(f"Error: Template LaTeX file not found at {template_path}")
         sys.exit(1)
@@ -291,6 +314,9 @@ def main():
     latex_content = latex_content.replace("__M_F_SCALE__", f"{m_f_scale:.5f}")
     latex_content = latex_content.replace("__R_VAL__", f"{R_val:.5f}")
     latex_content = latex_content.replace("__DENOM_T__", f"{R_val * inv_mf:.5f}")
+    latex_content = latex_content.replace("__LEAD_RHO_SCALE_H__", f"{lead_rho_scale_h:.5f}")
+    latex_content = latex_content.replace("__POWER_RHO_T_NUMER__", power_rho_t_numer)
+    latex_content = latex_content.replace("__POWER_RHO_OUT__", power_rho_out)
     
     # Shock Values
     latex_content = latex_content.replace("__XSI_S_S__", f"{xsi_s_val:.5f}")
@@ -363,12 +389,12 @@ def main():
     print("\n--- Subsonic Fluid Velocity u(m,t) ---")
     print(f"u(m,t) = U(\\xi) A^{a_u_frac} B^{b_u_frac} t^{c_u_frac}")
     print(f"       \\approx {U0_h:.5f} * ((1 - y)/(1 + {b_u_h:.5f} * y)) * A^{a_u_frac} B^{b_u_frac} t^{c_u_frac}")
-    print(f"       \\approx {lead_coeff_u_h:.5f} * ((1 - {inv_mf:.5f}*m*(t/ns)^-33/64) / (1 + {denom_coeff_u_h:.5f}*m*(t/ns)^-33/64)) * (t/ns)^{c_u_frac} km/s")
+    print(f"       \\approx {lead_coeff_u_h:.5f} * ((1 - {inv_mf:.5f}*(m/(g/cm^2))*(t/ns)^-33/64) / (1 + {denom_coeff_u_h:.5f}*(m/(g/cm^2))*(t/ns)^-33/64)) * (t/ns)^{c_u_frac} km/s")
     
     print("\n--- Subsonic Specific Volume v(m,t) ---")
     print(f"v(m,t) = V(\\xi) A^{a_v_frac} B^{b_v_frac} t^{c_v_frac}")
     print(f"       \\approx {V0_h:.5f} * (1 - y)^{d_v_h:.5f} * A^{a_v_frac} B^{b_v_frac} t^{c_v_frac}")
-    print(f"       \\approx {lead_coeff_v_h:.5f} * (1 - {inv_mf:.5f}*m*(t/ns)^-33/64)^{d_v_h:.5f} * (t/ns)^{c_v_frac} cm^3/g")
+    print(f"       \\approx {lead_coeff_v_h:.5f} * (1 - {inv_mf:.5f}*(m/(g/cm^2))*(t/ns)^-33/64)^{d_v_h:.5f} * (t/ns)^{c_v_frac} cm^3/g")
     
     print("\n====================================================")
     print("*** ALL TASKS COMPLETED SUCCESSFULLY! ***")

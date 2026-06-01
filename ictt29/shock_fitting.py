@@ -488,9 +488,7 @@ def calculate_dimensional_fits(mass_grid, t_actual, solver, params):
         p = P * p0 * t**tau
     Temperature is then derived from the CGS EOS.
     """
-    xsi_over_m_val = solver.xsi_over_m(time=t_actual)
-    m_s = solver.xsi_s / xsi_over_m_val
-
+    m_s = solver.shocked_mass(time=t_actual)
     y = mass_grid / m_s
     T_fit_ss, P_fit_ss, U_fit_ss, rho_fit_ss = fit_by_params(y, params)
 
@@ -543,8 +541,7 @@ def plot_dimensional_fit_comparison(history, solver, params, material_hydro_path
         t_actual = history.t[idx_sim]
 
         # shock front for shock solver
-        xsi_over_m_val = solver.xsi_over_m(time=t_actual)
-        m_s_exact = solver.xsi_s / xsi_over_m_val
+        m_s_exact = solver.shocked_mass(time=t_actual)
         shock_mask = m_sim <= m_s_exact
         m_sim_shock = m_sim[shock_mask][:-2]
 

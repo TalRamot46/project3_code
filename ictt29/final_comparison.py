@@ -92,7 +92,12 @@ def evaluate_level3_fits(mass_grid: np.ndarray, t_sec: float) -> dict:
             
             # Specific volume v [cm^3/g]
             v_val = 600.66640 * ((1.0 - 981.45247 * m * (t_ns ** (-33.0 / 64.0))) ** 39.54884) * (t_ns ** (25.0 / 48.0))
-            rho[i] = 1.0 / v_val
+            
+            # Subsonic Density rho [g/cm^3] (Level 3 CGS fully substituted EOS)
+            numerator = ((1.0 - y) * (1.0 + 199.10933 * m * (t_ns ** (-33.0 / 64.0)))) ** (16.0 / 39.0)
+            denominator = 0.34846 * (y ** 0.87633) + 0.02822 * (y ** 19.97029)
+            denominator = max(denominator, 1e-15)
+            rho[i] = 4.03377 * ((numerator / denominator) ** -1.16279) * (t_ns ** (-25.0 / 48.0))
             
             # Pressure p [Barye] (LaTeX: MBar -> multiply by 1e12 to get Barye)
             p_mbar = (2.45709 * (y ** 0.87633) + 0.19901 * (y ** 19.97029)) * (t_ns ** (-43.0 / 96.0))

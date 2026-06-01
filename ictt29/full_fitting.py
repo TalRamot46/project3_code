@@ -51,7 +51,7 @@ from project3_code.menahem_new.ablation_solver_og import AblationSolver
 from project3_code.ictt29.sub_fitting import perform_subsonic_fitting, calculate_dimensional_fits as calculate_dimensional_fits_sub
 from project3_code.ictt29.shock_fitting import perform_shock_fitting, calculate_dimensional_fits as calculate_dimensional_fits_shock
 
-USE_CACHE = False  # Set to True to use pre-saved pickle files, False to run again
+USE_CACHE = True  # Set to True to use pre-saved pickle files, False to run again
 
 
 def get_data():
@@ -142,8 +142,8 @@ def plot_patched_dimensional_fit_comparison(
     ax_u = axes[1, 0]
     ax_T = axes[1, 1]
 
-    p_scale = 1e12  # 1 Mbar = 1e12 Barye
-    u_scale = 1e5   # 1 km/s = 1e5 cm/s
+    p_scale = 1  # 1 Mbar = 1e12 Barye
+    u_scale = 1   # 1 km/s = 1e5 cm/s
 
     for i, (t_target, sim_color) in enumerate(zip(target_times, sim_colors)):
         # 1) Find simulation actual data at nearest target time
@@ -151,29 +151,30 @@ def plot_patched_dimensional_fit_comparison(
         m_sim = history.m[idx_sim]
         t_actual = history.t[idx_sim]
 
-        sim_rho = history.rho[idx_sim]
-        sim_p = history.p[idx_sim] / p_scale
-        sim_u = history.u[idx_sim] / u_scale
+        sim_rho = history.rho[idx_sim][:-1]
+        sim_p = history.p[idx_sim] 
+        sim_u = history.u[idx_sim]
         sim_T = history.T[idx_sim]
 
         # Determine fronts at this actual time
         m_f = ablation_solver.heat_solver.ablated_mass(time=t_actual)
-        m_s = m_f + ablation_solver.shock_solver.shocked_mass(time=t_actual)
+        m_s = ablation_solver.shock_solver.shocked_mass(time=t_actual)
 
         # Define grids
-        mass_sub = np.linspace(1e-12, m_f, 500)
+        mass_sub = np.linspace(1e-12, m_f, 1000)
         mass_shock = np.linspace(1e-12, m_sim[-1], 1000)
 
         # 2) Solve Subsonic region exact profiles
         sol_sub = ablation_solver.heat_solver.solve(mass=mass_sub, time=t_actual)
-        exact_sub_rho = sol_sub["density"]
+        exact_sub_rho = sol_sub["density"][:-1]
+        print(exact_sub_rho[-10:])
         exact_sub_p = sol_sub["pressure"] / p_scale
         exact_sub_u = sol_sub["velocity"] / u_scale
         exact_sub_T = sol_sub["temperature"]
 
         # 3) Solve Shock region exact profiles (covers shock region and cold region up to m_sim[-1])
         sol_shock = ablation_solver.shock_solver.solve(mass=mass_shock, time=t_actual)
-        exact_shock_rho = sol_shock["density"]
+        exact_shock_rho = sol_shock["density"][:-1]
         exact_shock_p = sol_shock["pressure"] / p_scale
         exact_shock_u = sol_shock["velocity"] / u_scale
         # shock solver doesn't solve T natively, so compute it using the shock EOS
@@ -185,10 +186,13 @@ def plot_patched_dimensional_fit_comparison(
         fit_sub_p = fits_sub["pressure"] / p_scale
         fit_sub_u = fits_sub["velocity"] / u_scale
         fit_sub_T = fits_sub["temperature"]
+        from project3_code.ictt29.sub_fitting import trim_noisy_tail_with_coordinate
+        mass_fit_rho, fit_rho = trim_noisy_tail_with_coordinate(mass_sub, fit_sub_rho)
+
 
         # 5) Shock Analytical fits mapped to CGS (covers both shock and cold regions)
         fits_shock = calculate_dimensional_fits_shock(mass_shock, t_actual, ablation_solver.shock_solver, shock_params)
-        fit_shock_rho = fits_shock["density"]
+        fit_shock_rho = fits_shock["density"][:-1]
         fit_shock_p = fits_shock["pressure"] / p_scale
         fit_shock_u = fits_shock["velocity"] / u_scale
         fit_shock_T = fits_shock["temperature"]
@@ -196,31 +200,31 @@ def plot_patched_dimensional_fit_comparison(
         show_label = i == 0
 
         # Plot Simulation (entire domain)
-        ax_rho.plot(m_sim * 1e3, sim_rho, '-', color=sim_color, markersize=3, alpha=0.7, label=f"Simulation ({t_target*1e9:.1f} ns)" if show_label else None)
+        ax_rho.plot(m_sim[:-1] * 1e3, sim_rho, '-', color=sim_color, markersize=3, alpha=0.7, label=f"Simulation ({t_target*1e9:.1f} ns)" if show_label else None)
         ax_p.plot(m_sim * 1e3, sim_p, '-', color=sim_color, markersize=3, alpha=0.7)
         ax_u.plot(m_sim * 1e3, sim_u, '-', color=sim_color, markersize=3, alpha=0.7)
         ax_T.plot(m_sim * 1e3, sim_T, '-', color=sim_color, markersize=3, alpha=0.7)
 
         # Plot Subsonic exact solutions (solid black)
-        ax_rho.plot(mass_sub * 1e3, exact_sub_rho, '-', color='black', lw=2.0, label="Subsonic Solver" if show_label else None)
+        ax_rho.plot(mass_sub[:-1] * 1e3, exact_sub_rho, '-', color='black', lw=2.0, label="Subsonic Solver" if show_label else None)
         ax_p.plot(mass_sub * 1e3, exact_sub_p, '-', color='black', lw=2.0)
         ax_u.plot(mass_sub * 1e3, exact_sub_u, '-', color='black', lw=2.0)
         ax_T.plot(mass_sub * 1e3, exact_sub_T, '-', color='black', lw=2.0)
 
         # Plot Subsonic fits (solid green)
-        ax_rho.plot(mass_sub * 1e3, fit_sub_rho, '.', color='green', markersize=2, alpha=0.4, label="Subsonic Fit" if show_label else None)
+        ax_rho.plot(mass_sub[:-1] * 1e3, fit_sub_rho, '.', color='green', markersize=2, alpha=0.4, label="Subsonic Fit" if show_label else None)
         ax_p.plot(mass_sub * 1e3, fit_sub_p, '.', color='green', markersize=2, alpha=0.4)
         ax_u.plot(mass_sub * 1e3, fit_sub_u, '.', color='green', markersize=2, alpha=0.4)
         ax_T.plot(mass_sub * 1e3, fit_sub_T, '.', color='green', markersize=2, alpha=0.4)
 
         # Plot Shock exact solutions (dashed black)
-        ax_rho.plot(mass_shock * 1e3, exact_shock_rho, '--', color='black', lw=1.8, label="Shock Solver" if show_label else None)
+        ax_rho.plot(mass_shock[:-1] * 1e3, exact_shock_rho, '--', color='black', lw=1.8, label="Shock Solver" if show_label else None)
         ax_p.plot(mass_shock * 1e3, exact_shock_p, '--', color='black', lw=1.8)
         ax_u.plot(mass_shock * 1e3, exact_shock_u, '--', color='black', lw=1.8)
         ax_T.plot(mass_shock * 1e3, exact_shock_T, '--', color='black', lw=1.8)
 
         # Plot Shock fits (dashed green, covering shock + cold region)
-        ax_rho.plot(mass_shock * 1e3, fit_shock_rho, ':', color='green', lw=1.5, alpha=0.7, label="Shock Fit" if show_label else None)
+        ax_rho.plot(mass_shock[:-1] * 1e3, fit_shock_rho, ':', color='green', lw=1.5, alpha=0.7, label="Shock Fit" if show_label else None)
         ax_p.plot(mass_shock * 1e3, fit_shock_p, ':', color='green', lw=1.5, alpha=0.7)
         ax_u.plot(mass_shock * 1e3, fit_shock_u, ':', color='green', lw=1.5, alpha=0.7)
         ax_T.plot(mass_shock * 1e3, fit_shock_T, ':', color='green', lw=1.5, alpha=0.7)
@@ -283,6 +287,7 @@ def run_preset_workflow():
 
 
 def main():
+    print("\"\""*500)
     run_preset_workflow()
     print("\nPatched ablation and shock simulations, fittings, comparisons, and plots generated successfully!")
 

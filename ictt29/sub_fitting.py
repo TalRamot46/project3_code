@@ -53,7 +53,7 @@ from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
 
 from project3_code.menahem_new.subsonic_heat_wave_og import SubsonicHeatWave
 
-USE_CACHE = False  # Set to True to use pre-saved pickle files, False to run again
+USE_CACHE = True
 
 
 def get_cached_sub_solver(case, case_label):
@@ -373,6 +373,7 @@ def calculate_dimensional_fits(mass_grid, t_actual, solver, params):
     xsi_vec = mass_grid * solver.xsi_over_m(time=t_actual)
     y = xsi_vec / solver.xsi_f
     T_fit, P_fit, U_fit, rho_fit = fit_by_params(y, params)
+
     
     rho_fit_dimensional = rho_fit * (solver.A**(-solver.a1)) * (solver.B**(-solver.b1)) * (t_actual ** (-solver.c1))    
     p_fit_dimensional = P_fit * (solver.A**solver.a3) * (solver.B**solver.b3) * (t_actual ** solver.c3)
@@ -424,7 +425,7 @@ def plot_dimensional_fit_comparison(history, solver, case, params, dimensional_f
         sim_u = history.u[idx_sim][sub_mask] 
         sim_T = history.T[idx_sim][sub_mask] 
         
-        # 2) Exact Solver Lagrangian Grid
+        # 2) Exact Solver Lagrangian Grid # TODO extract to some N
         mass_solver = np.linspace(1e-12, m_f_val, 1000)
         sol_exact = solver.solve(mass=mass_solver, time=t_actual)
         mass_exact_rho, exact_rho = trim_noisy_tail_with_coordinate(mass_solver, sol_exact["density"])
@@ -769,8 +770,8 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
 def main():
     run_preset_workflow(
         PRESET_FIG_8_CONSTANT_TEMPERATURE,
-        "constant_boundary_temperature_tau_0",
-        "Constant Boundary Temperature (tau=0)"
+        "heat_const_T",
+        "Ablation heat wave region"
     )
     print("\nAll custom subsonic simulations, SubsonicHeatWave comparisons, plotting, fitting, and exports completed successfully!")
 

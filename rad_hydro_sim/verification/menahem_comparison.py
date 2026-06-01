@@ -285,7 +285,7 @@ def run_menahem_piecewise_reference(
     no manual splicing is needed.
     """
     try:
-        from ablation_solver import AblationSolver  # type: ignore
+        from ablation_solver_og import AblationSolver  # type: ignore
     except ImportError as exc:
         print(f"  Could not import Menahem AblationSolver: {exc}; skipping.")
         return None

@@ -67,13 +67,9 @@ from project3_code.rad_hydro_sim.verification.menahem_comparison import (
 from project3_code.hydro_sim.plotting.hydro_plots import _create_7panel_vertical_figure
 
 from project3_code.menahem_new.piston_shock_og import PistonShock
-'''
-DONT CHANGE USE_CACHE!!!
-'''
-USE_CACHE = False #TODO MAKE IT POSSIBLE TO CHANG # Set to True to use pre-saved pickle files, False to run again
-'''
-DONT CHANGE USE_CACHE!!!
-'''
+
+USE_CACHE = True 
+
 Y_FIT_MIN = 0.1   # Configure the lower bound for fitting Temperature T
 FITTING_OPTION = "FIT_RHO_AROUND_FRONT"  # Literal["FIT_TEMP_AROUND_FRONT", "FIT_RHO_AROUND_FRONT", "FIT_RHO_ALL_AROUND"]
 
@@ -157,7 +153,17 @@ def perform_shock_fitting(solver):
         
     popt_P, _ = curve_fit(power_law_P, y_valid, P_valid, p0=[1.0])
     P_fit = 1.0 - (1.0 - solver.Ps) * y_valid**popt_P[0]
-    
+
+    # For debugging purposes:
+    # plt.plot(y_valid, np.abs(P_valid - P_fit), label='abs')
+    # plt.plot(y_valid, np.abs(P_valid - P_fit) / P_valid, label='rel')
+    # plt.yscale('log')
+    # plt.show()
+    # plt.plot(y_valid, P_valid, label='solver')
+    # plt.plot(y_valid, P_fit, label='fit')
+    # plt.ylim(1.0, 1.2)
+    # plt.yscale('log')
+    # plt.show()
     # Temperature or Density Fit Candidate Selection and Optimization
     Ts = T_valid[-1]
     T_0 = T_valid[0]
@@ -540,13 +546,18 @@ def plot_dimensional_fit_comparison(history, solver, params, material_hydro_path
         m_sim = history.m[idx_sim]
         t_actual = history.t[idx_sim]
 
-        sim_rho = history.rho[idx_sim]
-        sim_p = history.p[idx_sim]
-        sim_u = history.u[idx_sim]
-        sim_T = history.T[idx_sim]
+        # shock front for shock solver
+        m_s_exact = solver.shocked_mass(time=t_actual)
+        shock_mask = m_sim <= m_s_exact
+        m_sim_shock = m_sim[shock_mask][:-2]
+
+        sim_rho = history.rho[idx_sim][shock_mask][:-2]
+        sim_p = history.p[idx_sim][shock_mask] [:-2]
+        sim_u = history.u[idx_sim][shock_mask] [:-2]
+        sim_T = history.T[idx_sim][shock_mask][:-2]
             
-        # 2) Exact Solver
-        mass_solver = np.linspace(1e-12, m_sim[-1], 1000)
+        # 2) Exact Solver # TODO extract to some N
+        mass_solver = np.linspace(1e-12, m_s_exact, 1000)
         sol_exact = solver.solve(mass=mass_solver, time=t_actual)
         exact_rho = sol_exact["density"]
         exact_p = sol_exact["pressure"]
@@ -563,27 +574,27 @@ def plot_dimensional_fit_comparison(history, solver, params, material_hydro_path
         show_label = i == 0
         
         # Plot Density
-        ax_rho.plot(m_sim * 1e3, sim_rho, '-', color=sim_color, markersize=3, alpha=0.7, label=f"Simulation ({t_target*1e9:.1f} ns)" if show_label else None)
+        ax_rho.plot(m_sim_shock * 1e3, sim_rho, '-', color=sim_color, markersize=3, alpha=0.7, label=f"Simulation ({t_target*1e9:.1f} ns)" if show_label else None)
         ax_rho.plot(mass_solver * 1e3, exact_rho, '--', color='black', lw=2.0, label="Exact Solver" if show_label else None)
         ax_rho.plot(mass_solver * 1e3, fit_rho, '.', color='green', lw=0.5, alpha=0.5, label="Analytic Fit" if show_label else None)
         
         # Plot Pressure
-        ax_p.plot(m_sim * 1e3, sim_p, '-', color=sim_color, markersize=3, alpha=0.7)
+        ax_p.plot(m_sim_shock * 1e3, sim_p, '-', color=sim_color, markersize=3, alpha=0.7)
         ax_p.plot(mass_solver * 1e3, exact_p, '--', color='black', lw=2.0)
         ax_p.plot(mass_solver * 1e3, fit_p, '.', color='green', lw=0.5, alpha=0.5)
         
         # Plot Velocity
-        ax_u.plot(m_sim * 1e3, sim_u, '-', color=sim_color, markersize=3, alpha=0.7)
+        ax_u.plot(m_sim_shock * 1e3, sim_u, '-', color=sim_color, markersize=3, alpha=0.7)
         ax_u.plot(mass_solver * 1e3, exact_u, '--', color='black', lw=2.0)
         ax_u.plot(mass_solver * 1e3, fit_u, '.', color='green', lw=0.5, alpha=0.5)
         
         # Plot Temperature
-        ax_T.plot(m_sim * 1e3, sim_T, '-', color=sim_color, markersize=3, alpha=0.7)
+        ax_T.plot(m_sim_shock * 1e3, sim_T, '-', color=sim_color, markersize=3, alpha=0.7)
         ax_T.plot(mass_solver * 1e3, exact_T, '--', color='black', lw=2.0)
         ax_T.plot(mass_solver * 1e3, fit_T, '.', color='green', lw=0.5, alpha=0.5)
         
         # Temperature inset near origin
-        axins_T.plot(m_sim * 1e3, sim_T, '-', color=sim_color, markersize=2, alpha=0.7)
+        axins_T.plot(m_sim_shock * 1e3, sim_T, '-', color=sim_color, markersize=2, alpha=0.7)
         axins_T.plot(mass_solver * 1e3, exact_T, '--', color='black', lw=1.5)
         axins_T.plot(mass_solver * 1e3, fit_T, '.', color='green', markersize=1, alpha=0.5)
         
@@ -1014,7 +1025,7 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
         solver=solver,
         params=params,
         case_label=case_label,
-        case_title=case_title,
+        case_title="shock_const_T",
     )
     print(f"Preset {preset_name} processed successfully.")
 
@@ -1022,8 +1033,8 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
 def main():
     run_preset_workflow(
         PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE,
-        "power_law_pressure_drive",
-        "Power-Law Pressure Drive (tau=-43/96)"
+        "shock_const_T",
+        "Shock wave region"
     )
     print("\nAll custom simulations, PistonShock comparisons, plotting, fitting, and exports completed successfully!")
 

@@ -3,8 +3,8 @@ import sys
 
 from matplotlib import pyplot as plt
 
-from project3_code.menahem_new.piston_shock import PistonShock
-from project3_code.menahem_new.subsonic_heat_wave import SubsonicHeatWave, Units
+from project3_code.menahem_new.piston_shock_og import PistonShock
+from project3_code.menahem_new.subsonic_heat_wave_og import SubsonicHeatWave, Units
 
 import logging
 logging.basicConfig(level = logging.INFO)

@@ -540,18 +540,13 @@ def plot_dimensional_fit_comparison(history, solver, params, material_hydro_path
         m_sim = history.m[idx_sim]
         t_actual = history.t[idx_sim]
 
-        # shock front for shock solver
-        m_s_exact = solver.shocked_mass(time=t_actual)
-        shock_mask = m_sim <= m_s_exact
-        m_sim_shock = m_sim[shock_mask][:-2]
-
-        sim_rho = history.rho[idx_sim][shock_mask][:-2]
-        sim_p = history.p[idx_sim][shock_mask] [:-2]
-        sim_u = history.u[idx_sim][shock_mask] [:-2]
-        sim_T = history.T[idx_sim][shock_mask][:-2]
+        sim_rho = history.rho[idx_sim]
+        sim_p = history.p[idx_sim]
+        sim_u = history.u[idx_sim]
+        sim_T = history.T[idx_sim]
             
         # 2) Exact Solver
-        mass_solver = np.linspace(1e-12, m_s_exact, 1000)
+        mass_solver = np.linspace(1e-12, m_sim[-1], 1000)
         sol_exact = solver.solve(mass=mass_solver, time=t_actual)
         exact_rho = sol_exact["density"]
         exact_p = sol_exact["pressure"]
@@ -568,27 +563,27 @@ def plot_dimensional_fit_comparison(history, solver, params, material_hydro_path
         show_label = i == 0
         
         # Plot Density
-        ax_rho.plot(m_sim_shock * 1e3, sim_rho, '-', color=sim_color, markersize=3, alpha=0.7, label=f"Simulation ({t_target*1e9:.1f} ns)" if show_label else None)
+        ax_rho.plot(m_sim * 1e3, sim_rho, '-', color=sim_color, markersize=3, alpha=0.7, label=f"Simulation ({t_target*1e9:.1f} ns)" if show_label else None)
         ax_rho.plot(mass_solver * 1e3, exact_rho, '--', color='black', lw=2.0, label="Exact Solver" if show_label else None)
         ax_rho.plot(mass_solver * 1e3, fit_rho, '.', color='green', lw=0.5, alpha=0.5, label="Analytic Fit" if show_label else None)
         
         # Plot Pressure
-        ax_p.plot(m_sim_shock * 1e3, sim_p, '-', color=sim_color, markersize=3, alpha=0.7)
+        ax_p.plot(m_sim * 1e3, sim_p, '-', color=sim_color, markersize=3, alpha=0.7)
         ax_p.plot(mass_solver * 1e3, exact_p, '--', color='black', lw=2.0)
         ax_p.plot(mass_solver * 1e3, fit_p, '.', color='green', lw=0.5, alpha=0.5)
         
         # Plot Velocity
-        ax_u.plot(m_sim_shock * 1e3, sim_u, '-', color=sim_color, markersize=3, alpha=0.7)
+        ax_u.plot(m_sim * 1e3, sim_u, '-', color=sim_color, markersize=3, alpha=0.7)
         ax_u.plot(mass_solver * 1e3, exact_u, '--', color='black', lw=2.0)
         ax_u.plot(mass_solver * 1e3, fit_u, '.', color='green', lw=0.5, alpha=0.5)
         
         # Plot Temperature
-        ax_T.plot(m_sim_shock * 1e3, sim_T, '-', color=sim_color, markersize=3, alpha=0.7)
+        ax_T.plot(m_sim * 1e3, sim_T, '-', color=sim_color, markersize=3, alpha=0.7)
         ax_T.plot(mass_solver * 1e3, exact_T, '--', color='black', lw=2.0)
         ax_T.plot(mass_solver * 1e3, fit_T, '.', color='green', lw=0.5, alpha=0.5)
         
         # Temperature inset near origin
-        axins_T.plot(m_sim_shock * 1e3, sim_T, '-', color=sim_color, markersize=2, alpha=0.7)
+        axins_T.plot(m_sim * 1e3, sim_T, '-', color=sim_color, markersize=2, alpha=0.7)
         axins_T.plot(mass_solver * 1e3, exact_T, '--', color='black', lw=1.5)
         axins_T.plot(mass_solver * 1e3, fit_T, '.', color='green', markersize=1, alpha=0.5)
         

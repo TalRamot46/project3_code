@@ -212,22 +212,25 @@ def plot_patched_dimensional_fit_comparison(
         ax_T.plot(mass_sub * 1e3, exact_sub_T, '-', color='black', lw=2.0)
 
         # Plot Subsonic fits (solid green)
-        ax_rho.plot(mass_sub[:-1] * 1e3, fit_sub_rho, '.', color='green', markersize=2, alpha=0.4, label="Subsonic Fit" if show_label else None)
+        ax_rho.plot(mass_fit_rho * 1e3, fit_rho, '.', color='green', markersize=2, alpha=0.4, label="Subsonic Fit" if show_label else None)
         ax_p.plot(mass_sub * 1e3, fit_sub_p, '.', color='green', markersize=2, alpha=0.4)
         ax_u.plot(mass_sub * 1e3, fit_sub_u, '.', color='green', markersize=2, alpha=0.4)
         ax_T.plot(mass_sub * 1e3, fit_sub_T, '.', color='green', markersize=2, alpha=0.4)
 
-        # Plot Shock exact solutions (dashed black)
-        ax_rho.plot(mass_shock[:-1] * 1e3, exact_shock_rho, '--', color='black', lw=1.8, label="Shock Solver" if show_label else None)
-        ax_p.plot(mass_shock * 1e3, exact_shock_p, '--', color='black', lw=1.8)
-        ax_u.plot(mass_shock * 1e3, exact_shock_u, '--', color='black', lw=1.8)
-        ax_T.plot(mass_shock * 1e3, exact_shock_T, '--', color='black', lw=1.8)
+        # Plot Shock exact solutions (dashed black) - only in the physical shocked region (m >= m_f)
+        shock_mask = mass_shock >= m_f
+        shock_mask_rho = mass_shock[:-1] >= m_f
 
-        # Plot Shock fits (dashed green, covering shock + cold region)
-        ax_rho.plot(mass_shock[:-1] * 1e3, fit_shock_rho, ':', color='green', lw=1.5, alpha=0.7, label="Shock Fit" if show_label else None)
-        ax_p.plot(mass_shock * 1e3, fit_shock_p, ':', color='green', lw=1.5, alpha=0.7)
-        ax_u.plot(mass_shock * 1e3, fit_shock_u, ':', color='green', lw=1.5, alpha=0.7)
-        ax_T.plot(mass_shock * 1e3, fit_shock_T, ':', color='green', lw=1.5, alpha=0.7)
+        ax_rho.plot(mass_shock[:-1][shock_mask_rho] * 1e3, exact_shock_rho[shock_mask_rho], '--', color='black', lw=1.8, label="Shock Solver" if show_label else None)
+        ax_p.plot(mass_shock[shock_mask] * 1e3, exact_shock_p[shock_mask], '--', color='black', lw=1.8)
+        ax_u.plot(mass_shock[shock_mask] * 1e3, exact_shock_u[shock_mask], '--', color='black', lw=1.8)
+        ax_T.plot(mass_shock[shock_mask] * 1e3, exact_shock_T[shock_mask], '--', color='black', lw=1.8)
+
+        # Plot Shock fits (dashed green, covering shock + cold region) - only in the physical shocked region (m >= m_f)
+        ax_rho.plot(mass_shock[:-1][shock_mask_rho] * 1e3, fit_shock_rho[shock_mask_rho], ':', color='green', lw=1.5, alpha=0.7, label="Shock Fit" if show_label else None)
+        ax_p.plot(mass_shock[shock_mask] * 1e3, fit_shock_p[shock_mask], ':', color='green', lw=1.5, alpha=0.7)
+        ax_u.plot(mass_shock[shock_mask] * 1e3, fit_shock_u[shock_mask], ':', color='green', lw=1.5, alpha=0.7)
+        ax_T.plot(mass_shock[shock_mask] * 1e3, fit_shock_T[shock_mask], ':', color='green', lw=1.5, alpha=0.7)
 
     # Build time legend entries using plasma colors
     time_handles = [

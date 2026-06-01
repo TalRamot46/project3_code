@@ -101,7 +101,8 @@ def run_simulation_and_references(preset_name: str, case_label: str):
     cache_path = cache_dir / f"{case_label}_cache.pkl"
 
     case, config = get_preset(preset_name)
-
+    print(cache_path)
+    print(USE_CACHE)
     if USE_CACHE and cache_path.exists():
         print(f"Loading cached simulation and reference data from {cache_path}...")
         try:
@@ -202,12 +203,102 @@ def perform_subsonic_fitting(solver):
         
     # Pressure Fit with a constant P_valid[0] offset
     P_0 = P_valid[0] 
+    P_f = P_valid[-1]
     solver.P0 = P_0 # important - the 
-    def power_law_origin(y, a, b, c, d):
+    
+    # 10 Pressure fitting candidates
+    def fit_p_1(y, a, b, c, d):
         return P_0 + a * y**c + b * y**(c+d)
         
+    def fit_p_2(y, a, b, e, c, d, f):
+        return P_0 + a * y**c + b * y**(c+d) + e * y**(c+d+f)
+        
+    def fit_p_3(y, a, b, c, d):
+        return P_f + a * (1.0 - y)**c + b * (1.0 - y)**(c+d)
+        
+    def fit_p_4(y, a, b, e, c, d, f):
+        return P_f + a * (1.0 - y)**c + b * (1.0 - y)**(c+d) + e * (1.0 - y)**(c+d+f)
+        
+    def fit_p_5(y, c):
+        return P_f + (P_0 - P_f) * (1.0 - y)**c
+        
+    def fit_p_6(y, a, c, d):
+        return P_f + (P_0 - P_f) * (a * (1.0 - y)**c + (1.0 - a) * (1.0 - y)**(c+d))
+        
+    def fit_p_7(y, c):
+        return P_f + (P_0 - P_f) * (1.0 - y) / (1.0 + c * y)
+        
+    def fit_p_8(y, c, a, b):
+        y_clipped = np.clip(y, 1e-12, 1.0)
+        return P_f + (P_0 - P_f) * (1.0 - y_clipped**a) / (1.0 + c * y_clipped**b)
+        
+    def fit_p_9(y, a, b, d):
+        y = np.asarray(y)
+        res = np.zeros_like(y)
+        c = (P_0 - P_f + a * 0.2**b) / (0.8**d)
+        left_mask = y <= 0.2
+        res[left_mask] = P_0 + a * y[left_mask]**b
+        res[~left_mask] = P_f + c * (1.0 - y[~left_mask])**d
+        return res
+        
+    def fit_p_10(y, a1, a2, alpha, b1, b2, beta, y0):
+        y = np.asarray(y, dtype=float)
+        y_clipped = np.clip(y, 1e-12, 1.0)
+        P_left = P_0 + a1 * (y_clipped ** alpha) + a2 * (y_clipped ** (2.0 * alpha))
+        dx = 1.0 - y_clipped
+        P_right = P_f + b1 * dx**beta + b2 * dx**(2.0 * beta)
+        weight = (1.0 - y_clipped) / (1.0 + (y_clipped / y0) ** 4)
+        return weight * P_left + (1.0 - weight) * P_right
+        
+    candidates_p = [
+        {"id": 1, "func": fit_p_1, "name": "Power Law Origin: $P_0 + a y^c + b y^{c+d}$", "latex": r"P(y) \approx P_0 + a y^c + b y^{c+d}", "p0": [0.355, 0.5, 0.04, 2.3], "bounds": (-np.inf, np.inf)},
+        {"id": 2, "func": fit_p_2, "name": "Power Law Origin 3-Term (6P)", "latex": r"P(y) \approx P_0 + a y^c + b y^{c+d} + e y^{c+d+f}", "p0": [0.35, 0.5, 0.1, 0.04, 2.3, 1.0], "bounds": (-np.inf, np.inf)},
+        {"id": 3, "func": fit_p_3, "name": "Power Law y=1: $P_f + a(1-y)^c + b(1-y)^{c+d}$", "latex": r"P(y) \approx P_f + a(1-y)^c + b(1-y)^{c+d}", "p0": [-0.35, -0.5, 0.5, 1.0], "bounds": (-np.inf, np.inf)},
+        {"id": 4, "func": fit_p_4, "name": "Power Law y=1 3-Term (6P)", "latex": r"P(y) \approx P_f + a(1-y)^c + b(1-y)^{c+d} + e(1-y)^{c+d+f}", "p0": [-0.35, -0.5, -0.1, 0.5, 1.0, 1.0], "bounds": (-np.inf, np.inf)},
+        {"id": 5, "func": fit_p_5, "name": "Boundary-Match 1P: $P_f + (P_0-P_f)(1-y)^c$", "latex": r"P(y) \approx P_f + (P_0-P_f)(1-y)^c", "p0": [1.0], "bounds": (0.01, np.inf)},
+        {"id": 6, "func": fit_p_6, "name": "Boundary-Match 3P: $P_f + (P_0-P_f)[a(1-y)^c + (1-a)(1-y)^{c+d}]$", "latex": r"P(y) \approx Boundary-Match 3P", "p0": [0.5, 1.0, 1.0], "bounds": (-np.inf, np.inf)},
+        {"id": 7, "func": fit_p_7, "name": "Rational Front 1P", "latex": r"P(y) \approx P_f + (P_0-P_f)(1-y)/(1+cy)", "p0": [1.0], "bounds": (-0.99, np.inf)},
+        {"id": 8, "func": fit_p_8, "name": "General Rational Front 3P", "latex": r"P(y) \approx P_f + (P_0-P_f)(1-y^a)/(1+cy^b)", "p0": [1.0, 1.0, 1.0], "bounds": (-np.inf, np.inf)},
+        {"id": 9, "func": fit_p_9, "name": "Piecewise Power-Law (y=0.2)", "latex": r"P(y) \approx Piecewise\ Power-Law", "p0": [0.5, 1.0, 1.0], "bounds": (-np.inf, np.inf)},
+        {"id": 10, "func": fit_p_10, "name": "Asymptotic Blend 7P", "latex": r"P(y) \approx W P_{left} + (1-W) P_{right}", "p0": [0.5, 0.1, 0.5, -0.5, -0.1, 1.0, 0.2], "bounds": ([-10.0, -10.0, 0.01, -10.0, -10.0, 0.01, 0.05], [10.0, 10.0, 5.0, 10.0, 10.0, 5.0, 0.50])}
+    ]
+
     popt_T, _ = curve_fit(smith_approximation, y_valid, T_valid, p0=[0.5])
-    popt_P, _ = curve_fit(power_law_origin, y_valid, P_valid, p0=[0.355, 0.5, 0.04, 2.3])
+    popt_P, _ = curve_fit(fit_p_1, y_valid, P_valid, p0=[0.355, 0.5, 0.04, 2.3])
+    
+    best_p = None
+    min_avg_err_p = float("inf")
+    fits_p = {}
+    
+    print("--- Fitting Subsonic Pressure Candidates ---")
+    for cand in candidates_p:
+        try:
+            popt, _ = curve_fit(cand["func"], y_valid, P_valid, p0=cand["p0"], bounds=cand["bounds"], maxfev=10000)
+            P_fit = cand["func"](y_valid, *popt)
+            rel_err_p = np.abs((P_fit - P_valid) / P_valid)
+            avg_err = np.mean(rel_err_p)
+            max_err = np.max(rel_err_p)
+            print(f"  Candidate {cand['id']} ({cand['name']}): Avg Err: {avg_err:.3e}, Max Err: {max_err:.3e}")
+            fits_p[cand["id"]] = (popt, P_fit, avg_err, max_err, cand["name"], cand["latex"])
+            
+            if avg_err < min_avg_err_p:
+                min_avg_err_p = avg_err
+                best_p = {
+                    "id": cand["id"],
+                    "popt": popt,
+                    "func": cand["func"],
+                    "name": cand["name"],
+                    "latex": cand["latex"],
+                    "avg_err": avg_err,
+                    "max_err": max_err,
+                    "fit_val": P_fit
+                }
+        except Exception as e:
+            print(f"Subsonic pressure fit {cand['id']} failed: {e}")
+            fits_p[cand["id"]] = (None, None, 0.0, 0.0, cand["name"], cand["latex"])
+            
+    print(f"Optimal Pressure Candidate: Fit {best_p['id']} ({best_p['name']}) - Avg Err: {best_p['avg_err']:.3e}, Max Err: {best_p['max_err']:.3e}")
+    
     u_0 = U_valid[0]
     u_f = U_valid[-1]
 
@@ -340,6 +431,8 @@ def perform_subsonic_fitting(solver):
         "popt_P": popt_P,
         "best_u": best_u,
         "fits_u": fits_u,
+        "best_p": best_p,
+        "fits_p": fits_p,
         "solver": solver
     }
     return params
@@ -349,15 +442,14 @@ def fit_by_params(y: np.ndarray, params: dict):
     """Compute the self-similar fit profiles (T, P, U, rho) on the similarity coordinate xsi_vec."""
     solver = params["solver"]
     popt_T = params["popt_T"]
-    popt_P = params["popt_P"]
     best_u = params["best_u"]
+    best_p = params["best_p"]
     
     # Temperature fit
     T_fit = ((1.0 - y) * (1.0 + popt_T[0] * y)) ** (10.0 / 39.0)
     
     # Pressure fit
-    P_0 = solver.P0
-    P_fit = P_0 + popt_P[0] * y**popt_P[2] + popt_P[1] * y**(popt_P[2] + popt_P[3])
+    P_fit = best_p["func"](y, *best_p["popt"])
     
     # Velocity fit (evaluated on y)
     U_fit = best_u["func"](y, *best_u["popt"])
@@ -558,8 +650,33 @@ def plot_and_fit_self_similar(solver, params, self_similar_path, case_title):
     ax.plot(y_valid, P_valid, 'b-', label='Numerical Solver', lw=2)
     ax.plot(y_valid, P_fit, 'r--', label='Analytical Fit', lw=1.5)
     ax.set_ylabel(r"Pressure $P(y)$ [dimensionless]", fontsize=12)
-    ax.set_title("Subsonic: Pressure", fontsize=13, fontweight='bold')
-    lbl_P = f"$P(y) \\approx P(0) + {popt_P[0]:.5f} y^{{{popt_P[2]:.5f}}} + {popt_P[1]:.5f} y^{{{popt_P[2]+popt_P[3]:.5f}}}$\nAvg Err: {avg_P:.4e}, Max Err: {max_P:.4e}"
+    best_p = params["best_p"]
+    ax.set_title(f"Subsonic: Pressure ({best_p['name']})", fontsize=13, fontweight='bold')
+    
+    P_0_val, P_f_val = P_valid[0], P_valid[-1]
+    p_popt = best_p["popt"]
+    if best_p["id"] == 1:
+        p_formula = r"$P(y) \approx P(0) + {:.5f} y^{{{:.5f}}} + {:.5f} y^{{{:.5f}}}$".format(p_popt[0], p_popt[2], p_popt[1], p_popt[2]+p_popt[3])
+    elif best_p["id"] == 2:
+        p_formula = r"$P(y) \approx P(0) + {:.5f} y^{{{:.5f}}} + {:.5f} y^{{{:.5f}}} + {:.5f} y^{{{:.5f}}}$".format(p_popt[0], p_popt[3], p_popt[1], p_popt[3]+p_popt[4], p_popt[2], p_popt[3]+p_popt[4]+p_popt[5])
+    elif best_p["id"] == 3:
+        p_formula = r"$P(y) \approx P_f + {:.5f} (1-y)^{{{:.5f}}} + {:.5f} (1-y)^{{{:.5f}}}$".format(p_popt[0], p_popt[2], p_popt[1], p_popt[2]+p_popt[3])
+    elif best_p["id"] == 4:
+        p_formula = r"$P(y) \approx P_f + {:.5f} (1-y)^{{{:.5f}}} + {:.5f} (1-y)^{{{:.5f}}} + {:.5f} (1-y)^{{{:.5f}}}$".format(p_popt[0], p_popt[3], p_popt[1], p_popt[3]+p_popt[4], p_popt[2], p_popt[3]+p_popt[4]+p_popt[5])
+    elif best_p["id"] == 5:
+        p_formula = r"$P(y) \approx P_f + (P(0) - P_f) (1-y)^{{{:.5f}}}$".format(p_popt[0])
+    elif best_p["id"] == 6:
+        p_formula = r"$P(y) \approx P_f + (P(0) - P_f) [{:.4f}(1-y)^{{{:.4f}}} + {:.4f}(1-y)^{{{:.4f}}}]$".format(p_popt[0], p_popt[1], 1.0 - p_popt[0], p_popt[1]+p_popt[2])
+    elif best_p["id"] == 7:
+        p_formula = r"$P(y) \approx P_f + \frac{{(P(0) - P_f)(1-y)}}{{1 + {:.5f} y}}$".format(p_popt[0])
+    elif best_p["id"] == 8:
+        p_formula = r"$P(y) \approx P_f + (P(0) - P_f) \frac{{1 - y^{{{:.5f}}}}}{{1 + {:.5f} y^{{{:.5f}}}}}$".format(p_popt[1], p_popt[0], p_popt[2])
+    elif best_p["id"] == 9:
+        p_formula = r"$P(y) \approx Piecewise\ Power-Law$"
+    elif best_p["id"] == 10:
+        p_formula = r"$P(y) \approx W P_{left} + (1-W) P_{right}$"
+        
+    lbl_P = p_formula + f"\nAvg Err: {avg_P:.4e}, Max Err: {max_P:.4e}"
     ax.text(0.05, 0.70, lbl_P, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=9.5)
     
     # Panel (1,1): Velocity
@@ -663,6 +780,56 @@ def plot_standalone_velocity_fits(params, standalone_path, case_title):
     print(f"Saved standalone subsonic velocity fits to {standalone_path}")
 
 
+def plot_standalone_pressure_fits(params, standalone_path, case_title):
+    print("Generating standalone subsonic pressure fitting comparison plots...")
+    y_valid = params["y_valid"]
+    P_valid = params["P_valid"]
+    fits_p = params["fits_p"]
+    best_p = params["best_p"]
+    
+    fig_sa, (ax_sa1, ax_sa2) = plt.subplots(1, 2, figsize=(18, 8.5))
+    
+    y_bulk = y_valid
+    
+    # Left: Fits vs Numerical
+    ax_sa1.plot(y_valid, P_valid, 'b-', label='Numerical Solver', lw=3.0)
+    colors_p = {
+        1: 'crimson', 2: 'darkorange', 3: 'forestgreen', 4: 'darkviolet', 
+        5: 'deeppink', 6: 'teal', 7: 'chocolate', 8: 'navy', 9: 'black', 10: 'royalblue'
+    }
+    
+    for i in range(1, 11):
+        style = '--' if i != best_p["id"] else '-' 
+        popt, P_fit, avg_err, max_err, name, latex = fits_p[i]
+        if popt is not None:
+            lbl = f"Fit {i}: {name}\nAvg Err: {avg_err:.3e}, Max Err: {max_err:.3e}"
+            lw = 2.2 if i == best_p["id"] else 1.5
+            ax_sa1.plot(y_valid, P_fit, colors_p[i], linestyle=style, label=lbl, lw=lw)
+            
+            # Right: Semi-log Error curves (using absolute relative errors)
+            err_curve = np.abs((P_fit - P_valid) / P_valid)
+            ax_sa2.plot(y_bulk, err_curve, colors_p[i], label=f"Fit {i} (Avg: {avg_err:.3e})", lw=lw)
+            
+    ax_sa1.set_xlabel(r"Normalized coordinate $y = \xi / \xi_f$", fontsize=12)
+    ax_sa1.set_ylabel(r"Pressure $P(y)$ [dimensionless]", fontsize=12)
+    ax_sa1.legend(loc='best', fontsize=9.0)
+    ax_sa1.grid(True, alpha=0.3)
+    ax_sa1.set_title("Dimensionless Pressure $P(y)$ vs 10 Candidates", fontsize=13, fontweight='bold')
+    
+    ax_sa2.set_xlabel(r"Normalized coordinate $y = \xi / \xi_f$", fontsize=12)
+    ax_sa2.set_ylabel(r"Relative Error", fontsize=12)
+    ax_sa2.set_yscale('log')
+    ax_sa2.legend(loc='best', fontsize=9.5)
+    ax_sa2.grid(True, which="both", ls=":", alpha=0.5)
+    ax_sa2.set_title("Relative Errors of Pressure Fits (semi-log)", fontsize=13, fontweight='bold')
+    
+    fig_sa.suptitle(f"Subsonic Pressure Profile Curve Fitting & Optimization\nChosen Formal Fit: Fit {best_p['id']} ({best_p['name']})", fontsize=15, fontweight='bold')
+    plt.tight_layout()
+    fig_sa.savefig(standalone_path, dpi=200, bbox_inches='tight')
+    plt.close(fig_sa)
+    print(f"Saved standalone subsonic pressure fits to {standalone_path}")
+
+
 def plot_relative_errors(solver, params, relative_errors_path, case_title):
     print("Generating subsonic relative error plots...")
     y_valid = params["y_valid"]
@@ -718,6 +885,7 @@ def get_plot_paths(case_label: str) -> dict[str, str]:
     return {
         "self_similar": str(ss_dir / f"{case_label}_self_similar.png"),
         "velocity_fits": str(ss_dir / f"{case_label}_velocity_fits_standalone.png"),
+        "pressure_fits": str(ss_dir / f"{case_label}_pressure_fits_standalone.png"),
         "relative_errors": str(ss_dir / f"{case_label}_relative_errors.png"),
         "dimensional_comparison": str(dv_dir / f"{case_label}_dimensional_fit_comparison.png")
     }
@@ -737,13 +905,16 @@ def generate_verification_plots(
     # 1) Standalone Velocity fits comparison
     plot_standalone_velocity_fits(params, paths["velocity_fits"], case_title)
 
-    # 2) Self-similar profiles and fits
+    # 2) Standalone Pressure fits comparison
+    plot_standalone_pressure_fits(params, paths["pressure_fits"], case_title)
+
+    # 3) Self-similar profiles and fits
     plot_and_fit_self_similar(solver, params, paths["self_similar"], case_title)
 
-    # 3) Dimensional fit comparison
+    # 4) Dimensional fit comparison
     plot_dimensional_fit_comparison(history, solver, case, params, paths["dimensional_comparison"], case_title)
 
-    # 4) Relative errors of self-similar fits
+    # 5) Relative errors of self-similar fits
     plot_relative_errors(solver, params, paths["relative_errors"], case_title)
 
 

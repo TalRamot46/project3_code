@@ -31,6 +31,18 @@ if not hasattr(np, "trapz"):
     else:
         np.trapz = scipy.integrate.trapz
 
+# Monkeypatch numpy._core mapping for loading pickles saved with different Numpy versions
+try:
+    import numpy.core
+    import numpy.core.numeric
+    import numpy.core.multiarray
+    sys.modules['numpy._core'] = sys.modules.get('numpy.core')
+    sys.modules['numpy._core.numeric'] = sys.modules.get('numpy.core.numeric')
+    sys.modules['numpy._core.multiarray'] = sys.modules.get('numpy.core.multiarray')
+except ImportError:
+    pass
+
+
 
 # Ensure proper package and solver imports
 _REPO_PARENT = Path(__file__).resolve().parents[2]
@@ -106,11 +118,6 @@ def run_simulation_and_references(preset_name: str, case_label: str):
     if USE_CACHE and cache_path.exists():
         print(f"Loading cached simulation and reference data from {cache_path}...")
         try:
-            import sys
-            import numpy.core
-            sys.modules['numpy._core'] = sys.modules.get('numpy.core')
-            sys.modules['numpy._core.numeric'] = sys.modules.get('numpy.core.numeric')
-            sys.modules['numpy._core.multiarray'] = sys.modules.get('numpy.core.multiarray')
             with open(cache_path, "rb") as f:
                 data = pickle.load(f)
             solver = data["solver"]
@@ -368,6 +375,88 @@ def perform_subsonic_fitting(solver):
         u_right = u_f + b1 * dx + b2 * (dx ** 2) + b3 * (dx ** 3) + b4 * (dx ** 4)
         weight = (1.0 - y_clipped) / (1.0 + (y_clipped / y0) ** 4)
         return weight * u_left + (1.0 - weight) * u_right
+        
+    def fit_u_13(y, a, b, c, d, e):
+        y = np.asarray(y)
+        res = np.zeros_like(y)
+        u_1 = u_0 + a * 0.2**b
+        u_2 = u_f + c * 0.2**d
+        mask_left = y <= 0.2
+        mask_right = y > 0.8
+        mask_mid = ~(mask_left | mask_right)
+        res[mask_left] = u_0 + a * y[mask_left]**b
+        res[mask_right] = u_f + c * (1.0 - y[mask_right])**d
+        res[mask_mid] = u_1 + (u_2 - u_1) * ((y[mask_mid] - 0.2) / 0.6)**e
+        return res
+        
+    def fit_u_14(y, a, b, d):
+        y = np.asarray(y)
+        res = np.zeros_like(y)
+        c = (u_0 - u_f + a * 0.8**b) / (0.2**d)
+        mask_left = y <= 0.8
+        mask_right = y > 0.8
+        res[mask_left] = u_0 + a * y[mask_left]**b
+        res[mask_right] = u_f + c * (1.0 - y[mask_right])**d
+        return res
+        
+    def fit_u_15(y, a, b, c, d, e):
+        y = np.asarray(y)
+        res = np.zeros_like(y)
+        b_val = max(b, 0.01)
+        e_val = max(e, 0.01)
+        u_1 = u_0 + a * 0.2**b_val + c * 0.2**(2.0 * b_val)
+        d_1 = b_val * 0.2**(b_val - 1.0) * (a + 2.0 * c * 0.2**b_val)
+        u_2 = u_f + d * 0.2**e_val
+        C = (u_2 - u_1 - 0.6 * d_1) / 0.36
+        mask_left = y <= 0.2
+        mask_right = y > 0.8
+        mask_mid = ~(mask_left | mask_right)
+        y_l = y[mask_left]
+        res[mask_left] = u_0 + a * y_l**b_val + c * y_l**(2.0 * b_val)
+        y_r = y[mask_right]
+        res[mask_right] = u_f + d * (1.0 - y_r)**e_val
+        y_m = y[mask_mid]
+        res[mask_mid] = u_1 + d_1 * (y_m - 0.2) + C * (y_m - 0.2)**2
+        return res
+        
+    def fit_u_16(y, a, b, c, d, e):
+        y = np.asarray(y)
+        res = np.zeros_like(y)
+        u_1 = u_0 + a * 0.2**b
+        u_2 = u_f + c * 0.2**d
+        mask_left = y <= 0.2
+        mask_right = y > 0.8
+        mask_mid = ~(mask_left | mask_right)
+        res[mask_left] = u_0 + a * y[mask_left]**b
+        res[mask_right] = u_f + c * (1.0 - y[mask_right])**d
+        t = (y[mask_mid] - 0.2) / 0.6
+        res[mask_mid] = u_1 + (u_2 - u_1) * (1.0 + e) * t / (1.0 + e * t)
+        return res
+        
+    def fit_u_17(y, a, b, c, e):
+        y = np.asarray(y)
+        res = np.zeros_like(y)
+        b_val = max(b, 0.01)
+        e_val = max(e, 0.01)
+        u_1 = u_0 + a * 0.2**b_val
+        d_1 = a * b_val * 0.2**(b_val - 1.0)
+        u_2 = u_f + c * 0.2**e_val
+        d_2 = -c * e_val * 0.2**(e_val - 1.0)
+        mask_left = y <= 0.2
+        mask_right = y > 0.8
+        mask_mid = ~(mask_left | mask_right)
+        y_l = y[mask_left]
+        res[mask_left] = u_0 + a * y_l**b_val
+        y_r = y[mask_right]
+        res[mask_right] = u_f + c * (1.0 - y_r)**e_val
+        y_m = y[mask_mid]
+        t = (y_m - 0.2) / 0.6
+        h00 = 2.0 * t**3 - 3.0 * t**2 + 1.0
+        h10 = t**3 - 2.0 * t**2 + t
+        h01 = -2.0 * t**3 + 3.0 * t**2
+        h11 = t**3 - t**2
+        res[mask_mid] = h00 * u_1 + h10 * (0.6 * d_1) + h01 * u_2 + h11 * (0.6 * d_2)
+        return res
     
     candidates = [
         {"id": 1, "func": fit_u_1, "name": "Power Law: $c(1-y)^d$", "latex": r"U(y) \approx %.5f (1 - y)^{%.5f}", "p0": [u_0, 0.5], "bounds": (-np.inf, np.inf)},
@@ -381,7 +470,12 @@ def perform_subsonic_fitting(solver):
         {"id": 9, "func": fit_u_9, "name": "Piecewise Power-Law (y=0.2)", "latex": r"U(y) \approx Piecewise", "p0": [1.0, 0.5, 0.5], "bounds": (0.0, np.inf)},
         {"id": 10, "func": fit_u_10, "name": "Asymptotic Blend 6P", "latex": r"U(y) \approx W U_{left} + (1-W) U_{right}", "p0": [-5.0, -2.0, 0.25, 2.0, 0.5, 0.2], "bounds": ([-50.0, -50.0, 0.01, -20.0, -20.0, 0.05], [50.0, 50.0, 0.99, 20.0, 20.0, 0.50])},
         {"id": 11, "func": fit_u_11, "name": "Asymptotic Blend 8P (3 Pow)", "latex": r"U(y) \approx W U_{left,3} + (1-W) U_{right,3}", "p0": [-5.0, -2.0, -0.5, 0.25, 2.0, 0.5, 0.1, 0.2], "bounds": ([-50.0, -50.0, -50.0, 0.01, -20.0, -20.0, -20.0, 0.05], [50.0, 50.0, 50.0, 0.99, 20.0, 20.0, 20.0, 0.50])},
-        {"id": 12, "func": fit_u_12, "name": "Asymptotic Blend 10P (4 Pow)", "latex": r"U(y) \approx W U_{left,4} + (1-W) U_{right,4}", "p0": [-5.0, -2.0, -0.5, -0.1, 0.25, 2.0, 0.5, 0.1, 0.05, 0.2], "bounds": ([-50.0, -50.0, -50.0, -50.0, 0.01, -20.0, -20.0, -20.0, -20.0, 0.05], [50.0, 50.0, 50.0, 50.0, 0.99, 20.0, 20.0, 20.0, 20.0, 0.50])}
+        {"id": 12, "func": fit_u_12, "name": "Asymptotic Blend 10P (4 Pow)", "latex": r"U(y) \approx W U_{left,4} + (1-W) U_{right,4}", "p0": [-5.0, -2.0, -0.5, -0.1, 0.25, 2.0, 0.5, 0.1, 0.05, 0.2], "bounds": ([-50.0, -50.0, -50.0, -50.0, 0.01, -20.0, -20.0, -20.0, -20.0, 0.05], [50.0, 50.0, 50.0, 50.0, 0.99, 20.0, 20.0, 20.0, 20.0, 0.50])},
+        {"id": 13, "func": fit_u_13, "name": "Piecewise 3-Sec Power-Law (y=0.2, 0.8)", "latex": r"U(y) \approx Piecewise\ 3-Sec\ Power", "p0": [-5.0, 0.5, 1.0, 0.5, 1.0], "bounds": ([-100.0, 0.01, -100.0, 0.01, 0.01], [100.0, 5.0, 100.0, 5.0, 5.0])},
+        {"id": 14, "func": fit_u_14, "name": "Piecewise 2-Sec Power-Law (y=0.8)", "latex": r"U(y) \approx Piecewise\ 2-Sec\ Power", "p0": [-5.0, 0.5, 0.5], "bounds": ([-100.0, 0.01, 0.01], [100.0, 5.0, 5.0])},
+        {"id": 15, "func": fit_u_15, "name": "Piecewise 3-Sec C^1 Power-Law (y=0.2, 0.8)", "latex": r"U(y) \approx Piecewise\ 3-Sec\ C^1\ Power", "p0": [-5.0, 0.5, 1.0, 1.0, 0.5], "bounds": ([-100.0, 0.01, -100.0, -100.0, 0.01], [100.0, 5.0, 100.0, 100.0, 5.0])},
+        {"id": 16, "func": fit_u_16, "name": "Piecewise 3-Sec Rational (y=0.2, 0.8)", "latex": r"U(y) \approx Piecewise\ 3-Sec\ Rational", "p0": [-5.0, 0.5, 1.0, 0.5, 0.5], "bounds": ([-100.0, 0.01, -100.0, 0.01, -0.99], [100.0, 5.0, 100.0, 5.0, 10.0])},
+        {"id": 17, "func": fit_u_17, "name": "Piecewise 3-Sec Hermite C^1 (y=0.2, 0.8)", "latex": r"U(y) \approx Piecewise\ 3-Sec\ Hermite\ C^1", "p0": [-5.0, 0.5, 1.0, 0.5], "bounds": ([-100.0, 0.01, -100.0, 0.01], [100.0, 5.0, 100.0, 5.0])}
     ]
     
     y_valid_u = y_valid
@@ -712,6 +806,16 @@ def plot_and_fit_self_similar(solver, params, self_similar_path, case_title):
         u_formula = r"$U(y) \approx W U_{left,3} + (1-W) U_{right,3}$"
     elif best_u["id"] == 12:
         u_formula = r"$U(y) \approx W U_{left,4} + (1-W) U_{right,4}$"
+    elif best_u["id"] == 13:
+        u_formula = r"$U(y) \approx Piecewise\ 3-Section\ Power$"
+    elif best_u["id"] == 14:
+        u_formula = r"$U(y) \approx Piecewise\ 2-Section\ Power$"
+    elif best_u["id"] == 15:
+        u_formula = r"$U(y) \approx Piecewise\ 3-Section\ C^1\ Power$"
+    elif best_u["id"] == 16:
+        u_formula = r"$U(y) \approx Piecewise\ 3-Section\ Rational$"
+    elif best_u["id"] == 17:
+        u_formula = r"$U(y) \approx Piecewise\ 3-Sec\ Hermite\ C^1$"
         
     lbl_U = u_formula + f"\nAvg Err: {avg_U:.4e}, Max Err: {max_U:.4e}"
     ax.text(0.05, 0.70, lbl_U, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=9.5)
@@ -745,10 +849,11 @@ def plot_standalone_velocity_fits(params, standalone_path, case_title):
     colors_u = {
         1: 'crimson', 2: 'darkorange', 3: 'forestgreen', 4: 'darkviolet', 
         5: 'deeppink', 6: 'teal', 7: 'chocolate', 8: 'navy', 9: 'black', 10: 'royalblue',
-        11: 'brown', 12: 'magenta'
+        11: 'brown', 12: 'magenta', 13: 'darkcyan', 14: 'darkgoldenrod', 15: 'darkred', 16: 'indigo',
+        17: 'limegreen'
     }
     
-    for i in range(1, 13):
+    for i in range(1, 18):
         style = '--' if i != best_u["id"] else '-' 
         popt, U_fit, avg_err, max_err, name, latex = fits_u[i]
         if popt is not None:
@@ -762,14 +867,14 @@ def plot_standalone_velocity_fits(params, standalone_path, case_title):
             
     ax_sa1.set_xlabel(r"Normalized coordinate $y = \xi / \xi_f$", fontsize=12)
     ax_sa1.set_ylabel(r"Velocity $U(y)$ [dimensionless]", fontsize=12)
-    ax_sa1.legend(loc='best', fontsize=9.0)
+    ax_sa1.legend(loc='best', fontsize=8.0, ncol=2)
     ax_sa1.grid(True, alpha=0.3)
-    ax_sa1.set_title("Dimensionless Velocity $U(y)$ vs 12 Candidates", fontsize=13, fontweight='bold')
+    ax_sa1.set_title("Dimensionless Velocity $U(y)$ vs 17 Candidates", fontsize=13, fontweight='bold')
     
     ax_sa2.set_xlabel(r"Normalized coordinate $y = \xi / \xi_f$", fontsize=12)
     ax_sa2.set_ylabel(r"Relative Error", fontsize=12)
     ax_sa2.set_yscale('log')
-    ax_sa2.legend(loc='best', fontsize=9.5)
+    ax_sa2.legend(loc='best', fontsize=8.5, ncol=2)
     ax_sa2.grid(True, which="both", ls=":", alpha=0.5)
     ax_sa2.set_title("Relative Errors of Velocity Fits (semi-log)", fontsize=13, fontweight='bold')
     

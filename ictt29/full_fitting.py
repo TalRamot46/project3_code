@@ -51,7 +51,7 @@ from project3_code.menahem_new.ablation_solver_og import AblationSolver
 from project3_code.ictt29.sub_fitting import perform_subsonic_fitting, calculate_dimensional_fits as calculate_dimensional_fits_sub
 from project3_code.ictt29.shock_fitting import perform_shock_fitting, calculate_dimensional_fits as calculate_dimensional_fits_shock
 
-USE_CACHE = True  # Set to True to use pre-saved pickle files, False to run again
+USE_CACHE = False  # Set to True to use pre-saved pickle files, False to run again
 
 
 def get_data():
@@ -142,7 +142,8 @@ def plot_patched_dimensional_fit_comparison(
     ax_u = axes[1, 0]
     ax_T = axes[1, 1]
 
-    p_scale = 1  # 1 Mbar = 1e12 Barye
+    # TODO: Change the scales here and apply also to sub & shock
+    p_scale = 1  # 1 Mbar = 1e12 Barye 
     u_scale = 1   # 1 km/s = 1e5 cm/s
 
     for i, (t_target, sim_color) in enumerate(zip(target_times, sim_colors)):

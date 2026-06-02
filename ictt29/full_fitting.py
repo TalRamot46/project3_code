@@ -51,7 +51,7 @@ from project3_code.menahem_new.ablation_solver_og import AblationSolver
 from project3_code.ictt29.sub_fitting import perform_subsonic_fitting, calculate_dimensional_fits as calculate_dimensional_fits_sub
 from project3_code.ictt29.shock_fitting import perform_shock_fitting, calculate_dimensional_fits as calculate_dimensional_fits_shock
 
-USE_CACHE = False  # Set to True to use pre-saved pickle files, False to run again
+USE_CACHE = True  # Set to True to use pre-saved pickle files, False to run again
 
 
 def get_data():
@@ -168,7 +168,6 @@ def plot_patched_dimensional_fit_comparison(
         # 2) Solve Subsonic region exact profiles
         sol_sub = ablation_solver.heat_solver.solve(mass=mass_sub, time=t_actual)
         exact_sub_rho = sol_sub["density"][:-1]
-        print(exact_sub_rho[-10:])
         exact_sub_p = sol_sub["pressure"] / p_scale
         exact_sub_u = sol_sub["velocity"] / u_scale
         exact_sub_T = sol_sub["temperature"]

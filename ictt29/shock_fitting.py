@@ -71,7 +71,7 @@ from project3_code.menahem_new.piston_shock_og import PistonShock
 USE_CACHE = True 
 
 Y_FIT_MIN = 0.1   # Configure the lower bound for fitting Temperature T
-FITTING_OPTION = "FIT_RHO_AROUND_FRONT"  # Literal["FIT_TEMP_AROUND_FRONT", "FIT_RHO_AROUND_FRONT", "FIT_RHO_ALL_AROUND"]
+FITTING_OPTION = "FIT_RHO_AROUND_PISTON"  # Literal["FIT_TEMP_AROUND_PISTON", "FIT_RHO_AROUND_PISTON", "FIT_RHO_ALL_AROUND"]
 
 def get_cached_shock_solver(case, case_label):
     """Solve shock similarity ODEs once and cache the solver object (with found xsi_s)."""
@@ -171,7 +171,7 @@ def perform_shock_fitting(solver):
     rho_0 = rho_valid[0]
     
     # Define candidates and mask based on FITTING_OPTION
-    if FITTING_OPTION == "FIT_TEMP_AROUND_FRONT":
+    if FITTING_OPTION == "FIT_TEMP_AROUND_PISTON":
         def fit_cand_1(y, a):
             return Ts + (T_0 - Ts) * (1.0 - y)**a
             
@@ -198,7 +198,7 @@ def perform_shock_fitting(solver):
         fit_mask_T = y_valid >= Y_FIT_MIN
         y_fit_data = T_valid[fit_mask_T]
         
-    else: # FIT_RHO_AROUND_FRONT or FIT_RHO_ALL_AROUND
+    else: # FIT_RHO_AROUND_PISTON or FIT_RHO_ALL_AROUND
         def fit_cand_1(y, a):
             return rho_s + (rho_0 - rho_s) * (1.0 - y)**a
             
@@ -222,7 +222,7 @@ def perform_shock_fitting(solver):
             {"id": 5, "func": fit_cand_5, "name": "Rational Power Law (BC)", "latex": r"\rho(y) \approx \rho_s + (\rho_0-\rho_s)\frac{(1-y)^{%.5f}}{1+%.5f y}", "p0": [1.0, 0.1]}
         ]
         
-        if FITTING_OPTION == "FIT_RHO_AROUND_FRONT":
+        if FITTING_OPTION == "FIT_RHO_AROUND_PISTON":
             fit_mask_T = y_valid >= Y_FIT_MIN
         else: # FIT_RHO_ALL_AROUND
             fit_mask_T = np.ones_like(y_valid, dtype=bool)
@@ -239,13 +239,13 @@ def perform_shock_fitting(solver):
             fit_val = cand["func"](y_valid, *popt)
             
             # Derive derived Temperature or Density for error computation
-            if FITTING_OPTION == "FIT_TEMP_AROUND_FRONT":
+            if FITTING_OPTION == "FIT_TEMP_AROUND_PISTON":
                 T_fit = fit_val
                 rho_fit = (P_fit / (6730.0 * solver.r * T_fit**1.6))**(1.0/1.14)
             elif FITTING_OPTION == "FIT_RHO_ALL_AROUND":
                 rho_fit = fit_val
                 T_fit = (P_fit / (6730.0 * solver.r * rho_fit**0.86))**(1.0/1.6)
-            else: # FIT_RHO_AROUND_FRONT
+            else: # FIT_RHO_AROUND_PISTON
                 rho_fit_high = fit_val[fit_mask_T]
                 T_fit_high = (P_fit[fit_mask_T] / (6730.0 * solver.r * rho_fit_high**0.86))**(1.0/1.6)
                 T_fit = np.zeros_like(y_valid)
@@ -260,7 +260,7 @@ def perform_shock_fitting(solver):
             max_err = np.max(rel_err_T)
             
             # Format the latex_str
-            if FITTING_OPTION == "FIT_TEMP_AROUND_FRONT":
+            if FITTING_OPTION == "FIT_TEMP_AROUND_PISTON":
                 if cand["id"] == 1:
                     latex_str = r"T(y) \approx T_s + (T_0-T_s)(1-y)^{%.5f}" % tuple(popt)
                 elif cand["id"] == 2:
@@ -381,10 +381,10 @@ def perform_shock_fitting(solver):
                 rho_fit_low_cand = fit_rho_around_zero(y_valid[low_mask], *popt_rho_low_cand)
                 T_fit_low_cand = (P_fit[low_mask] / (6730.0 * solver.r * rho_fit_low_cand**0.86))**(1.0/1.6)
                 
-                if FITTING_OPTION == "FIT_TEMP_AROUND_FRONT":
+                if FITTING_OPTION == "FIT_TEMP_AROUND_PISTON":
                     T_fit_high_cand = fit_val_cand[high_mask]
                     rho_fit_high_cand = (P_fit[high_mask] / (6730.0 * solver.r * T_fit_high_cand**1.6))**(1.0/0.86)
-                else: # FIT_RHO_AROUND_FRONT
+                else: # FIT_RHO_AROUND_PISTON
                     rho_fit_high_cand = fit_val_cand[high_mask]
                     T_fit_high_cand = (P_fit[high_mask] / (6730.0 * solver.r * rho_fit_high_cand**0.86))**(1.0/1.6)
                     
@@ -475,10 +475,10 @@ def fit_by_params(y, params):
         # High domain (y >= Y_FIT_MIN)
         if np.any(high_mask):
             fit_val_high = best_T["func"](y_clipped[high_mask], *best_T["popt"])
-            if FITTING_OPTION == "FIT_TEMP_AROUND_FRONT":
+            if FITTING_OPTION == "FIT_TEMP_AROUND_PISTON":
                 T_fit[high_mask] = fit_val_high
                 rho_fit[high_mask] = (P_fit[high_mask] / (6730.0 * solver.r * T_fit[high_mask]**1.6))**(1.0/0.86)
-            else: # FIT_RHO_AROUND_FRONT
+            else: # FIT_RHO_AROUND_PISTON
                 rho_fit[high_mask] = fit_val_high
                 T_fit[high_mask] = (P_fit[high_mask] / (6730.0 * solver.r * rho_fit[high_mask]**0.86))**(1.0/1.6)
                 

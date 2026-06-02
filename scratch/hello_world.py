@@ -1,2 +1,2 @@
-# Hello World script
-print("Hello, World!")
+# Dynamic admission hello world
+print("Hello from the sandboxed environment!")

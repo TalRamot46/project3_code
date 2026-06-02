@@ -529,8 +529,7 @@ def plot_dimensional_fit_comparison(history, solver, params, material_hydro_path
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     
     target_times = [1.0e-9, 1.5e-9, 2.0e-9]
-    plasma = plt.get_cmap("plasma")
-    sim_colors = [plasma(v) for v in np.linspace(0, 1, len(target_times))]
+    sim_colors = ["royalblue", "darkorange", "crimson"]
     
     ax_rho = axes[0, 0]
     ax_p = axes[0, 1]
@@ -580,27 +579,27 @@ def plot_dimensional_fit_comparison(history, solver, params, material_hydro_path
         # Plot Density
         ax_rho.plot(m_sim_shock * 1e3, sim_rho, '-', color=sim_color, markersize=3, alpha=0.7, label=f"Simulation ({t_target*1e9:.1f} ns)" if show_label else None)
         ax_rho.plot(mass_solver * 1e3, exact_rho, '--', color='black', lw=2.0, label="Exact Solver" if show_label else None)
-        ax_rho.plot(mass_solver * 1e3, fit_rho, '.', color='green', lw=0.5, alpha=0.5, label="Analytic Fit" if show_label else None)
+        ax_rho.plot(mass_solver * 1e3, fit_rho, '.', color='forestgreen', lw=0.5, alpha=0.5, label="Analytic Fit" if show_label else None)
         
         # Plot Pressure
         ax_p.plot(m_sim_shock * 1e3, sim_p / p_scale, '-', color=sim_color, markersize=3, alpha=0.7)
         ax_p.plot(mass_solver * 1e3, exact_p / p_scale, '--', color='black', lw=2.0)
-        ax_p.plot(mass_solver * 1e3, fit_p / p_scale, '.', color='green', lw=0.5, alpha=0.5)
+        ax_p.plot(mass_solver * 1e3, fit_p / p_scale, '.', color='forestgreen', lw=0.5, alpha=0.5)
         
         # Plot Velocity
         ax_u.plot(m_sim_shock * 1e3, sim_u / u_scale, '-', color=sim_color, markersize=3, alpha=0.7)
         ax_u.plot(mass_solver * 1e3, exact_u / u_scale, '--', color='black', lw=2.0)
-        ax_u.plot(mass_solver * 1e3, fit_u / u_scale, '.', color='green', lw=0.5, alpha=0.5)
+        ax_u.plot(mass_solver * 1e3, fit_u / u_scale, '.', color='forestgreen', lw=0.5, alpha=0.5)
         
         # Plot Temperature
         ax_T.plot(m_sim_shock * 1e3, sim_T / T_scale, '-', color=sim_color, markersize=3, alpha=0.7)
         ax_T.plot(mass_solver * 1e3, exact_T / T_scale, '--', color='black', lw=2.0)
-        ax_T.plot(mass_solver * 1e3, fit_T / T_scale, '.', color='green', lw=0.5, alpha=0.5)
+        ax_T.plot(mass_solver * 1e3, fit_T / T_scale, '.', color='forestgreen', lw=0.5, alpha=0.5)
         
         # Temperature inset near origin
         axins_T.plot(m_sim_shock * 1e3, sim_T / T_scale, '-', color=sim_color, markersize=2, alpha=0.7)
         axins_T.plot(mass_solver * 1e3, exact_T / T_scale, '--', color='black', lw=1.5)
-        axins_T.plot(mass_solver * 1e3, fit_T / T_scale, '.', color='green', markersize=1, alpha=0.5)
+        axins_T.plot(mass_solver * 1e3, fit_T / T_scale, '.', color='forestgreen', markersize=1, alpha=0.5)
         
     # Build time legend entries using plasma colors
     time_handles = [
@@ -617,15 +616,15 @@ def plot_dimensional_fit_comparison(history, solver, params, material_hydro_path
         if j == 0:
             style_handles = [
                 Line2D([0], [0], color='black', lw=2, linestyle='--', label='Exact Solver'),
-                Line2D([0], [0], color='green', lw=2, linestyle='--', label='Analytic Fit'),
+                Line2D([0], [0], color='forestgreen', lw=2, linestyle='--', label='Analytic Fit'),
             ]
             ax.legend(handles=time_handles + style_handles, loc="upper left")
             
     # Style temperature inset — zoom to first 20% of the mass range at the latest time
     last_m_s = solver.xsi_s / solver.xsi_over_m(time=target_times[-1])
-    zoom_m_max = 0.05 * last_m_s * 1e3  # 20% of smallest shock-front mass, in mg/cm^2
+    zoom_m_max = 0.25 * last_m_s * 1e3  # 25% of smallest shock-front mass, in mg/cm^2
     axins_T.set_xlim(0, zoom_m_max)
-    axins_T.set_ylim(0, 1e6 / T_scale)
+    axins_T.set_ylim(0, 1.15)
     axins_T.grid(True, alpha=0.3)
     axins_T.set_title("Zoom near piston", fontsize=9)
     axins_T.tick_params(labelsize=8)

@@ -239,6 +239,26 @@ def main():
     avg_U_s, max_U_s = best_u_shock["avg_err"], best_u_shock["max_err"]
     avg_rho_s, max_rho_s = np.mean(err_rho_s), np.max(err_rho_s)
     
+    # 3c. EULERIAN COORDINATE TRANSFORMATION CALCULATIONS
+    m_f_val = solver_heat.ablated_mass(time=t_ns_h)
+    pos_scale_s = solver_shock._position_temporal_factor(time=t_ns_h)
+    q1_s = 1.0 - solver_shock.omega
+    q2_s = (2.0 - solver_shock.omega) / (solver_shock.tau + 2.0)
+    
+    x_p_fit_val = pos_scale_s * q2_s * solver_shock.U0
+    
+    xsi_mf_val = m_f_val * solver_shock.xsi_over_m(time=t_ns_h)
+    y_mf_val = xsi_mf_val / solver_shock.xsi_s
+    
+    _, _, U_fit_sh_mf_val, rho_fit_sh_mf_val = shock_fitting.fit_by_params(np.array([y_mf_val]), params_shock)
+    V_fit_sh_mf_val = 1.0 / rho_fit_sh_mf_val[0]
+    
+    x_af_fit_val = pos_scale_s * (q1_s * xsi_mf_val * V_fit_sh_mf_val + q2_s * U_fit_sh_mf_val[0])
+    C_pos_val = solver_heat._position_temporal_factor(time=t_ns_h)
+    x_b_fit_val = solver_heat.boundary_position(time=t_ns_h) + x_af_fit_val
+    x_s_fit_val = solver_shock.shock_position(time=t_ns_h)
+    x_b_sub_coeff = C_pos_val * solver_heat.U0
+
     # 4. DYNAMIC LATEX GENERATION
     doc_dir = Path("c:/Users/TLP-001/Documents/GitHub/project3_docs/fitting")
     template_path = doc_dir / "piecewise_analytic_formulas_template.tex"
@@ -289,6 +309,22 @@ def main():
         if val < 0 or formatted.startswith("-"):
             if formatted.startswith("-"):
                 formatted = formatted[1:]
+            return f"- {formatted}"
+        else:
+            return f"+ {formatted}"
+
+    def fmt_signed_scientific(val, format_spec=".5e"):
+        formatted = f"{val:{format_spec}}"
+        is_neg = False
+        if val < 0 or formatted.startswith("-"):
+            is_neg = True
+            if formatted.startswith("-"):
+                formatted = formatted[1:]
+        if "e" in formatted:
+            base, exp = formatted.split("e")
+            exp = int(exp)
+            formatted = f"{base} \\times 10^{{{exp}}}"
+        if is_neg:
             return f"- {formatted}"
         else:
             return f"+ {formatted}"
@@ -408,6 +444,16 @@ def main():
     latex_content = latex_content.replace("__ERR_TH_MAX__", fmt_err(max_T_h))
     latex_content = latex_content.replace("__ERR_TS_AVG__", fmt_err(avg_T_s))
     latex_content = latex_content.replace("__ERR_TS_MAX__", fmt_err(max_T_s))
+    
+    # Eulerian transformations replacements
+    latex_content = latex_content.replace("__X_AF_1NS__", fmt_latex_scientific(x_af_fit_val))
+    latex_content = latex_content.replace("__C_POS_SCALE__", fmt_latex_scientific(C_pos_val))
+    latex_content = latex_content.replace("__POS_SCALE_S__", fmt_latex_scientific(pos_scale_s))
+    latex_content = latex_content.replace("__X_P_1NS__", fmt_latex_scientific(x_p_fit_val))
+    latex_content = latex_content.replace("__X_S_1NS__", fmt_latex_scientific(x_s_fit_val))
+    latex_content = latex_content.replace("__U0_SUB__", fmt_signed(solver_heat.U0))
+    latex_content = latex_content.replace("__U0_SHOCK__", fmt_signed(solver_shock.U0))
+    latex_content = latex_content.replace("__LEAD_XB_COEFF_SIGNED__", fmt_signed_scientific(x_b_sub_coeff))
     
     # Subsonic Temperature converted to Kelvin
     T0_kelvin = 1.0 * KELVIN_PER_HEV

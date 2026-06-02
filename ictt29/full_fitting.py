@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import sys
+sys.setrecursionlimit(10000)
 import pickle
 import time
 from pathlib import Path
@@ -68,10 +69,17 @@ def get_data():
         print(f"Loading cached simulation history and solver from {cache_path}...")
         try:
             import sys
-            import numpy.core
-            sys.modules['numpy._core'] = sys.modules.get('numpy.core')
-            sys.modules['numpy._core.numeric'] = sys.modules.get('numpy.core.numeric')
-            sys.modules['numpy._core.multiarray'] = sys.modules.get('numpy.core.multiarray')
+            import numpy
+            try:
+                import numpy._core
+                numpy.core = numpy._core
+                sys.modules['numpy.core'] = numpy._core
+                sys.modules['numpy.core.numeric'] = numpy._core.numeric
+                sys.modules['numpy.core.multiarray'] = numpy._core.multiarray
+            except ImportError:
+                sys.modules['numpy._core'] = sys.modules.get('numpy.core')
+                sys.modules['numpy._core.numeric'] = sys.modules.get('numpy.core.numeric')
+                sys.modules['numpy._core.multiarray'] = sys.modules.get('numpy.core.multiarray')
             with open(cache_path, "rb") as f:
                 data = pickle.load(f)
             solver = data["solver"]

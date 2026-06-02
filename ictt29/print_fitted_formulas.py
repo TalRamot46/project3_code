@@ -200,6 +200,45 @@ def main():
     T_scale_kelvin = ( (p_scale_barye * (v_scale_eos ** 0.86)) / (solver_shock.r * 6730.91) ) ** 0.625
     T_pow = (tau_s + 0.86 * (tau_s + 2.0) / 2.0) / 1.6
     
+    # 3b. COMPUTE ERROR MARGINS FOR SECTION 6
+    # Subsonic Errors
+    T_valid_h = params_heat["T_valid"]
+    P_valid_h = params_heat["P_valid"]
+    U_valid_h = params_heat["U_valid"]
+    y_valid_h = params_heat["y_valid"]
+    
+    T_fit_h, P_fit_h, U_fit_h, _ = sub_fitting.fit_by_params(y_valid_h, params_heat)
+    _, _, _, rho_fit_h = sub_fitting.fit_by_params(params_heat["y_rho"], params_heat)
+    
+    err_T_h = np.abs((T_fit_h - T_valid_h) / T_valid_h)
+    err_P_h = np.abs((P_fit_h - P_valid_h) / P_valid_h)
+    err_U_h = np.abs((U_fit_h - U_valid_h) / (U_valid_h + 1e-15))
+    err_rho_h = np.abs((rho_fit_h - params_heat["rho_valid"]) / params_heat["rho_valid"])
+    
+    avg_T_h, max_T_h = np.mean(err_T_h), np.max(err_T_h)
+    avg_P_h, max_P_h = np.mean(err_P_h), np.max(err_P_h)
+    avg_U_h, max_U_h = best_u_sub["avg_err"], best_u_sub["max_err"]
+    avg_rho_h, max_rho_h = np.mean(err_rho_h), np.max(err_rho_h)
+    
+    # Shock Errors
+    y_valid_s = params_shock["y_valid"]
+    T_valid_s = params_shock["T_valid"]
+    P_valid_s = params_shock["P_valid"]
+    U_valid_s = params_shock["U_valid"]
+    rho_valid_s = params_shock["rho_valid"]
+    
+    T_fit_s, P_fit_s, U_fit_s, rho_fit_s = shock_fitting.fit_by_params(y_valid_s, params_shock)
+    
+    err_T_s = np.abs((T_fit_s - T_valid_s) / T_valid_s)
+    err_P_s = np.abs((P_fit_s - P_valid_s) / P_valid_s)
+    err_U_s = np.abs((U_fit_s - U_valid_s) / (U_valid_s + 1e-15))
+    err_rho_s = np.abs((rho_fit_s - rho_valid_s) / rho_valid_s)
+    
+    avg_T_s, max_T_s = np.mean(err_T_s), np.max(err_T_s)
+    avg_P_s, max_P_s = np.mean(err_P_s), np.max(err_P_s)
+    avg_U_s, max_U_s = best_u_shock["avg_err"], best_u_shock["max_err"]
+    avg_rho_s, max_rho_s = np.mean(err_rho_s), np.max(err_rho_s)
+    
     # 4. DYNAMIC LATEX GENERATION
     doc_dir = Path("c:/Users/TLP-001/Documents/GitHub/project3_docs/fitting")
     template_path = doc_dir / "piecewise_analytic_formulas_template.tex"
@@ -244,49 +283,60 @@ def main():
     latex_content = latex_content.replace("__V_SCALE_H__", f"{v_scale_h:.5f}")
     latex_content = latex_content.replace("__LEAD_V_H__", f"{lead_coeff_v_h:.5f}")
     
+    # Custom formatter for signed coefficients to prevent + - double signs in LaTeX
+    def fmt_signed(val, format_spec=".5f"):
+        formatted = f"{val:{format_spec}}"
+        if val < 0 or formatted.startswith("-"):
+            if formatted.startswith("-"):
+                formatted = formatted[1:]
+            return f"- {formatted}"
+        else:
+            return f"+ {formatted}"
+
     # Subsonic Pressure Fit (Fit 4)
     latex_content = latex_content.replace("__PF_SUB__", f"{Pf_sub:.5f}")
-    latex_content = latex_content.replace("__A_P_SUB__", f"{a_P_sub:.5f}")
-    latex_content = latex_content.replace("__B_P_SUB__", f"{b_P_sub:.5f}")
-    latex_content = latex_content.replace("__E_P_SUB__", f"{e_P_sub:.5f}")
+    latex_content = latex_content.replace("__A_P_SUB_SIGNED__", fmt_signed(a_P_sub))
+    latex_content = latex_content.replace("__B_P_SUB_SIGNED__", fmt_signed(b_P_sub))
+    latex_content = latex_content.replace("__E_P_SUB_SIGNED__", fmt_signed(e_P_sub))
     latex_content = latex_content.replace("__C_P_SUB__", f"{c_P_sub:.5f}")
     latex_content = latex_content.replace("__CPD_P_SUB__", f"{cpd_P_sub:.5f}")
     latex_content = latex_content.replace("__CPDF_P_SUB__", f"{cpdf_P_sub:.5f}")
     latex_content = latex_content.replace("__P_SCALE_SUB__", f"{p_scale_h_mbar:.5f}")
     latex_content = latex_content.replace("__LEAD_PF_SUB__", f"{lead_pf_sub:.5f}")
-    latex_content = latex_content.replace("__LEAD_A_P_SUB__", f"{lead_a_p_sub:.5f}")
-    latex_content = latex_content.replace("__LEAD_B_P_SUB__", f"{lead_b_p_sub:.5f}")
-    latex_content = latex_content.replace("__LEAD_E_P_SUB__", f"{lead_e_p_sub:.5f}")
+    latex_content = latex_content.replace("__LEAD_A_P_SUB_SIGNED__", fmt_signed(lead_a_p_sub))
+    latex_content = latex_content.replace("__LEAD_B_P_SUB_SIGNED__", fmt_signed(lead_b_p_sub))
+    latex_content = latex_content.replace("__LEAD_E_P_SUB_SIGNED__", fmt_signed(lead_e_p_sub))
     
     # Subsonic Velocity Fit (Fit 12)
     latex_content = latex_content.replace("__U0_SUB__", f"{U0_sub:.5f}")
     latex_content = latex_content.replace("__UF_SUB__", f"{UF_sub:.5f}")
-    latex_content = latex_content.replace("__UA1_SUB__", f"{ua1:.5f}")
-    latex_content = latex_content.replace("__UA2_SUB__", f"{ua2:.5f}")
-    latex_content = latex_content.replace("__UA3_SUB__", f"{ua3:.5f}")
-    latex_content = latex_content.replace("__UA4_SUB__", f"{ua4:.5f}")
-    latex_content = latex_content.replace("__UB1_SUB__", f"{ub1:.5f}")
-    latex_content = latex_content.replace("__UB2_SUB__", f"{ub2:.5f}")
-    latex_content = latex_content.replace("__UB3_SUB__", f"{ub3:.5f}")
-    latex_content = latex_content.replace("__UB4_SUB__", f"{ub4:.5f}")
+    latex_content = latex_content.replace("__UA1_SUB_SIGNED__", fmt_signed(ua1))
+    latex_content = latex_content.replace("__UA2_SUB_SIGNED__", fmt_signed(ua2))
+    latex_content = latex_content.replace("__UA3_SUB_SIGNED__", fmt_signed(ua3))
+    latex_content = latex_content.replace("__UA4_SUB_SIGNED__", fmt_signed(ua4))
+    latex_content = latex_content.replace("__UB1_SUB_SIGNED__", fmt_signed(ub1))
+    latex_content = latex_content.replace("__UB2_SUB_SIGNED__", fmt_signed(ub2))
+    latex_content = latex_content.replace("__UB3_SUB_SIGNED__", fmt_signed(ub3))
+    latex_content = latex_content.replace("__UB4_SUB_SIGNED__", fmt_signed(ub4))
     latex_content = latex_content.replace("__UALPHA_SUB__", f"{ualpha:.5f}")
     latex_content = latex_content.replace("__UY0_SUB__", f"{uy0:.5f}")
     latex_content = latex_content.replace("__U_SCALE_SUB__", f"{u_scale_h_kms:.5f}")
     latex_content = latex_content.replace("__LEAD_U0_SUB__", f"{lead_u0_sub:.5f}")
     latex_content = latex_content.replace("__LEAD_UF_SUB__", f"{lead_uf_sub:.5f}")
-    latex_content = latex_content.replace("__LEAD_UA1_SUB__", f"{lead_ua1_sub:.5f}")
-    latex_content = latex_content.replace("__LEAD_UA2_SUB__", f"{lead_ua2_sub:.5f}")
-    latex_content = latex_content.replace("__LEAD_UA3_SUB__", f"{lead_ua3_sub:.5f}")
-    latex_content = latex_content.replace("__LEAD_UA4_SUB__", f"{lead_ua4_sub:.5f}")
-    latex_content = latex_content.replace("__LEAD_UB1_SUB__", f"{lead_ub1_sub:.5f}")
-    latex_content = latex_content.replace("__LEAD_UB2_SUB__", f"{lead_ub2_sub:.5f}")
-    latex_content = latex_content.replace("__LEAD_UB3_SUB__", f"{lead_ub3_sub:.5f}")
-    latex_content = latex_content.replace("__LEAD_UB4_SUB__", f"{lead_ub4_sub:.5f}")
+    latex_content = latex_content.replace("__LEAD_UA1_SUB_SIGNED__", fmt_signed(lead_ua1_sub))
+    latex_content = latex_content.replace("__LEAD_UA2_SUB_SIGNED__", fmt_signed(lead_ua2_sub))
+    latex_content = latex_content.replace("__LEAD_UA3_SUB_SIGNED__", fmt_signed(lead_ua3_sub))
+    latex_content = latex_content.replace("__LEAD_UA4_SUB_SIGNED__", fmt_signed(lead_ua4_sub))
+    latex_content = latex_content.replace("__LEAD_UB1_SUB_SIGNED__", fmt_signed(lead_ub1_sub))
+    latex_content = latex_content.replace("__LEAD_UB2_SUB_SIGNED__", fmt_signed(lead_ub2_sub))
+    latex_content = latex_content.replace("__LEAD_UB3_SUB_SIGNED__", fmt_signed(lead_ub3_sub))
+    latex_content = latex_content.replace("__LEAD_UB4_SUB_SIGNED__", fmt_signed(lead_ub4_sub))
     
     # Subsonic Temperature & Density EOS formulas
     latex_content = latex_content.replace("__R_T_SUB__", f"{R_val:.5f}")
     latex_content = latex_content.replace("__DENOM_T__", f"{denom_T:.5f}")
     latex_content = latex_content.replace("__LEAD_RHO_SCALE_H__", f"{lead_rho_scale_h:.5f}")
+    latex_content = latex_content.replace("__RHO_SCALE_SUB__", f"{rho_scale_h:.5f}")
     latex_content = latex_content.replace("__POWER_RHO_T_NUMER__", power_rho_t_numer)
     latex_content = latex_content.replace("__POWER_RHO_OUT__", power_rho_out)
     
@@ -294,15 +344,17 @@ def main():
     latex_content = latex_content.replace("__PS_SHOCK__", f"{Ps_shock:.5f}")
     latex_content = latex_content.replace("__D_P_SHOCK__", f"{dP_shock:.5f}")
     latex_content = latex_content.replace("__P_SCALE_SHOCK__", f"{p_scale_s_mbar:.5f}")
-    latex_content = latex_content.replace("__LEAD_P_DIFF_SHOCK__", f"{lead_coeff_p_diff_s:.5f}")
+    latex_content = latex_content.replace("__P_DIFF_COEFF_S_SIGNED__", fmt_signed(lead_p_diff))
+    latex_content = latex_content.replace("__LEAD_P_DIFF_SHOCK_SIGNED__", fmt_signed(lead_coeff_p_diff_s))
+    latex_content = latex_content.replace("__RHO_0_CGS__", f"{solver_shock.rho0:.5f}")
     
     # Shock Velocity Fit (Fit 3)
     latex_content = latex_content.replace("__CU_SHOCK__", f"{cu_shock:.5f}")
-    latex_content = latex_content.replace("__AU_SHOCK__", f"{au_shock:.5f}")
     latex_content = latex_content.replace("__BU_SHOCK__", f"{bu_shock:.5f}")
     latex_content = latex_content.replace("__U_SCALE_SHOCK__", f"{u_scale_s_kms:.5f}")
     latex_content = latex_content.replace("__LEAD_CU_SHOCK__", f"{lead_cu_shock:.5f}")
-    latex_content = latex_content.replace("__LEAD_AU_SHOCK__", f"{lead_au_shock:.5f}")
+    latex_content = latex_content.replace("__AU_SHOCK_NEG_SIGNED__", fmt_signed(-au_shock))
+    latex_content = latex_content.replace("__LEAD_AU_SHOCK_NEG_SIGNED__", fmt_signed(-lead_au_shock))
     
     # Shock Density (piecewise)
     latex_content = latex_content.replace("__RHO0_SHOCK__", f"{rho_0_shock:.5f}")
@@ -312,12 +364,54 @@ def main():
     
     # Shock Temperature Fit (piecewise high domain Fit 2)
     latex_content = latex_content.replace("__TS_SHOCK__", f"{Ts_shock:.5f}")
-    latex_content = latex_content.replace("__C1_T_HIGH__", f"{c1_t:.5f}")
-    latex_content = latex_content.replace("__C2_T_HIGH__", f"{c2_t:.5f}")
+    latex_content = latex_content.replace("__C1_T_HIGH_SIGNED__", fmt_signed(c1_t))
+    latex_content = latex_content.replace("__C2_T_HIGH_SIGNED__", fmt_signed(c2_t))
     latex_content = latex_content.replace("__A_T_HIGH__", f"{a_t:.5f}")
     latex_content = latex_content.replace("__B_T_HIGH__", f"{b_t:.5f}")
     latex_content = latex_content.replace("__T_SCALE_KELVIN_SHOCK__", f"{T_scale_kelvin:.5f}")
     latex_content = latex_content.replace("__T_POW_SHOCK__", f"{T_pow:.5f}")
+    
+    # Helper to format values in scientific notation for LaTeX
+    def fmt_latex_scientific(val, format_spec=".5e"):
+        formatted = f"{val:{format_spec}}"
+        if "e" in formatted:
+            base, exp = formatted.split("e")
+            exp = int(exp)
+            return f"{base} \\times 10^{{{exp}}}"
+        return formatted
+
+    # Helper to format error margins as percentages
+    def fmt_err(val):
+        pct = val * 100.0
+        if pct < 1e-2 and pct > 0:
+            return f"{pct:.3e}"
+        else:
+            return f"{pct:.3f}"
+
+    # Error values replacements for Section 6
+    latex_content = latex_content.replace("__ERR_UH_AVG__", fmt_err(avg_U_h))
+    latex_content = latex_content.replace("__ERR_UH_MAX__", fmt_err(max_U_h))
+    latex_content = latex_content.replace("__ERR_US_AVG__", fmt_err(avg_U_s))
+    latex_content = latex_content.replace("__ERR_US_MAX__", fmt_err(max_U_s))
+    
+    latex_content = latex_content.replace("__ERR_PH_AVG__", fmt_err(avg_P_h))
+    latex_content = latex_content.replace("__ERR_PH_MAX__", fmt_err(max_P_h))
+    latex_content = latex_content.replace("__ERR_PS_AVG__", fmt_err(avg_P_s))
+    latex_content = latex_content.replace("__ERR_PS_MAX__", fmt_err(max_P_s))
+    
+    latex_content = latex_content.replace("__ERR_RHOH_AVG__", fmt_err(avg_rho_h))
+    latex_content = latex_content.replace("__ERR_RHOH_MAX__", fmt_err(max_rho_h))
+    latex_content = latex_content.replace("__ERR_RHOS_AVG__", fmt_err(avg_rho_s))
+    latex_content = latex_content.replace("__ERR_RHOS_MAX__", fmt_err(max_rho_s))
+    
+    latex_content = latex_content.replace("__ERR_TH_AVG__", fmt_err(avg_T_h))
+    latex_content = latex_content.replace("__ERR_TH_MAX__", fmt_err(max_T_h))
+    latex_content = latex_content.replace("__ERR_TS_AVG__", fmt_err(avg_T_s))
+    latex_content = latex_content.replace("__ERR_TS_MAX__", fmt_err(max_T_s))
+    
+    # Subsonic Temperature converted to Kelvin
+    T0_kelvin = 1.0 * KELVIN_PER_HEV
+    latex_content = latex_content.replace("__T0_KELVIN__", fmt_latex_scientific(T0_kelvin))
     
     # Target file paths
     tex_path = doc_dir / "piecewise_analytic_formulas.tex"

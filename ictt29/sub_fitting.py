@@ -496,7 +496,7 @@ def perform_subsonic_fitting(solver):
             print(f"  Candidate {cand['id']} ({cand['name']}): Avg Err: {avg_err:.3e}, Max Err: {max_err:.3e}")
             fits_u[cand["id"]] = (popt, U_fit, avg_err, max_err, cand["name"], cand["latex"])
             
-            if avg_err < min_avg_err:
+            if avg_err < min_avg_err and cand["id"] != 16:
                 min_avg_err = avg_err
                 best_u = {
                     "id": cand["id"],
@@ -840,7 +840,7 @@ def plot_standalone_velocity_fits(params, standalone_path, case_title):
     best_u = params["best_u"]
     
     fig_sa, (ax_sa1, ax_sa2) = plt.subplots(1, 2, figsize=(18, 8.5))
-    
+
     # Evaluate errors on the full y_valid coordinate range (unmasked)
     y_bulk = y_valid
     
@@ -864,7 +864,19 @@ def plot_standalone_velocity_fits(params, standalone_path, case_title):
             # Right: Semi-log Error curves (using absolute relative errors)
             err_curve = np.abs((U_fit - U_valid) / (U_valid + 1e-15))
             ax_sa2.plot(y_bulk, err_curve, colors_u[i], label=f"Fit {i} (Avg: {avg_err:.3e})", lw=lw)
+    
+    # for i in [16]:
+    #     style = '--' if i == best_u["id"] else '-' 
+    #     popt, U_fit, avg_err, max_err, name, latex = fits_u[i]
+    #     if popt is not None:
+    #         lbl = f"Fit {i}: {name}\nAvg Err: {avg_err:.3e}, Max Err: {max_err:.3e}"
+    #         lw = 2.2 if i == best_u["id"] else 2.2
+    #         ax_sa1.plot(y_valid, U_fit, colors_u[i], linestyle=style, label=lbl, lw=lw)
             
+    #         # Right: Semi-log Error curves (using absolute relative errors)
+    #         err_curve = np.abs((U_fit - U_valid) / (U_valid + 1e-15))
+    #         ax_sa2.plot(y_bulk, err_curve, colors_u[i], label=f"Fit {i} (Avg: {avg_err:.3e})", lw=lw)
+
     ax_sa1.set_xlabel(r"Normalized coordinate $y = \xi / \xi_f$", fontsize=12)
     ax_sa1.set_ylabel(r"Velocity $U(y)$ [dimensionless]", fontsize=12)
     ax_sa1.legend(loc='best', fontsize=8.0, ncol=2)

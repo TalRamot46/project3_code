@@ -594,6 +594,10 @@ def plot_dimensional_fit_comparison(history, solver, case, params, dimensional_f
     ax_u = axes[1, 0]
     ax_T = axes[1, 1]
     
+    p_scale = 1e12
+    u_scale = 1e5
+    T_scale = 1.160451812e6
+    
     for i, (t_target, sim_color) in enumerate(zip(target_times, sim_colors)):
         # 1) Simulation
         idx_sim = np.argmin(np.abs(np.array(history.t) - t_target))
@@ -647,19 +651,19 @@ def plot_dimensional_fit_comparison(history, solver, case, params, dimensional_f
         # axins.plot(mass_fit_rho[sol_zoom_mask_fit] * 1e3, fit_rho[sol_zoom_mask_fit], '--', color='green', lw=1.2)
         
         # Plot Pressure
-        ax_p.plot(m_sim_sub * 1e3, sim_p, '-', color=sim_color, markersize=3, alpha=0.7)
-        ax_p.plot(mass_solver * 1e3, exact_p, '--', color='black', lw=2.0)
-        ax_p.plot(mass_solver * 1e3, fit_p, '.', color='green', lw=0.5, alpha=0.3)
+        ax_p.plot(m_sim_sub * 1e3, sim_p / p_scale, '-', color=sim_color, markersize=3, alpha=0.7)
+        ax_p.plot(mass_solver * 1e3, exact_p / p_scale, '--', color='black', lw=2.0)
+        ax_p.plot(mass_solver * 1e3, fit_p / p_scale, '.', color='green', lw=0.5, alpha=0.3)
         
         # Plot Velocity
-        ax_u.plot(m_sim_sub * 1e3, sim_u, '-', color=sim_color, markersize=3, alpha=0.7)
-        ax_u.plot(mass_solver * 1e3, exact_u, '--', color='black', lw=2.0)
-        ax_u.plot(mass_solver * 1e3, fit_u, '.', color='green', lw=0.5, alpha=0.3)
+        ax_u.plot(m_sim_sub * 1e3, sim_u / u_scale, '-', color=sim_color, markersize=3, alpha=0.7)
+        ax_u.plot(mass_solver * 1e3, exact_u / u_scale, '--', color='black', lw=2.0)
+        ax_u.plot(mass_solver * 1e3, fit_u / u_scale, '.', color='green', lw=0.5, alpha=0.3)
         
         # Plot Temperature
-        ax_T.plot(m_sim_sub * 1e3, sim_T, '-', color=sim_color, markersize=3, alpha=0.7)
-        ax_T.plot(mass_solver * 1e3, exact_T, '--', color='black', lw=2.0)
-        ax_T.plot(mass_solver * 1e3, fit_T, '.', color='green', lw=0.5, alpha=0.3)
+        ax_T.plot(m_sim_sub * 1e3, sim_T / T_scale, '-', color=sim_color, markersize=3, alpha=0.7)
+        ax_T.plot(mass_solver * 1e3, exact_T / T_scale, '--', color='black', lw=2.0)
+        ax_T.plot(mass_solver * 1e3, fit_T / T_scale, '.', color='green', lw=0.5, alpha=0.3)
 
     # Build time legend entries using plasma colors
     time_handles = [

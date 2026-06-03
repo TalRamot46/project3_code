@@ -51,7 +51,7 @@ from project3_code.rad_hydro_sim.verification.menahem_comparison import (
 )
 from project3_code.rad_hydro_sim.simulation.radiation_step import KELVIN_PER_HEV
 
-from ablation_solver import AblationSolver
+from ablation_solver_og import AblationSolver
 
 
 # =============================================================================
@@ -196,7 +196,7 @@ def plot_xt_trajectories(history, case, xt_path, case_title, ablation_solver=Non
     ax.set_title(f"Space-Time (xt) Trajectories and Fronts\n{case_title}", fontsize=13, fontweight='bold')
     ax.grid(True, alpha=0.25)
     ax.legend(loc="lower right", fontsize=9.5)
-    ax.set_ylim(0, 0.00016)
+    ax.set_ylim(0, 0.0016)
     
     fig.tight_layout()
     fig.savefig(xt_path, dpi=200)
@@ -220,8 +220,13 @@ def run_simulation_and_references(preset_name: str, case_label: str):
     if cache_path.exists():
         print(f"Loading cached simulation and reference data from {cache_path}...")
         try:
+            class CustomUnpickler(pickle.Unpickler):
+                def find_class(self, module, name):
+                    if 'numpy._core' in module:
+                        module = module.replace('numpy._core', 'numpy.core')
+                    return super().find_class(module, name)
             with open(cache_path, "rb") as f:
-                data = pickle.load(f)
+                data = CustomUnpickler(f).load()
             history = data["history"]
             shussman_ref = data["shussman_ref"]
             menahem_ref = data["menahem_ref"]
@@ -287,8 +292,20 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
         )
     else:
         print("Pickle file exists, loading simulation...")
-        with open(cache_path, "rb") as f:
-            data = pickle.load(f)
+        try:
+            class CustomUnpickler(pickle.Unpickler):
+                def find_class(self, module, name):
+                    if 'numpy._core' in module:
+                        module = module.replace('numpy._core', 'numpy.core')
+                    return super().find_class(module, name)
+            with open(cache_path, "rb") as f:
+                data = CustomUnpickler(f).load()
+        except Exception as e:
+            print(f"Failed to load cache: {e}. Re-running simulation...")
+            case, history, shussman_ref, menahem_ref, ablation_solver = run_simulation_and_references(
+                preset_name, case_label
+            )
+            data = {"case": case, "history": history, "ablation_solver": ablation_solver}
         case = data.get("case")
         if case is None:
             case, _ = get_preset(preset_name)

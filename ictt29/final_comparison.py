@@ -41,7 +41,7 @@ from project3_code.rad_hydro_sim.verification.menahem_comparison import (
     _ablation_kwargs_from_case,
     _build_mass_grid,
 )
-from ablation_solver import AblationSolver
+from ablation_solver_og import AblationSolver
 
 def _get_equally_spaced_elements(times: np.ndarray, n: int) -> np.ndarray:
     ideal_times = np.linspace(times.min(), times.max(), n)
@@ -151,8 +151,13 @@ def get_data():
     if cache_path.exists():
         print(f"--> Loading cached simulation history from {cache_path}...")
         try:
+            class CustomUnpickler(pickle.Unpickler):
+                def find_class(self, module, name):
+                    if 'numpy._core' in module:
+                        module = module.replace('numpy._core', 'numpy.core')
+                    return super().find_class(module, name)
             with open(cache_path, "rb") as f:
-                data = pickle.load(f)
+                data = CustomUnpickler(f).load()
             history = data["history"]
             print("--> Simulation cache loaded successfully.")
         except Exception as e:

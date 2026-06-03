@@ -1,4 +1,4 @@
-# ictt29/full_fitting_eulerian.py
+# ictt_other_presets/full_fitting_eulerian.py
 """
 Unified patched ablation and shock fitting verification script in Eulerian coordinates.
 
@@ -6,11 +6,6 @@ Combines:
 1. 1D Rad-Hydro Simulation (cell boundaries mapped to cell-center positions).
 2. AblationSolver patched reference solver (heat wave + piston shock) in Eulerian frame.
 3. Patched self-similar analytical fits dynamically mapped to Eulerian coordinate.
-
-Produces three comparison plots:
-1. fig_8_patched_fit_comparison_eulerian.png: individual subsonic (solid) and shock (dashed) overlays in Eulerian coordinates.
-2. fig_8_fully_patched_comparison_eulerian.png: fully patched, seamless profiles in Eulerian coordinates.
-3. fig_8_front_trajectories_eulerian.png: time-dependent trajectories of the ablation boundary, shock piston, and shock front.
 """
 from __future__ import annotations
 
@@ -36,13 +31,14 @@ _MENAHEM_DIR = _REPO_ROOT / "menahem_new"
 if str(_MENAHEM_DIR) not in sys.path:
     sys.path.insert(0, str(_MENAHEM_DIR))
 
-_ICTT29_DIR = Path(__file__).resolve().parent
-if str(_ICTT29_DIR) not in sys.path:
-    sys.path.insert(0, str(_ICTT29_DIR))
+_ICTT_OTHER_DIR = Path(__file__).resolve().parent
+if str(_ICTT_OTHER_DIR) not in sys.path:
+    sys.path.insert(0, str(_ICTT_OTHER_DIR))
 
 from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
 from project3_code.rad_hydro_sim.problems.presets_config import (
-    PRESET_FIG_8_CONSTANT_TEMPERATURE,
+    PRESET_FIG_9_CONSTANT_FLUX,
+    PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE,
 )
 from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
 from project3_code.rad_hydro_sim.simulation.radiation_step import KELVIN_PER_HEV
@@ -196,13 +192,13 @@ def calculate_patched_eulerian_positions_fit(mass_grid, t_actual, ablation_solve
 # Data Loading and Management
 # =============================================================================
 
-def get_data():
+def get_data(preset_name: str, case_label: str):
     """Run full simulation and build AblationSolver reference solver, or load from cache."""
-    cache_dir = Path("results/ictt/cache")
+    cache_dir = Path("results/ictt_other_presets/cache")
     cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_path = cache_dir / "full_fitting_cache.pkl"
+    cache_path = cache_dir / f"{case_label}_full_fitting_cache.pkl"
 
-    case, config = get_preset(PRESET_FIG_8_CONSTANT_TEMPERATURE)
+    case, config = get_preset(preset_name)
 
     if USE_CACHE and cache_path.exists():
         print(f"Loading cached simulation history and solver from {cache_path}...")
@@ -210,7 +206,15 @@ def get_data():
             class CustomUnpickler(pickle.Unpickler):
                 def find_class(self, module, name):
                     if 'numpy._core' in module:
-                        module = module.replace('numpy._core', 'numpy.core')
+                        try:
+                            return super().find_class(module, name)
+                        except (ModuleNotFoundError, ImportError):
+                            module = module.replace('numpy._core', 'numpy.core')
+                    elif 'numpy.core' in module:
+                        try:
+                            return super().find_class(module, name)
+                        except (ModuleNotFoundError, ImportError):
+                            module = module.replace('numpy.core', 'numpy._core')
                     return super().find_class(module, name)
             with open(cache_path, "rb") as f:
                 data = CustomUnpickler(f).load()
@@ -234,11 +238,10 @@ def get_data():
     ablation_solver = AblationSolver(**_ablation_kwargs_from_case(case))
 
     cache_data = {"case": case, "history": history, "solver": ablation_solver}
-    print(f"Saving simulation cache to {cache_path}...")
+    # Detach un-picklable ODE solver components temporarily
+    heat_ode = getattr(ablation_solver.heat_solver, "ode_solver", None)
+    shock_ode = getattr(ablation_solver.shock_solver, "ode_solver", None)
     try:
-        # Detach un-picklable ODE solver components temporarily
-        heat_ode = getattr(ablation_solver.heat_solver, "ode_solver", None)
-        shock_ode = getattr(ablation_solver.shock_solver, "ode_solver", None)
         if hasattr(ablation_solver.heat_solver, "ode_solver"):
             del ablation_solver.heat_solver.ode_solver
         if hasattr(ablation_solver.shock_solver, "ode_solver"):
@@ -246,13 +249,13 @@ def get_data():
 
         with open(cache_path, "wb") as f:
             pickle.dump(cache_data, f, protocol=pickle.HIGHEST_PROTOCOL)
-
+    except Exception as e:
+        print(f"Failed to save simulation cache: {e}")
+    finally:
         if heat_ode is not None:
             ablation_solver.heat_solver.ode_solver = heat_ode
         if shock_ode is not None:
             ablation_solver.shock_solver.ode_solver = shock_ode
-    except Exception as e:
-        print(f"Failed to save simulation cache: {e}")
 
     return case, history, ablation_solver
 
@@ -307,7 +310,8 @@ def plot_patched_dimensional_fit_comparison_eulerian(
     print(f"Generating physical patched profiles comparison in Eulerian for {case_title}...")
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
 
-    target_times = [2.0e-9]
+    t_max = max(history.t)
+    target_times = [t_max]
     sim_colors = ["#1a5fb4"]
 
     ax_rho = axes[0, 0]
@@ -337,15 +341,13 @@ def plot_patched_dimensional_fit_comparison_eulerian(
         sim_u = history.u[idx_sim] / u_scale
         sim_T = history.T[idx_sim] / T_scale
 
-        # Determine fronts at this actual time
         m_f = hs.ablated_mass(time=t_actual)
         m_s = ss.shocked_mass(time=t_actual)
 
         # Define grids (natively sized 1000) with quadratic clustering near m=0
         mass_sub = 1e-12 + (m_f - 1e-12) * (np.linspace(0.0, 1.0, 1000) ** 2.0)
-        mass_shock = np.linspace(1e-12, m_sim[-1], 1000)
+        mass_shock = np.linspace(1e-12, max(m_sim[-1], 2.0 * m_f), 1000)
 
-        # 2) Solver exact subsonic & shock
         # Solve patched exact solver to get heat_position and front locations
         sol_exact = ablation_solver.solve(mass=mass_shock, time=t_actual)
         heat_position = sol_exact["heat_position"]
@@ -387,7 +389,7 @@ def plot_patched_dimensional_fit_comparison_eulerian(
         exact_shock_T = exact_shock_T_kelvin / T_scale
         exact_shock_x_um = sol_shock_absolute["position"] * 1e4
 
-        # 3) Analytical subsonic & shock fits
+        # Analytical subsonic & shock fits
         fits_sub = calculate_dimensional_fits_sub(mass_sub, t_actual, hs, sub_params)
         fit_sub_rho = fits_sub["density"]
         fit_sub_p = fits_sub["pressure"] / p_scale
@@ -406,13 +408,13 @@ def plot_patched_dimensional_fit_comparison_eulerian(
 
         show_label = i == 0
 
-        # Plot Simulation (entire domain) - Blue
+        # Plot Simulation (entire domain)
         ax_rho.plot(x_sim_center_um, sim_rho, '-', color='#1a5fb4', lw=2.2)
         ax_p.plot(x_sim_center_um, sim_p, '-', color='#1a5fb4', lw=2.2)
         ax_u.plot(x_sim_center_um, sim_u, '-', color='#1a5fb4', lw=2.2)
         ax_T.plot(x_sim_center_um, sim_T, '-', color='#1a5fb4', lw=2.2)
 
-        # Plot Subsonic exact solutions (solid black)
+        # Plot Subsonic exact (solid black)
         ax_rho.plot(exact_sub_x_um, exact_sub_rho, '-', color='#333333', lw=2.0)
         ax_p.plot(exact_sub_x_um, exact_sub_p, '-', color='#333333', lw=2.0)
         ax_u.plot(exact_sub_x_um, exact_sub_u, '-', color='#333333', lw=2.0)
@@ -424,7 +426,7 @@ def plot_patched_dimensional_fit_comparison_eulerian(
         ax_u.plot(fit_sub_x_um, fit_sub_u, ':', color='#26a269', lw=2.0)
         ax_T.plot(fit_sub_x_um, fit_sub_T, ':', color='#26a269', lw=2.0)
 
-        # Plot Shock exact solutions (dashed black)
+        # Plot Shock exact (dashed black)
         ax_rho.plot(exact_shock_x_um, exact_shock_rho, '--', color='#333333', lw=1.8)
         ax_p.plot(exact_shock_x_um, exact_shock_p, '--', color='#333333', lw=1.8)
         ax_u.plot(exact_shock_x_um, exact_shock_u, '--', color='#333333', lw=1.8)
@@ -456,12 +458,11 @@ def plot_patched_dimensional_fit_comparison_eulerian(
         # Simulation fronts
         dx_sim = x_sim_center_um[1] - x_sim_center_um[0]
         x_b_sim = x_sim_center_um[0] - 0.5 * dx_sim
-        # Detect simulation shock
         rhok_smooth = _rolling_mean(sim_rho, 5)
         ishock, _ = find_shock_front(rhok_smooth, m_sim, rho_unshocked=float(case.rho0), gamma=float(case.r) + 1.0)
         x_s_sim = x_sim_center_um[ishock] if ishock >= 1 else np.nan
 
-        # Draw vertical lines for the fronts on all subplots with matching styles
+        # Draw vertical lines for the fronts on all subplots
         for ax in [ax_rho, ax_p, ax_u, ax_T]:
             # Ablation boundary
             ax.axvline(x=x_b_sim, color='#1a5fb4', linestyle='-', lw=1.2, alpha=0.6)
@@ -480,7 +481,7 @@ def plot_patched_dimensional_fit_comparison_eulerian(
 
     # Build clear style/front legend entries
     legend_handles = [
-        Line2D([0], [0], color='#1a5fb4', lw=2.5, linestyle='-', label='Simulation (2.0 ns)'),
+        Line2D([0], [0], color='#1a5fb4', lw=2.5, linestyle='-', label=f'Simulation ({t_target*1e9:.3f} ns)'),
         Line2D([0], [0], color='#333333', lw=2.0, linestyle='-', label='Subsonic Solver'),
         Line2D([0], [0], color='#26a269', lw=2.0, linestyle=':', label='Subsonic Fit'),
         Line2D([0], [0], color='#333333', lw=1.8, linestyle='--', label='Shock Solver'),
@@ -491,7 +492,6 @@ def plot_patched_dimensional_fit_comparison_eulerian(
     ]
     ax_rho.legend(handles=legend_handles, loc="best", fontsize=9.5)
 
-    # Set y limits based on simulation bounds
     all_sim_rho = []
     all_sim_p = []
     all_sim_u = []
@@ -514,7 +514,6 @@ def plot_patched_dimensional_fit_comparison_eulerian(
     ax_u.set_ylim(min_sim_u * 1.15 - 5.0, max_sim_u + 10.0)
     ax_T.set_ylim(-0.05 * max_sim_T, max_sim_T * 1.15)
 
-    # Styling
     labels = ["Density [g/cm³]", "Pressure [MBar]", "Velocity [km/s]", "Temperature [HeV]"]
     for j, ax in enumerate([ax_rho, ax_p, ax_u, ax_T]):
         ax.grid(True, alpha=0.3)
@@ -544,7 +543,8 @@ def plot_fully_patched_comparison_eulerian(
     print(f"Generating physical fully patched comparison in Eulerian for {case_title}...")
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
 
-    target_times = [2.0e-9]
+    t_max = max(history.t)
+    target_times = [t_max]
     sim_colors = ["#1a5fb4"]
 
     ax_rho = axes[0, 0]
@@ -574,8 +574,9 @@ def plot_fully_patched_comparison_eulerian(
         sim_u = history.u[idx_sim] / u_scale
         sim_T = history.T[idx_sim] / T_scale
 
-        # Define grid quadratically clustered near m=0
-        mass_solver = 1e-12 + (m_sim[-1] - 1e-12) * (np.linspace(0.0, 1.0, 1000) ** 2.0)
+        m_f = hs.ablated_mass(time=t_actual)
+        m_max_val = max(m_sim[-1], 2.0 * m_f)
+        mass_solver = 1e-12 + (m_max_val - 1e-12) * (np.linspace(0.0, 1.0, 1000) ** 2.0)
 
         # Solve fully patched exact profiles from AblationSolver
         sol_exact = ablation_solver.solve(mass=mass_solver, time=t_actual)
@@ -615,7 +616,7 @@ def plot_fully_patched_comparison_eulerian(
 
         show_label = i == 0
 
-        # Plot Simulation (entire domain) - Blue
+        # Plot Simulation (entire domain)
         ax_rho.plot(x_sim_center_um, sim_rho, '-', color='#1a5fb4', lw=2.2)
         ax_p.plot(x_sim_center_um, sim_p, '-', color='#1a5fb4', lw=2.2)
         ax_u.plot(x_sim_center_um, sim_u, '-', color='#1a5fb4', lw=2.2)
@@ -633,7 +634,7 @@ def plot_fully_patched_comparison_eulerian(
         ax_u.plot(fit_x_um, fit_u, ':', color='#e67e22', lw=2.0)
         ax_T.plot(fit_x_um, fit_T, ':', color='#e67e22', lw=2.0)
 
-        # Front positions to plot as vertical lines
+        # Front positions
         heat_position = sol_exact["heat_position"]
         x_b_sol = (sol_exact["boundary_position"] + heat_position) * 1e4
         x_af_sol = heat_position * 1e4
@@ -658,7 +659,7 @@ def plot_fully_patched_comparison_eulerian(
         ishock, _ = find_shock_front(rhok_smooth, m_sim, rho_unshocked=float(case.rho0), gamma=float(case.r) + 1.0)
         x_s_sim = x_sim_center_um[ishock] if ishock >= 1 else np.nan
 
-        # Draw vertical lines for the fronts on all subplots with matching styles
+        # Draw vertical lines for the fronts on all subplots
         for ax in [ax_rho, ax_p, ax_u, ax_T]:
             # Ablation boundary
             ax.axvline(x=x_b_sim, color='#1a5fb4', linestyle='-', lw=1.2, alpha=0.6)
@@ -677,7 +678,7 @@ def plot_fully_patched_comparison_eulerian(
 
     # Build clear style/front legend entries
     legend_handles = [
-        Line2D([0], [0], color='#1a5fb4', lw=2.5, linestyle='-', label='Simulation (2.0 ns)'),
+        Line2D([0], [0], color='#1a5fb4', lw=2.5, linestyle='-', label=f'Simulation ({t_target*1e9:.3f} ns)'),
         Line2D([0], [0], color='#333333', lw=2.0, linestyle='-', label='Exact Patched Solver'),
         Line2D([0], [0], color='#e67e22', lw=2.0, linestyle=':', label='Patched Fit'),
         Line2D([0], [0], color='grey', lw=1.2, linestyle='-', label='Simulation Fronts'),
@@ -686,7 +687,6 @@ def plot_fully_patched_comparison_eulerian(
     ]
     ax_rho.legend(handles=legend_handles, loc="best", fontsize=9.5)
 
-    # Set y limits based on simulation bounds
     all_sim_rho = []
     all_sim_p = []
     all_sim_u = []
@@ -709,7 +709,6 @@ def plot_fully_patched_comparison_eulerian(
     ax_u.set_ylim(min_sim_u * 1.15 - 5.0, max_sim_u + 10.0)
     ax_T.set_ylim(-0.05 * max_sim_T, max_sim_T * 1.15)
 
-    # Styling
     labels = ["Density [g/cm³]", "Pressure [MBar]", "Velocity [km/s]", "Temperature [HeV]"]
     for j, ax in enumerate([ax_rho, ax_p, ax_u, ax_T]):
         ax.grid(True, alpha=0.3)
@@ -736,13 +735,11 @@ def plot_front_trajectories_eulerian(history, ablation_solver, sub_params, shock
     times = np.asarray(history.t, dtype=float)
     x_sim = np.asarray(history.x, dtype=float)
     
-    # Grid sizes
     n_cells = x_sim.shape[1] - 1
     mass_grid = _build_mass_grid(case, num_cells=n_cells)
     
     times_model = _get_equally_spaced_elements(times, 200)
     
-    # 1) Simulation shock position tracking
     x_shock_sim = np.full(times.size, np.nan, dtype=float)
     for k in range(1, times.size):
         rhok = np.asarray(history.rho[k], dtype=float)
@@ -758,19 +755,14 @@ def plot_front_trajectories_eulerian(history, ablation_solver, sub_params, shock
         if ishock >= 1:
             x_shock_sim[k] = float(x_sim[k, ishock]) * 1e4
             
-    # Apply rolling mean to clean up shock front detection noise slightly
     x_shock_sim = _rolling_mean(x_shock_sim, 3)
-    
-    # Simulation boundary position is just the first cell coordinate
     x_boundary_sim = x_sim[:, 0] * 1e4
     
-    # 2) Solver exact front tracking
     x_boundary_sol = np.zeros_like(times_model)
     x_piston_sol = np.zeros_like(times_model)
     x_ablation_front_sol = np.zeros_like(times_model)
     x_shock_sol = np.zeros_like(times_model)
     
-    # 3) Fit analytical front tracking
     x_boundary_fit = np.zeros_like(times_model)
     x_piston_fit = np.zeros_like(times_model)
     x_ablation_front_fit = np.zeros_like(times_model)
@@ -780,6 +772,10 @@ def plot_front_trajectories_eulerian(history, ablation_solver, sub_params, shock
     ss = ablation_solver.shock_solver
     q1 = 1.0 - ss.omega
     q2 = (2.0 - ss.omega) / (ss.tau + 2.0)
+    
+    m_f_max = hs.ablated_mass(time=times_model[-1])
+    m_max_val = max(mass_grid[-1], 2.0 * m_f_max)
+    mass_grid = mass_grid * (m_max_val / mass_grid[-1])
     
     for i, t in enumerate(times_model):
         t_val = max(float(t), 1e-18)
@@ -813,7 +809,6 @@ def plot_front_trajectories_eulerian(history, ablation_solver, sub_params, shock
         # shock front position for fit
         x_shock_fit[i] = ss.shock_position(time=t_val) * 1e4
         
-    # Plot curves
     fig, ax = plt.subplots(figsize=(10, 7))
     t_ns = times * 1e9
     t_ns_model = times_model * 1e9
@@ -840,7 +835,6 @@ def plot_front_trajectories_eulerian(history, ablation_solver, sub_params, shock
     ax.legend(loc="best", fontsize=10, ncol=2)
     ax.grid(True, alpha=0.3)
     
-    # Limit time window
     ax.set_xlim(0, times[-1] * 1e9)
     
     fig.tight_layout()
@@ -853,9 +847,9 @@ def plot_front_trajectories_eulerian(history, ablation_solver, sub_params, shock
 # Main Execution Workflow
 # =============================================================================
 
-def run_preset_workflow():
+def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
     """Run simulation, load reference solvers, run fitting pipelines, and plot eulerian profiles and trajectories."""
-    case, history, ablation_solver = get_data()
+    case, history, ablation_solver = get_data(preset_name, case_label)
 
     # 1) Run Subsonic fitting pipeline using ablation_solver.heat_solver
     print("--- Running Subsonic Ablation Fitting ---")
@@ -867,11 +861,11 @@ def run_preset_workflow():
     shock_solver = ablation_solver.shock_solver
     shock_params = perform_shock_fitting(shock_solver)
 
-    dv_dir = _REPO_ROOT / "results" / "ictt" / "dimensional_verification"
+    dv_dir = Path("results/ictt_other_presets/dimensional_verification")
     dv_dir.mkdir(parents=True, exist_ok=True)
 
     # 3) Plot 1: Subsonic & Shock Overlays in Eulerian coordinate
-    plot_path_overlays = dv_dir / "fig_8_patched_fit_comparison_eulerian.png"
+    plot_path_overlays = dv_dir / f"{case_label}_patched_fit_comparison_eulerian.png"
     plot_patched_dimensional_fit_comparison_eulerian(
         history=history,
         ablation_solver=ablation_solver,
@@ -879,11 +873,11 @@ def run_preset_workflow():
         shock_params=shock_params,
         case=case,
         plot_path=str(plot_path_overlays),
-        case_title="Fig 8 Constant Temperature Drive (tau=0)",
+        case_title=case_title,
     )
 
     # 4) Plot 2: Fully Patched seamless profiles in Eulerian coordinate
-    plot_path_patched = dv_dir / "fig_8_fully_patched_comparison_eulerian.png"
+    plot_path_patched = dv_dir / f"{case_label}_fully_patched_comparison_eulerian.png"
     plot_fully_patched_comparison_eulerian(
         history=history,
         ablation_solver=ablation_solver,
@@ -891,11 +885,11 @@ def run_preset_workflow():
         shock_params=shock_params,
         case=case,
         plot_path=str(plot_path_patched),
-        case_title="Fig 8 Constant Temperature Drive (tau=0)",
+        case_title=case_title,
     )
     
     # 5) Plot 3: Time-dependent front trajectories in Eulerian coordinate
-    plot_path_trajectories = dv_dir / "fig_8_front_trajectories_eulerian.png"
+    plot_path_trajectories = dv_dir / f"{case_label}_front_trajectories_eulerian.png"
     plot_front_trajectories_eulerian(
         history=history,
         ablation_solver=ablation_solver,
@@ -903,12 +897,21 @@ def run_preset_workflow():
         shock_params=shock_params,
         case=case,
         plot_path=str(plot_path_trajectories),
-        case_title="Fig 8 Constant Temperature Drive (tau=0)",
+        case_title=case_title,
     )
 
 
 def main():
-    run_preset_workflow()
+    run_preset_workflow(
+        PRESET_FIG_9_CONSTANT_FLUX,
+        "flux_const",
+        "Fig 9 Constant Flux Drive"
+    )
+    run_preset_workflow(
+        PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE,
+        "ablation_p_const",
+        "Fig 10 Constant Ablation Pressure Drive"
+    )
     print("\nPatched eulerian ablation and shock simulations, fittings, comparisons, and plots generated successfully!")
 
 

@@ -396,20 +396,20 @@ def run_preset_workflow(preset_name, case_label, case_title):
     shock_solver = ablation_solver.shock_solver
     shock_params = perform_shock_fitting(shock_solver)
 
-    dv_dir = _REPO_ROOT / "results" / "ictt" / "dimensional_verification"
+    dv_dir = _REPO_ROOT / "results" / "ictt" / case_label / "dimensional_verification"
     dv_dir.mkdir(parents=True, exist_ok=True)
 
-    # 3) Plot 1: Subsonic & Shock Overlays
-    plot_path_overlays = dv_dir / f"{case_label}_patched_fit_comparison.png"
-    plot_patched_dimensional_fit_comparison(
-        history=history,
-        ablation_solver=ablation_solver,
-        sub_params=sub_params,
-        shock_params=shock_params,
-        case=case,
-        plot_path=str(plot_path_overlays),
-        case_title=case_title,
-    )
+    # 3) Plot 1: Subsonic & Shock Overlays (Disabled as requested: no need for patched comparison with regions not actually separated)
+    # plot_path_overlays = dv_dir / f"{case_label}_patched_fit_comparison.png"
+    # plot_patched_dimensional_fit_comparison(
+    #     history=history,
+    #     ablation_solver=ablation_solver,
+    #     sub_params=sub_params,
+    #     shock_params=shock_params,
+    #     case=case,
+    #     plot_path=str(plot_path_overlays),
+    #     case_title=case_title,
+    # )
 
     # 4) Plot 2: Fully Patched seamless profiles compared to AblationSolver
     plot_path_patched = dv_dir / f"{case_label}_fully_patched_comparison.png"

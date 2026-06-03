@@ -3,8 +3,14 @@ import sys
 
 from matplotlib import pyplot as plt
 
-from project3_code.menahem_new.piston_shock_og import PistonShock
-from project3_code.menahem_new.subsonic_heat_wave_og import SubsonicHeatWave, Units
+# edit: allow relative imports by importing the project directory
+import os
+
+project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_dir)
+
+from menahem_new.piston_shock_og import PistonShock
+from menahem_new.subsonic_heat_wave_og import SubsonicHeatWave, Units
 
 import logging
 logging.basicConfig(level = logging.INFO)
@@ -408,37 +414,37 @@ def test_profiles():
     m_ab = np.array([solver.heat_solver.ablated_mass(time=t) for t in times])
     # x_boundary = np.array([solver.boundary_position(time=t) for t in times])
 
-    plt.plot(times, m_ab, c="r", label="Krief solver")
-    plt.plot(times, mab_sh(times), ls="--", c="b", label="Shussman-Heizler paper")
-    plt.grid()
-    plt.legend(fontsize=16)
-    # plt.yscale("log")
-    # plt.xscale("log")
-    # plt.legend()
-    plt.autoscale(enable=True, axis='both', tight=True)
-    plt.xlabel("time [sec]")
-    plt.ylabel("ablated mass [g]", fontsize=12)
-    plt.xlabel("time [sec]", fontsize=12)
-    plt.suptitle(solver.heat_solver.title, fontsize=12)
-    plt.show()
+    # plt.plot(times, m_ab, c="r", label="Krief solver")
+    # plt.plot(times, mab_sh(times), ls="--", c="b", label="Shussman-Heizler paper")
+    # plt.grid()
+    # plt.legend(fontsize=16)
+    # # plt.yscale("log")
+    # # plt.xscale("log")
+    # # plt.legend()
+    # plt.autoscale(enable=True, axis='both', tight=True)
+    # plt.xlabel("time [sec]")
+    # plt.ylabel("ablated mass [g]", fontsize=12)
+    # plt.xlabel("time [sec]", fontsize=12)
+    # plt.suptitle(solver.heat_solver.title, fontsize=12)
+    # plt.show()
 
 
     hs = solver.heat_solver
     times_pos = times[times > 0.]
     Ts = hs.Tb * times_pos**hs.tau
     Tbath = hs.Tbath(time=times_pos)
-    # plt.figure()
-    plt.plot(times_pos/Units.nsec, Ts/Units.ev_kelvin, label=r"$T_s(t) = T_b \, t^{\tau}$")
-    plt.plot(times_pos/Units.nsec, Tbath/Units.ev_kelvin, ls="--", label=r"$T_{\mathrm{bath}}(t)$")
-    plt.grid()
-    plt.legend(fontsize=12)
-    plt.autoscale(enable=True, axis='both', tight=True)
-    plt.xlabel("time [ns]", fontsize=12)
-    plt.ylabel("temperature [eV]", fontsize=12)
-    plt.suptitle(hs.title, fontsize=12)
-    plt.show()
+    # # plt.figure()
+    # plt.plot(times_pos/Units.nsec, Ts/Units.ev_kelvin, label=r"$T_s(t) = T_b \, t^{\tau}$")
+    # plt.plot(times_pos/Units.nsec, Tbath/Units.ev_kelvin, ls="--", label=r"$T_{\mathrm{bath}}(t)$")
+    # plt.grid()
+    # plt.legend(fontsize=12)
+    # plt.autoscale(enable=True, axis='both', tight=True)
+    # plt.xlabel("time [ns]", fontsize=12)
+    # plt.ylabel("temperature [eV]", fontsize=12)
+    # plt.suptitle(hs.title, fontsize=12)
+    # plt.show()
 
-    quit()
+    # quit()
 
     # plt.plot(times, -x_boundary)
     # plt.grid()
@@ -477,34 +483,34 @@ def test_profiles():
     mass = np.array([1e-30, 1e-7*mass[0]]+ list(mass))
 
     ##### plot hydro profiles
-    for time in times_profiles:
-        solution = solver.solve(mass=mass, time=time)
-        solution["temperature"] /= Units.hev_kelvin
-        for use_r in [True, False]:
-            for fg in ["density", "velocity", "pressure", "temperature"]:
-                plt.suptitle(solver.heat_solver.title, fontsize=12)
-                plt.figure(fg+str(use_r))
-                if use_r: 
-                    plt.plot(solution["position"], solution[fg], label=f"t={time:g}", marker="o")
-                    plt.axvline(x=solution["shock_position"], lw=2, c="k", ls="--")
-                    plt.axvline(x=solution["heat_position"], lw=2, c="b", ls="--")
-                    plt.axvline(x=solution["boundary_position"], lw=2, c="r", ls="--")
-                else:    
-                    plt.plot(mass, solution[fg], label=f"t={time:g}")
-                    plt.axvline(x=solution["ablated_mass"], lw=2, c="k", ls="--")
-    for use_r in [True, False]:
-        for fg in ["density", "velocity", "pressure", "temperature"]:
-            plt.figure(fg+str(use_r))
-            plt.legend()
-            plt.grid()
-            plt.autoscale(enable=True, axis='both', tight=True)
-            if use_r: plt.xlabel("x [cm]")
-            else: 
-                plt.xlabel("mass [g/cm^2]")
-                plt.xlim(xmax=m_max)
-            plt.ylabel(fg)
+    # for time in times_profiles:
+    #     solution = solver.solve(mass=mass, time=time)
+    #     solution["temperature"] /= Units.hev_kelvin
+    #     for use_r in [True, False]:
+    #         for fg in ["density", "velocity", "pressure", "temperature"]:
+    #             plt.suptitle(solver.heat_solver.title, fontsize=12)
+    #             plt.figure(fg+str(use_r))
+    #             if use_r: 
+    #                 plt.plot(solution["position"], solution[fg], label=f"t={time:g}", marker="o")
+    #                 plt.axvline(x=solution["shock_position"], lw=2, c="k", ls="--")
+    #                 plt.axvline(x=solution["heat_position"], lw=2, c="b", ls="--")
+    #                 plt.axvline(x=solution["boundary_position"], lw=2, c="r", ls="--")
+    #             else:    
+    #                 plt.plot(mass, solution[fg], label=f"t={time:g}")
+    #                 plt.axvline(x=solution["ablated_mass"], lw=2, c="k", ls="--")
+    # for use_r in [True, False]:
+    #     for fg in ["density", "velocity", "pressure", "temperature"]:
+    #         plt.figure(fg+str(use_r))
+    #         plt.legend()
+    #         plt.grid()
+    #         plt.autoscale(enable=True, axis='both', tight=True)
+    #         if use_r: plt.xlabel("x [cm]")
+    #         else: 
+    #             plt.xlabel("mass [g/cm^2]")
+    #             plt.xlim(xmax=m_max)
+    #         plt.ylabel(fg)
 
-    plt.show()
+    # plt.show()
 
     ########## plot position as a function of time
     results = [solver.solve(mass=mass, time=time) for time in times[1:]]
@@ -532,7 +538,7 @@ def test_profiles():
     plt.xlim([0., times[-1]])
     plt.ylim([-0.1*L, L])
     plt.suptitle(solver.heat_solver.title, fontsize=12)
-    plt.savefig("rt_zoom.pdf", bbox_inches='tight')
+    plt.savefig("rt_zoom1.pdf", bbox_inches='tight')
     plt.savefig("rt_zoom.png", bbox_inches='tight')
     plt.show()
 

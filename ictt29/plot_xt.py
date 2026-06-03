@@ -5,7 +5,7 @@ Space-time (x-t) trajectory and front plotting.
 Runs the 1D Rad-Hydro simulation (or loads from cache) and plots
 cell boundaries x(t) with diagnosed fronts (Simulation vs Analytic).
 """
-from __future__ import annotations
+from numpy import dtype
 
 import os
 import sys
@@ -94,19 +94,6 @@ def _rolling_mean(a: np.ndarray, window: int) -> np.ndarray:
     kernel = np.ones(w, dtype=float) / float(w)
     return np.convolve(np.asarray(a, dtype=float), kernel, mode="same")
 
-
-def _get_equally_spaced_elements(times: np.ndarray, n: int) -> np.ndarray:
-    ideal_times = np.linspace(times.min(), times.max(), n)
-    indices = np.searchsorted(times, ideal_times)
-    indices = np.clip(indices, 0, len(times) - 1)
-    for i in range(len(indices)):
-        idx = indices[i]
-        if idx > 0 and abs(times[idx-1] - ideal_times[i]) < abs(times[idx] - ideal_times[i]):
-            indices[i] = idx - 1
-    unique_indices = np.unique(indices)
-    return times[unique_indices]
-
-
 # =============================================================================
 # Plotting functions
 # =============================================================================
@@ -123,7 +110,8 @@ def plot_xt_trajectories(history, case, xt_path, case_title, ablation_solver=Non
         ablation_solver = AblationSolver(**_ablation_kwargs_from_case(case))
     mass_grid = _build_mass_grid(case, num_cells=n_cells)
     
-    times_model = _get_equally_spaced_elements(times, 200)
+    # get 200 equally spaced times from the simulation times
+    times_model = times[::max(1, len(times)//200)]
     results = []
     for t in times_model:
         sol = ablation_solver.solve(mass=mass_grid, time=max(float(t), 1e-18))
@@ -172,8 +160,8 @@ def plot_xt_trajectories(history, case, xt_path, case_title, ablation_solver=Non
     
     # Plot mass trajectories - thin background grid so they don't cover the fronts
     NUM_PRESENTED_CELLS = 50
-    chosen_cell_indices = _get_equally_spaced_elements(np.arange(n_cells), NUM_PRESENTED_CELLS)
-    
+    chosen_cell_indices = np.round(np.linspace(0, n_cells-1, NUM_PRESENTED_CELLS)).astype(int)
+        
     matched_sim_coordinates = np.zeros_like(x_sim, dtype=float)
     matched_sim_coordinates[:, 1:] = 0.5 * (x_sim[:, 1:] + x_sim[:, :-1])
     
@@ -207,113 +195,18 @@ def plot_xt_trajectories(history, case, xt_path, case_title, ablation_solver=Non
 # Main Orchestration
 # =============================================================================
 
-def run_simulation_and_references(preset_name: str, case_label: str):
-    """Run full simulation and build reference solvers, or load from pickle cache."""
-    cache_dir = Path("results/ictt/cache")
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_path = cache_dir / f"{case_label}_cache.pkl"
-    
-    # 1) Initialize case and set grid size N=400
-    case, config = get_preset(preset_name)
-    config = replace(config, N=400)
-    
-    if cache_path.exists():
-        print(f"Loading cached simulation and reference data from {cache_path}...")
-        try:
-            class CustomUnpickler(pickle.Unpickler):
-                def find_class(self, module, name):
-                    if 'numpy._core' in module:
-                        module = module.replace('numpy._core', 'numpy.core')
-                    return super().find_class(module, name)
-            with open(cache_path, "rb") as f:
-                data = CustomUnpickler(f).load()
-            history = data["history"]
-            shussman_ref = data["shussman_ref"]
-            menahem_ref = data["menahem_ref"]
-            ablation_solver = data["ablation_solver"]
-            print("Cache loaded successfully.")
-            return case, history, shussman_ref, menahem_ref, ablation_solver
-        except Exception as e:
-            print(f"Failed to load cache: {e}. Re-running simulation...")
-
-    # Pre-calculate evaluation times
-    eval_times_sec = np.linspace(1e-12, case.t_sec_end, 50)
-    
-    # Build Menahem ablation piecewise reference
-    print(f"Building Menahem piecewise reference...")
-    menahem_times_sec = np.array([0.25, 0.5, 0.75, 1.0]) * float(case.t_sec_end)
-    menahem_ref = run_menahem_piecewise_reference(case, times_sec=menahem_times_sec)
-        
-    # Run radiation-hydrodynamics simulation
-    print(f"Running simulation...")
-    _, _, _, history = simulate_rad_hydro(rad_hydro_case=case, simulation_config=config)
-    
-    # Build Shussman piecewise reference
-    print(f"Building Shussman piecewise reference...")
-    eval_times_ns = eval_times_sec * 1e9
-    T0_HeV = float(case.T0_Kelvin) / KELVIN_PER_HEV
-    shussman_ref = run_shussman_piecewise_reference(case, times_ns=eval_times_ns, T0_HeV=T0_HeV)
-    
-    # Instantiate AblationSolver
-    print(f"Instantiating AblationSolver reference...")
-    ablation_solver = AblationSolver(**_ablation_kwargs_from_case(case))
-    
-    # Cache everything
-    cache_data = {
-        "case": case,
-        "history": history,
-        "shussman_ref": shussman_ref,
-        "menahem_ref": menahem_ref,
-        "ablation_solver": ablation_solver,
-    }
-    
-    print(f"Saving simulation and reference data cache to {cache_path}...")
-    try:
-        with open(cache_path, "wb") as f:
-            pickle.dump(cache_data, f, protocol=pickle.HIGHEST_PROTOCOL)
-        print("Cache saved successfully.")
-    except Exception as e:
-        print(f"Failed to save cache: {e}")
-        
-    return case, history, shussman_ref, menahem_ref, ablation_solver
-
-
 def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
     """Run full verification comparison pipeline for a given preset."""
     print("=" * 80)
     print(f"PROCESSING PRESET: {preset_name} -> {case_label}")
     print("=" * 80)
     
-    cache_path = Path("results/ictt/cache") / f"{case_label}_cache.pkl"
-    if not cache_path.exists():
-        print("Pickle file doesn't exist, running simulation...")
-        case, history, shussman_ref, menahem_ref, ablation_solver = run_simulation_and_references(
-            preset_name, case_label
-        )
-    else:
-        print("Pickle file exists, loading simulation...")
-        try:
-            class CustomUnpickler(pickle.Unpickler):
-                def find_class(self, module, name):
-                    if 'numpy._core' in module:
-                        module = module.replace('numpy._core', 'numpy.core')
-                    return super().find_class(module, name)
-            with open(cache_path, "rb") as f:
-                data = CustomUnpickler(f).load()
-        except Exception as e:
-            print(f"Failed to load cache: {e}. Re-running simulation...")
-            case, history, shussman_ref, menahem_ref, ablation_solver = run_simulation_and_references(
-                preset_name, case_label
-            )
-            data = {"case": case, "history": history, "ablation_solver": ablation_solver}
-        case = data.get("case")
-        if case is None:
-            case, _ = get_preset(preset_name)
-        history = data["history"]
-        ablation_solver = data["ablation_solver"]
+    from data_loader import get_sim_history, get_ablation_solver
+    case, history = get_sim_history(preset_name, case_label)
+    ablation_solver = get_ablation_solver(case, case_label)
     
     # Generate x-t plot
-    out_dir = Path("results/ictt/xt")
+    out_dir = Path("results/ictt") / case_label / "eulerian_verification"
     out_dir.mkdir(parents=True, exist_ok=True)
     xt_path = str(out_dir / f"{case_label}_xt.png")
     plot_xt_trajectories(history, case, xt_path, case_title, ablation_solver=ablation_solver)
@@ -322,10 +215,25 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
 
 
 def main():
+    from project3_code.rad_hydro_sim.problems.presets_config import (
+        PRESET_FIG_8_CONSTANT_TEMPERATURE,
+        PRESET_FIG_9_CONSTANT_FLUX,
+        PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE,
+    )
     run_preset_workflow(
         PRESET_FIG_8_CONSTANT_TEMPERATURE, 
-        "constant_boundary_temperature_tau_0", 
+        "const_T", 
         "Constant Boundary Temperature (tau=0)"
+    )
+    run_preset_workflow(
+        PRESET_FIG_9_CONSTANT_FLUX, 
+        "const_S", 
+        "Fig 9 Constant Flux Drive"
+    )
+    run_preset_workflow(
+        PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE, 
+        "const_P_shock", 
+        "Fig 10 Constant Ablation Pressure Drive"
     )
     print("\nAll x-t trajectory plots completed successfully!")
 

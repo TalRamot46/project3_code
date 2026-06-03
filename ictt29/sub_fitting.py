@@ -923,8 +923,8 @@ def plot_relative_errors(solver, params, relative_errors_path, case_title):
 
 
 def get_plot_paths(case_label: str) -> dict[str, str]:
-    out_dir = Path("results/ictt")
-    ss_dir = out_dir / "self_similar"
+    out_dir = Path("results/ictt") / case_label
+    ss_dir = out_dir / "self_similar_heat"
     dv_dir = out_dir / "dimensional_verification"
     ss_dir.mkdir(parents=True, exist_ok=True)
     dv_dir.mkdir(parents=True, exist_ok=True)
@@ -934,7 +934,7 @@ def get_plot_paths(case_label: str) -> dict[str, str]:
         "velocity_fits": str(ss_dir / f"{case_label}_velocity_fits_standalone.png"),
         "pressure_fits": str(ss_dir / f"{case_label}_pressure_fits_standalone.png"),
         "relative_errors": str(ss_dir / f"{case_label}_relative_errors.png"),
-        "dimensional_comparison": str(dv_dir / f"{case_label}_dimensional_fit_comparison.png")
+        "dimensional_comparison": str(dv_dir / f"{case_label}_dimensional_fit_comparison_heat.png")
     }
 
 
@@ -991,11 +991,11 @@ def main():
         "const_T",
         "Fig 8 Constant Temperature Drive"
     )
-    # run_preset_workflow(
-    #     PRESET_FIG_9_CONSTANT_FLUX,
-    #     "const_S",
-    #     "Fig 9 Constant Flux Drive"
-    # )
+    run_preset_workflow(
+        PRESET_FIG_9_CONSTANT_FLUX,
+        "const_S",
+        "Fig 9 Constant Flux Drive"
+    )
     run_preset_workflow(
         PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE,
         "const_P_shock",

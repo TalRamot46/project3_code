@@ -893,8 +893,8 @@ def run_simulation_and_references(preset_name: str, case_label: str):
 
 
 def get_plot_paths(case_label: str) -> dict[str, str]:
-    out_dir = Path("results/ictt")
-    ss_dir = out_dir / "self_similar"
+    out_dir = Path("results/ictt") / case_label
+    ss_dir = out_dir / "self_similar_shock"
     dv_dir = out_dir / "dimensional_verification"
     ss_dir.mkdir(parents=True, exist_ok=True)
     dv_dir.mkdir(parents=True, exist_ok=True)
@@ -904,7 +904,7 @@ def get_plot_paths(case_label: str) -> dict[str, str]:
         "velocity_fits": str(ss_dir / f"{case_label}_velocity_fits_standalone.png"),
         "temperature_fits": str(ss_dir / f"{case_label}_temperature_fits_standalone.png"),
         "relative_errors": str(ss_dir / f"{case_label}_relative_errors.png"),
-        "dimensional_comparison": str(dv_dir / f"{case_label}_dimensional_fit_comparison.png")
+        "dimensional_comparison": str(dv_dir / f"{case_label}_dimensional_fit_comparison_shock.png")
     }
 
 
@@ -950,7 +950,7 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
         solver=solver,
         params=params,
         case_label=case_label,
-        case_title="shock_const_T",
+        case_title=case_title,
     )
     print(f"Preset {preset_name} processed successfully.")
 

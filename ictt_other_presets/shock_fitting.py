@@ -84,7 +84,7 @@ FITTING_OPTION = "FIT_RHO_AROUND_PISTON"  # Literal["FIT_TEMP_AROUND_PISTON", "F
 
 def get_cached_shock_solver(case, case_label):
     """Solve shock similarity ODEs once and cache the solver object (with found xsi_s)."""
-    cache_dir = Path("results/ictt_other_presets/cache")
+    cache_dir = Path("results/ictt/cache")
     cache_dir.mkdir(parents=True, exist_ok=True)
     solver_cache_path = cache_dir / f"{case_label}_shock_similarity_solver.pkl"
     
@@ -910,7 +910,7 @@ def plot_relative_errors(solver, params, relative_errors_path, case_title):
 
 def run_simulation_and_references(preset_name: str, case_label: str):
     """Run full simulation and build PistonShock reference solver, or load from cache."""
-    cache_dir = Path("results/ictt_other_presets/cache")
+    cache_dir = Path("results/ictt/cache")
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_path = cache_dir / f"{case_label}_cache_shock.pkl"
 
@@ -953,18 +953,18 @@ def run_simulation_and_references(preset_name: str, case_label: str):
 
 
 def get_plot_paths(case_label: str) -> dict[str, str]:
-    out_dir = Path("results/ictt_other_presets")
-    ss_dir = out_dir / "self_similar"
-    dv_dir = out_dir / "dimensional_verification"
-    ss_dir.mkdir(parents=True, exist_ok=True)
+    case_dir = Path("results/ictt") / case_label
+    ss_shock_dir = case_dir / "self_similar_shock"
+    dv_dir = case_dir / "dimensional_verification"
+    ss_shock_dir.mkdir(parents=True, exist_ok=True)
     dv_dir.mkdir(parents=True, exist_ok=True)
 
     return {
-        "self_similar": str(ss_dir / f"{case_label}_self_similar_shock.png"),
-        "velocity_fits": str(ss_dir / f"{case_label}_velocity_fits_standalone_shock.png"),
-        "temperature_fits": str(ss_dir / f"{case_label}_temperature_fits_standalone_shock.png"),
-        "relative_errors": str(ss_dir / f"{case_label}_relative_errors_shock.png"),
-        "dimensional_comparison": str(dv_dir / f"{case_label}_dimensional_fit_comparison_shock.png")
+        "self_similar": str(ss_shock_dir / f"{case_label}_self_similar.png"),
+        "velocity_fits": str(ss_shock_dir / f"{case_label}_standalone_velocity.png"),
+        "temperature_fits": str(ss_shock_dir / f"{case_label}_standalone_temperature.png"),
+        "relative_errors": str(ss_shock_dir / f"{case_label}_relative_error.png"),
+        "dimensional_comparison": str(dv_dir / f"{case_label}_dimensional_shock.png")
     }
 
 
@@ -1005,14 +1005,20 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
 
 
 def main():
+    from project3_code.rad_hydro_sim.problems.presets_config import PRESET_FIG_8_CONSTANT_TEMPERATURE
+    run_preset_workflow(
+        PRESET_FIG_8_CONSTANT_TEMPERATURE,
+        "const_T",
+        "Fig 8 Constant Temperature Drive"
+    )
     run_preset_workflow(
         PRESET_FIG_9_CONSTANT_FLUX,
-        "flux_const",
+        "const_S",
         "Fig 9 Constant Flux Drive"
     )
     run_preset_workflow(
         PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE,
-        "ablation_p_const",
+        "const_P_shock",
         "Fig 10 Constant Ablation Pressure Drive"
     )
     print("\nAll custom simulations, PistonShock comparisons, plotting, fitting, and exports completed successfully!")

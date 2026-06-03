@@ -56,7 +56,7 @@ USE_CACHE = True  # Set to True to use pre-saved pickle files, False to run agai
 
 def get_data(preset_name: str, case_label: str):
     """Run full simulation and build AblationSolver reference solver, or load from cache."""
-    cache_dir = Path("results/ictt_other_presets/cache")
+    cache_dir = Path("results/ictt/cache")
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_path = cache_dir / f"{case_label}_full_fitting_cache.pkl"
 
@@ -444,22 +444,11 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
     shock_solver = ablation_solver.shock_solver
     shock_params = perform_shock_fitting(shock_solver)
 
-    dv_dir = Path("results/ictt_other_presets/dimensional_verification")
+    case_dir = Path("results/ictt") / case_label
+    dv_dir = case_dir / "dimensional_verification"
     dv_dir.mkdir(parents=True, exist_ok=True)
 
-    # 3) Plot 1: Subsonic & Shock Overlays
-    plot_path_overlays = dv_dir / f"{case_label}_patched_fit_comparison.png"
-    plot_patched_dimensional_fit_comparison(
-        history=history,
-        ablation_solver=ablation_solver,
-        sub_params=sub_params,
-        shock_params=shock_params,
-        case=case,
-        plot_path=str(plot_path_overlays),
-        case_title=case_title,
-    )
-
-    # 4) Plot 2: Fully Patched seamless profiles compared to AblationSolver
+    # Plot: Fully Patched seamless profiles compared to AblationSolver
     plot_path_patched = dv_dir / f"{case_label}_fully_patched_comparison.png"
     plot_fully_patched_comparison(
         history=history,
@@ -473,14 +462,20 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
 
 
 def main():
+    from project3_code.rad_hydro_sim.problems.presets_config import PRESET_FIG_8_CONSTANT_TEMPERATURE
+    run_preset_workflow(
+        PRESET_FIG_8_CONSTANT_TEMPERATURE,
+        "const_T",
+        "Fig 8 Constant Temperature Drive"
+    )
     run_preset_workflow(
         PRESET_FIG_9_CONSTANT_FLUX,
-        "flux_const",
+        "const_S",
         "Fig 9 Constant Flux Drive"
     )
     run_preset_workflow(
         PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE,
-        "ablation_p_const",
+        "const_P_shock",
         "Fig 10 Constant Ablation Pressure Drive"
     )
     print("\nPatched ablation and shock simulations, fittings, comparisons, and plots generated successfully!")

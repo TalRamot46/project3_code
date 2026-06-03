@@ -119,6 +119,103 @@ def _get_equally_spaced_elements(times: np.ndarray, n: int) -> np.ndarray:
     return times[unique_indices]
 
 
+def plot_xt_trajectories(history, case, xt_path, case_title, ablation_solver=None):
+    """Plot cell boundaries x(t) and diagnosed fronts (Simulation vs Analytic)."""
+    print(f"Generating space-time (xt) plot for {case_title}...")
+    times = np.asarray(history.t, dtype=float)
+    x_sim = np.asarray(history.x, dtype=float)
+    n_cells = x_sim.shape[1] - 1
+    
+    # 1) Menahem AblationSolver analytic solution
+    if ablation_solver is None:
+        ablation_solver = AblationSolver(**_ablation_kwargs_from_case(case))
+    mass_grid = _build_mass_grid(case, num_cells=n_cells)
+    
+    # Scale mass_grid for Fig 10 compatibility
+    m_f_max = ablation_solver.heat_solver.ablated_mass(time=times[-1])
+    m_max_val = max(mass_grid[-1], 2.0 * m_f_max)
+    mass_grid = mass_grid * (m_max_val / mass_grid[-1])
+    
+    times_model = _get_equally_spaced_elements(times, 200)
+    results = []
+    for t in times_model:
+        sol = ablation_solver.solve(mass=mass_grid, time=max(float(t), 1e-18))
+        results.append(sol)
+        
+    position_times = np.array([r["position"] for r in results]).T
+    shock_position = np.array([r["shock_position"] for r in results], dtype=float)
+    piston_position = np.array([r["piston_position"] for r in results], dtype=float)
+    heat_position = np.array([r["heat_position"] for r in results], dtype=float)
+    boundary_position = np.array([r["boundary_position"] for r in results], dtype=float)
+    
+    # 2) Simulation shock from density profile
+    x_shock_sim = np.full(times.size - 1, np.nan, dtype=float)
+    for k in range(1, times.size):
+        rhok = np.asarray(history.rho[k], dtype=float)
+        mk = np.asarray(history.m[k], dtype=float)
+        rhok_smooth = _rolling_mean(rhok, 5)
+        ishock, _ = find_shock_front(
+            rhok_smooth,
+            mk,
+            rho_unshocked=float(case.rho0),
+            gamma=float(case.r) + 1.0,
+            Hugoniot_threshold=0.5,
+        )
+        if ishock >= 1:
+            x_shock_sim[k - 1] = float(x_sim[k, ishock])
+            
+    # Apply linear regression correction for small times (t < 0.002 ns)
+    later_times = np.array([])
+    later_x = np.array([])
+    for k in range(1, times.size):
+        t_ns = times[k] * 1e9
+        if t_ns >= 0.002 and not np.isnan(x_shock_sim[k - 1]):
+            later_times = np.append(later_times, times[k])
+            later_x = np.append(later_x, x_shock_sim[k - 1])
+            
+    if len(later_times) >= 2:
+        slope, intercept = np.polyfit(np.log(later_times+1e-20), np.log(later_x), 1)
+        for k in range(1, times.size):
+            t_ns = times[k] * 1e9
+            if t_ns < 0.002:
+                x_shock_sim[k - 1] = np.exp(slope * np.log(times[k] + 1e-20) + intercept)
+            
+    # 3) Setup figure
+    fig, ax = plt.subplots(figsize=(9.5, 6.5))
+    
+    # Plot mass trajectories
+    NUM_PRESENTED_CELLS = 50
+    chosen_cell_indices = _get_equally_spaced_elements(np.arange(n_cells), NUM_PRESENTED_CELLS)
+    
+    matched_sim_coordinates = np.zeros_like(x_sim, dtype=float)
+    matched_sim_coordinates[:, 1:] = 0.5 * (x_sim[:, 1:] + x_sim[:, :-1])
+    
+    legend_added = False
+    for j in chosen_cell_indices:
+        lbl_sim = "Simulation Cells" if not legend_added else None
+        lbl_men = "Analytic Cells" if not legend_added else None
+        ax.plot(times * 1e9, matched_sim_coordinates[:, j + 1], color="black", lw=0.4, alpha=0.8, label=lbl_sim)
+        ax.plot(times_model * 1e9, position_times[j + 2], color="blue", lw=0.4, alpha=0.7, label=lbl_men)
+        legend_added = True
+        
+    # Plot bold fronts
+    ax.plot(times[1:] * 1e9, x_shock_sim, lw=2.5, c="red", label="Shock (simulation)")
+    ax.plot(times_model * 1e9, shock_position, lw=2.0, ls="--", c="darkred", label="Shock (Menahem)")
+    ax.plot(times_model * 1e9, piston_position, lw=2.0, ls="--", c="green", label="Piston (Menahem)")
+    ax.plot(times_model * 1e9, heat_position, lw=2.0, ls="--", c="purple", label="Heat Wave (Menahem)")
+    
+    ax.set_xlabel(r"$t$ [ns]", fontsize=12)
+    ax.set_ylabel(r"$x$ [cm]", fontsize=12)
+    ax.set_title(f"Space-Time (xt) Trajectories and Fronts\n{case_title}", fontsize=13, fontweight='bold')
+    ax.grid(True, alpha=0.25)
+    ax.legend(loc="lower right", fontsize=9.5)
+    ax.set_ylim(0, float(case.x_max) * 1.1)
+    
+    fig.tight_layout()
+    fig.savefig(xt_path, dpi=200)
+    plt.close(fig)
+
+
 # =============================================================================
 # Eulerian Coordinate Fit Calculations
 # =============================================================================
@@ -194,7 +291,7 @@ def calculate_patched_eulerian_positions_fit(mass_grid, t_actual, ablation_solve
 
 def get_data(preset_name: str, case_label: str):
     """Run full simulation and build AblationSolver reference solver, or load from cache."""
-    cache_dir = Path("results/ictt_other_presets/cache")
+    cache_dir = Path("results/ictt/cache")
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_path = cache_dir / f"{case_label}_full_fitting_cache.pkl"
 
@@ -861,23 +958,22 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
     shock_solver = ablation_solver.shock_solver
     shock_params = perform_shock_fitting(shock_solver)
 
-    dv_dir = Path("results/ictt_other_presets/dimensional_verification")
-    dv_dir.mkdir(parents=True, exist_ok=True)
+    case_dir = Path("results/ictt") / case_label
+    eulerian_ver_dir = case_dir / "eulerian_verification"
+    eulerian_ver_dir.mkdir(parents=True, exist_ok=True)
 
-    # 3) Plot 1: Subsonic & Shock Overlays in Eulerian coordinate
-    plot_path_overlays = dv_dir / f"{case_label}_patched_fit_comparison_eulerian.png"
-    plot_patched_dimensional_fit_comparison_eulerian(
+    # 3) Plot 1: xt space-time trajectories
+    plot_path_xt = eulerian_ver_dir / f"{case_label}_xt.png"
+    plot_xt_trajectories(
         history=history,
-        ablation_solver=ablation_solver,
-        sub_params=sub_params,
-        shock_params=shock_params,
         case=case,
-        plot_path=str(plot_path_overlays),
+        xt_path=str(plot_path_xt),
         case_title=case_title,
+        ablation_solver=ablation_solver,
     )
 
-    # 4) Plot 2: Fully Patched seamless profiles in Eulerian coordinate
-    plot_path_patched = dv_dir / f"{case_label}_fully_patched_comparison_eulerian.png"
+    # 4) Plot 2: Fully Patched profiles in Eulerian coordinate
+    plot_path_patched = eulerian_ver_dir / f"{case_label}_eulerian_comparison.png"
     plot_fully_patched_comparison_eulerian(
         history=history,
         ablation_solver=ablation_solver,
@@ -889,7 +985,7 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
     )
     
     # 5) Plot 3: Time-dependent front trajectories in Eulerian coordinate
-    plot_path_trajectories = dv_dir / f"{case_label}_front_trajectories_eulerian.png"
+    plot_path_trajectories = eulerian_ver_dir / f"{case_label}_front_trajectories.png"
     plot_front_trajectories_eulerian(
         history=history,
         ablation_solver=ablation_solver,
@@ -902,14 +998,20 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
 
 
 def main():
+    from project3_code.rad_hydro_sim.problems.presets_config import PRESET_FIG_8_CONSTANT_TEMPERATURE
+    run_preset_workflow(
+        PRESET_FIG_8_CONSTANT_TEMPERATURE,
+        "const_T",
+        "Fig 8 Constant Temperature Drive"
+    )
     run_preset_workflow(
         PRESET_FIG_9_CONSTANT_FLUX,
-        "flux_const",
+        "const_S",
         "Fig 9 Constant Flux Drive"
     )
     run_preset_workflow(
         PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE,
-        "ablation_p_const",
+        "const_P_shock",
         "Fig 10 Constant Ablation Pressure Drive"
     )
     print("\nPatched eulerian ablation and shock simulations, fittings, comparisons, and plots generated successfully!")

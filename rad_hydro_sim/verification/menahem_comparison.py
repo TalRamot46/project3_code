@@ -172,7 +172,6 @@ def _ablation_kwargs_from_case(case) -> dict:
 def _build_mass_grid(
     case,
     num_cells: int = 400,
-    m_min_factor: float = 1e-10,
 ) -> np.ndarray:
     """Return a monotonically increasing Lagrangian mass coordinate array.
 
@@ -182,15 +181,16 @@ def _build_mass_grid(
     (uniform initial density), and prepend a tiny cell so the solver has a
     well-defined minimum mass strictly greater than zero.
     """
-    x_max = float(case.x_max)
-    coordinate = np.linspace(0.0, x_max, int(num_cells) + 1)
+    L = float(case.x_max)
+    coordinate = np.array(list(sorted(set(
+        list(np.linspace(0., L, num_cells+1)) \
+    ))))
     dx = np.diff(coordinate)
     density = np.full_like(dx, float(case.rho0))
     mass_cells = density * dx
     mass = np.cumsum(mass_cells)
-    # prepend two tiny coordinates so the first real cell has m > 0 with room
-    tiny_m = m_min_factor * mass[0]
-    return np.concatenate([[tiny_m * 1e-5, tiny_m], mass])
+    mass = np.array([1e-30, 1e-7*mass[0]]+ list(mass))
+    return mass
 
 
 # ---------------------------------------------------------------------------

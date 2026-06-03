@@ -111,7 +111,10 @@ def plot_xt_trajectories(history, case, xt_path, case_title, ablation_solver=Non
     mass_grid = _build_mass_grid(case, num_cells=n_cells)
     
     # get 200 equally spaced times from the simulation times
-    times_model = times[::max(1, len(times)//200)]
+    mask = range(1, len(times), max(1, len(times)//200))
+    times_model = times[mask]
+    times = times_model
+    x_sim = x_sim[mask]
     results = []
     for t in times_model:
         sol = ablation_solver.solve(mass=mass_grid, time=max(float(t), 1e-18))
@@ -159,32 +162,35 @@ def plot_xt_trajectories(history, case, xt_path, case_title, ablation_solver=Non
     fig, ax = plt.subplots(figsize=(9.5, 6.5))
     
     # Plot mass trajectories - thin background grid so they don't cover the fronts
-    NUM_PRESENTED_CELLS = 50
+    NUM_PRESENTED_CELLS = 100
     chosen_cell_indices = np.round(np.linspace(0, n_cells-1, NUM_PRESENTED_CELLS)).astype(int)
         
-    matched_sim_coordinates = np.zeros_like(x_sim, dtype=float)
-    matched_sim_coordinates[:, 1:] = 0.5 * (x_sim[:, 1:] + x_sim[:, :-1])
+    # matched_sim_coordinates = np.zeros_like(x_sim, dtype=float)
+    # matched_sim_coordinates[:, 1:] = 0.5 * (x_sim[:, 1:] + x_sim[:, :-1])
+    matched_sim_coordinates = x_sim
     
     legend_added = False
     for j in chosen_cell_indices:
         lbl_sim = "Simulation Cells" if not legend_added else None
         lbl_men = "Analytic Cells" if not legend_added else None
-        ax.plot(times * 1e9, matched_sim_coordinates[:, j + 1], color="black", lw=0.4, alpha=0.8, label=lbl_sim)
-        ax.plot(times_model * 1e9, position_times[j + 2], color="blue", lw=0.4, alpha=0.7, label=lbl_men)
+        ax.plot(times, matched_sim_coordinates[:, j + 1], color="black", lw=0.4, alpha=0.8, label=lbl_sim)
+        ax.plot(times_model, position_times[j + 2], color="blue", lw=0.4, alpha=0.7, label=lbl_men)
         legend_added = True
         
     # Plot bold fronts
-    ax.plot(times[1:] * 1e9, x_shock_sim, lw=2.5, c="red", label="Shock (simulation)")
-    ax.plot(times_model * 1e9, shock_position, lw=2.0, ls="--", c="darkred", label="Shock (Menahem)")
-    ax.plot(times_model * 1e9, piston_position, lw=2.0, ls="--", c="green", label="Piston (Menahem)")
-    ax.plot(times_model * 1e9, heat_position, lw=2.0, ls="--", c="purple", label="Heat Wave (Menahem)")
+    ax.plot(times[1:], x_shock_sim, lw=2.5, c="red", label="Shock (simulation)")
+    ax.plot(times_model, shock_position, lw=2.0, ls="--", c="darkred", label="Shock (Menahem)")
+    ax.plot(times_model, piston_position, lw=2.0, ls="--", c="green", label="Piston (Menahem)")
+    ax.plot(times_model, heat_position, lw=2.0, ls="--", c="purple", label="Heat Wave (Menahem)")
     
-    ax.set_xlabel(r"$t$ [ns]", fontsize=12)
-    ax.set_ylabel(r"$x$ [cm]", fontsize=12)
+    plt.xlabel("time [sec]")
+    plt.ylabel("position [cm]")
+    plt.autoscale(enable=True, axis='both', tight=True)
     ax.set_title(f"Space-Time (xt) Trajectories and Fronts\n{case_title}", fontsize=13, fontweight='bold')
     ax.grid(True, alpha=0.25)
     ax.legend(loc="lower right", fontsize=9.5)
-    ax.set_ylim(0, 0.0016)
+    plt.xlim([0., times[-1]])
+    plt.ylim([-0.1*x_sim.max(), x_sim.max()])
     
     fig.tight_layout()
     fig.savefig(xt_path, dpi=200)

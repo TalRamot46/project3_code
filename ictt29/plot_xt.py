@@ -64,22 +64,36 @@ def find_shock_front(
     *,
     rho_unshocked: float,
     gamma: float,
-    Hugoniot_threshold: float = 0.5,
+    Hugoniot_threshold: float = 0.9,
 ) -> tuple[int, float]:
-    """Detect the shock as the right edge of the compressed region."""
+    """Detect the shock as the right edge of the compressed region.
+
+    The Rankine-Hugoniot strong-shock limit gives a maximum compression ratio
+    of (gamma+1)/(gamma-1).  We look for the rightmost cell whose density
+    exceeds ``Hugoniot_threshold`` times that maximum — 0.9 (90 %) is a tight
+    bracket that reliably identifies the shock front without triggering on
+    lightly-compressed upstream cells.
+
+    Fallback: if no cell passes the threshold (e.g. very early times when the
+    shock is still weak), we fall back to the cell with the steepest negative
+    density gradient in mass-coordinate space.
+    """
     rho_arr = np.asarray(rho, dtype=float)
     m_arr = np.asarray(m_coordinate, dtype=float)
     n = rho_arr.size
     if n < 3:
         return -1, float("nan")
 
+    # Maximum strong-shock compression ratio scaled by the threshold fraction.
     rho_thresh = float(rho_unshocked) * Hugoniot_threshold * (gamma + 1.0) / (gamma - 1.0)
     compressed = rho_arr > rho_thresh
     compressed_idx = np.flatnonzero(compressed)
     if compressed_idx.size > 0:
+        # Rightmost cell above threshold = right edge of the compressed region.
         i = int(compressed_idx[-1])
         return i, float(rho_arr[i])
 
+    # Fallback: steepest negative density gradient in Lagrangian mass space.
     drho_dm = np.gradient(rho_arr, m_arr)
     i_steep = int(np.argmin(drho_dm))
     if np.isfinite(drho_dm[i_steep]):
@@ -127,22 +141,36 @@ def plot_xt_trajectories(history, case, xt_path, case_title, ablation_solver=Non
     boundary_position = np.array([r["boundary_position"] for r in results], dtype=float)
     
     # 2) Simulation shock from density profile
+    #
+    # IMPORTANT: after the downsampling on lines above, `times` and `x_sim`
+    # refer to a subset of the original history selected by `mask`.  However
+    # `history.rho` and `history.m` still hold the *full* unmasked arrays.
+    # We must index them with the original (unmasked) frame indices, not with
+    # the loop counter k that runs over the *downsampled* range.
+    # We pre-extract the downsampled density and mass arrays here so the loop
+    # below can use simple 0-based indexing consistently with `times`/`x_sim`.
+    mask_list = list(mask)  # convert range/slice to a list of original indices
+    rho_sampled = np.array([history.rho[i] for i in mask_list], dtype=float)  # (N_sampled, Ncells)
+    m_sampled   = np.array([history.m[i]   for i in mask_list], dtype=float)  # (N_sampled, Ncells)
+
     x_shock_sim = np.full(times.size - 1, np.nan, dtype=float)
     for k in range(1, times.size):
-        rhok = np.asarray(history.rho[k], dtype=float)
-        mk = np.asarray(history.m[k], dtype=float)
+        # k indexes into the *downsampled* arrays (rho_sampled, m_sampled, x_sim)
+        rhok = rho_sampled[k]          # shape (Ncells,)
+        mk   = m_sampled[k]            # shape (Ncells,)
         rhok_smooth = _rolling_mean(rhok, 5)
         ishock, _ = find_shock_front(
             rhok_smooth,
             mk,
             rho_unshocked=float(case.rho0),
             gamma=float(case.r) + 1.0,
-            Hugoniot_threshold=0.5,
+            # threshold kept consistent with find_shock_front default (0.9)
         )
         if ishock >= 1:
             x_shock_sim[k - 1] = float(x_sim[k, ishock])
-            
-    # Apply linear regression correction for small times (t < 0.002 ns)
+
+    # Apply log-space linear regression to extrapolate shock position for very
+    # early times (t < 0.002 ns) where the shock is not yet detected reliably.
     later_times = np.array([])
     later_x = np.array([])
     for k in range(1, times.size):
@@ -150,9 +178,9 @@ def plot_xt_trajectories(history, case, xt_path, case_title, ablation_solver=Non
         if t_ns >= 0.002 and not np.isnan(x_shock_sim[k - 1]):
             later_times = np.append(later_times, times[k])
             later_x = np.append(later_x, x_shock_sim[k - 1])
-            
+
     if len(later_times) >= 2:
-        slope, intercept = np.polyfit(np.log(later_times+1e-20), np.log(later_x), 1)
+        slope, intercept = np.polyfit(np.log(later_times + 1e-20), np.log(later_x), 1)
         for k in range(1, times.size):
             t_ns = times[k] * 1e9
             if t_ns < 0.002:
@@ -182,7 +210,7 @@ def plot_xt_trajectories(history, case, xt_path, case_title, ablation_solver=Non
     ax.plot(times_model, shock_position, lw=2.0, ls="--", c="darkred", label="Shock (Menahem)")
     ax.plot(times_model, piston_position, lw=2.0, ls="--", c="green", label="Piston (Menahem)")
     ax.plot(times_model, heat_position, lw=2.0, ls="--", c="purple", label="Heat Wave (Menahem)")
-    
+    ax.plot(times_model, boundary_position, lw=2.0, ls="--", c="black", label="boundary (Menahem)")    
     plt.xlabel("time [sec]")
     plt.ylabel("position [cm]")
     plt.autoscale(enable=True, axis='both', tight=True)

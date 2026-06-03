@@ -72,43 +72,17 @@ USE_CACHE = True  # Set to True to use pre-saved pickle files, False to run agai
 
 # =============================================================================
 # Helper functions for shock detection and rolling average
+# (imported from the shared utility module)
 # =============================================================================
 
-def find_shock_front(
-    rho: np.ndarray,
-    m_coordinate: np.ndarray,
-    *,
-    rho_unshocked: float,
-    gamma: float,
-    Hugoniot_threshold: float = 0.5,
-) -> tuple[int, float]:
-    """Detect the shock as the right edge of the compressed region."""
-    rho_arr = np.asarray(rho, dtype=float)
-    m_arr = np.asarray(m_coordinate, dtype=float)
-    n = rho_arr.size
-    if n < 3:
-        return -1, float("nan")
-
-    rho_thresh = float(rho_unshocked) * Hugoniot_threshold * (gamma + 1.0) / (gamma - 1.0)
-    compressed = rho_arr > rho_thresh
-    compressed_idx = np.flatnonzero(compressed)
-    if compressed_idx.size > 0:
-        i = int(compressed_idx[-1])
-        return i, float(rho_arr[i])
-
-    drho_dm = np.gradient(rho_arr, m_arr)
-    i_steep = int(np.argmin(drho_dm))
-    if np.isfinite(drho_dm[i_steep]):
-        return i_steep, float(rho_arr[i_steep])
-    return -1, float("nan")
-
-
-def _rolling_mean(a: np.ndarray, window: int) -> np.ndarray:
-    if window <= 1:
-        return np.asarray(a, dtype=float)
-    w = int(max(1, window))
-    kernel = np.ones(w, dtype=float) / float(w)
-    return np.convolve(np.asarray(a, dtype=float), kernel, mode="same")
+from sim_front_utils import (  # noqa: E402
+    find_shock_front,
+    _rolling_mean,
+    detect_sim_ablation_boundary,
+    detect_sim_ablation_front,
+    detect_sim_shock_front_trajectory,
+    compute_fit_front_trajectories,
+)
 
 
 def _get_equally_spaced_elements(times: np.ndarray, n: int) -> np.ndarray:
@@ -405,7 +379,7 @@ def plot_patched_dimensional_fit_comparison_eulerian(
         # Simulation fronts
         dx_sim = x_sim_center_um[1] - x_sim_center_um[0]
         x_b_sim = x_sim_center_um[0] - 0.5 * dx_sim
-        # Detect simulation shock
+        # Detect simulation shock (Hugoniot_threshold defaults to 0.9 via sim_front_utils)
         rhok_smooth = _rolling_mean(sim_rho, 5)
         ishock, _ = find_shock_front(rhok_smooth, m_sim, rho_unshocked=float(case.rho0), gamma=float(case.r) + 1.0)
         x_s_sim = x_sim_center_um[ishock] if ishock >= 1 else np.nan
@@ -601,7 +575,7 @@ def plot_fully_patched_comparison_eulerian(
         x_b_fit = (hs.boundary_position(time=t_actual) + x_af_fit) * 1e4
         x_s_fit = ss.shock_position(time=t_actual) * 1e4
         
-        # Simulation fronts
+        # Simulation fronts (Hugoniot_threshold defaults to 0.9 via sim_front_utils)
         dx_sim = x_sim_center_um[1] - x_sim_center_um[0]
         x_b_sim = x_sim_center_um[0] - 0.5 * dx_sim
         rhok_smooth = _rolling_mean(sim_rho, 5)
@@ -686,103 +660,85 @@ def plot_front_trajectories_eulerian(history, ablation_solver, sub_params, shock
     times = np.asarray(history.t, dtype=float)
     x_sim = np.asarray(history.x, dtype=float)
     
-    # Grid sizes
-    n_cells = x_sim.shape[1] - 1
+    # Grid sizes – x_sim stores cell centres (Ncells columns), so n_cells = Ncells.
+    n_cells = x_sim.shape[1]
     mass_grid = _build_mass_grid(case, num_cells=n_cells)
-    
+
     times_model = _get_equally_spaced_elements(times, 200)
-    
-    # 1) Simulation shock position tracking
-    x_shock_sim = np.full(times.size, np.nan, dtype=float)
-    for k in range(1, times.size):
-        rhok = np.asarray(history.rho[k], dtype=float)
-        mk = np.asarray(history.m[k], dtype=float)
-        rhok_smooth = _rolling_mean(rhok, 5)
-        ishock, _ = find_shock_front(
-            rhok_smooth,
-            mk,
-            rho_unshocked=float(case.rho0),
-            gamma=float(case.r) + 1.0,
-            Hugoniot_threshold=0.5,
-        )
-        if ishock >= 1:
-            x_shock_sim[k] = float(x_sim[k, ishock]) * 1e4
-            
-    # Apply rolling mean to clean up shock front detection noise slightly
-    x_shock_sim = _rolling_mean(x_shock_sim, 3)
-    
-    # Simulation boundary position is just the first cell coordinate
-    x_boundary_sim = x_sim[:, 0] * 1e4
-    
+
+    # 1) Simulation front tracking
+    #    detect_sim_shock_front_trajectory / detect_sim_ablation_boundary work
+    #    directly on the full (unmasked) history arrays, so indexing is safe.
+    x_shock_sim_raw = detect_sim_shock_front_trajectory(
+        history.rho,
+        history.m,
+        x_sim,
+        rho_unshocked=float(case.rho0),
+        gamma=float(case.r) + 1.0,
+        smooth_window=5,
+        extrap_t_ns=0.002,
+        extrap_times=times,
+    )
+    # Convert to µm and apply a light rolling mean to reduce jitter
+    x_shock_sim = _rolling_mean(x_shock_sim_raw * 1e4, 3)
+
+    # Ablation boundary: left face of the leftmost cell
+    x_boundary_sim = detect_sim_ablation_boundary(x_sim) * 1e4
+
+    # Ablation front: leftmost strongly-compressed cell
+    x_ablation_front_sim = detect_sim_ablation_front(
+        history.rho,
+        history.m,
+        x_sim,
+        rho_unshocked=float(case.rho0),
+        gamma=float(case.r) + 1.0,
+        smooth_window=5,
+    ) * 1e4
+
     # 2) Solver exact front tracking
-    x_boundary_sol = np.zeros_like(times_model)
-    x_piston_sol = np.zeros_like(times_model)
+    x_boundary_sol       = np.zeros_like(times_model)
+    x_piston_sol         = np.zeros_like(times_model)
     x_ablation_front_sol = np.zeros_like(times_model)
-    x_shock_sol = np.zeros_like(times_model)
-    
-    # 3) Fit analytical front tracking
-    x_boundary_fit = np.zeros_like(times_model)
-    x_piston_fit = np.zeros_like(times_model)
-    x_ablation_front_fit = np.zeros_like(times_model)
-    x_shock_fit = np.zeros_like(times_model)
-    
-    hs = ablation_solver.heat_solver
-    ss = ablation_solver.shock_solver
-    q1 = 1.0 - ss.omega
-    q2 = (2.0 - ss.omega) / (ss.tau + 2.0)
-    
+    x_shock_sol          = np.zeros_like(times_model)
+
     for i, t in enumerate(times_model):
         t_val = max(float(t), 1e-18)
         sol = ablation_solver.solve(mass=mass_grid, time=t_val)
-        
-        # Solver positions
-        x_boundary_sol[i] = (sol["boundary_position"] + sol["heat_position"]) * 1e4
-        x_piston_sol[i] = sol["piston_position"] * 1e4
-        x_ablation_front_sol[i] = sol["heat_position"] * 1e4
-        x_shock_sol[i] = sol["shock_position"] * 1e4
-        
-        # Fit positions
-        m_f = hs.ablated_mass(time=t_val)
-        xsi_mf = m_f * ss.xsi_over_m(time=t_val)
-        y_mf = xsi_mf / ss.xsi_s
-        _, _, U_fit_sh_mf, rho_fit_sh_mf = shock_fit_by_params(np.array([y_mf]), shock_params)
-        V_fit_sh_mf = 1.0 / rho_fit_sh_mf[0]
-        
-        pos_scale = ss._position_temporal_factor(time=t_val)
-        
-        # front position (heat wave interface) for fit
-        x_af_val = pos_scale * (q1 * xsi_mf * V_fit_sh_mf + q2 * U_fit_sh_mf[0])
-        x_ablation_front_fit[i] = x_af_val * 1e4
-        
-        # shock piston position for fit
-        x_piston_fit[i] = pos_scale * q2 * ss.U0 * 1e4
-        
-        # boundary position for fit
-        x_boundary_fit[i] = (hs.boundary_position(time=t_val) + x_af_val) * 1e4
-        
-        # shock front position for fit
-        x_shock_fit[i] = ss.shock_position(time=t_val) * 1e4
+        x_boundary_sol[i]       = (sol["boundary_position"] + sol["heat_position"]) * 1e4
+        x_piston_sol[i]         = sol["piston_position"]    * 1e4
+        x_ablation_front_sol[i] = sol["heat_position"]      * 1e4
+        x_shock_sol[i]          = sol["shock_position"]     * 1e4
+
+    # 3) Analytic-fit front tracking (shared utility)
+    fit_fronts = compute_fit_front_trajectories(
+        times_model, ablation_solver, sub_params, shock_params
+    )
+    x_boundary_fit       = fit_fronts["boundary"]       * 1e4
+    x_ablation_front_fit = fit_fronts["ablation_front"] * 1e4
+    x_piston_fit         = fit_fronts["piston"]         * 1e4
+    x_shock_fit          = fit_fronts["shock"]          * 1e4
         
     # Plot curves
     fig, ax = plt.subplots(figsize=(10, 7))
     t_ns = times * 1e9
     t_ns_model = times_model * 1e9
-    
+
     # Plot Simulation
-    ax.plot(t_ns, x_boundary_sim, '-', color='black', lw=2.5, label=r"$x_{\rm boundary}$ (simulation)")
-    ax.plot(t_ns, x_shock_sim, '-', color='red', lw=2.5, label=r"$x_{\rm shock\ front}$ (simulation)")
-    
+    ax.plot(t_ns, x_boundary_sim,       '-',  color='black',   lw=2.5, label=r"$x_{\rm boundary}$ (simulation)")
+    ax.plot(t_ns, x_ablation_front_sim, '-',  color='fuchsia', lw=2.0, label=r"$x_{\rm ablation\ front}$ (simulation)")
+    ax.plot(t_ns, x_shock_sim,          '-',  color='red',     lw=2.5, label=r"$x_{\rm shock\ front}$ (simulation)")
+
     # Plot Solver
-    ax.plot(t_ns_model, x_boundary_sol, '--', color='grey', lw=2.0, label=r"$x_{\rm boundary}$ (solver)")
-    ax.plot(t_ns_model, x_piston_sol, '--', color='blue', lw=2.0, label=r"$x_{\rm piston}$ (solver)")
+    ax.plot(t_ns_model, x_boundary_sol,       '--', color='grey',    lw=2.0, label=r"$x_{\rm boundary}$ (solver)")
+    ax.plot(t_ns_model, x_piston_sol,         '--', color='blue',    lw=2.0, label=r"$x_{\rm piston}$ (solver)")
     ax.plot(t_ns_model, x_ablation_front_sol, '--', color='fuchsia', lw=2.0, label=r"$x_{\rm ablation\ front}$ (solver)")
-    ax.plot(t_ns_model, x_shock_sol, '--', color='darkred', lw=2.0, label=r"$x_{\rm shock\ front}$ (solver)")
-    
+    ax.plot(t_ns_model, x_shock_sol,          '--', color='darkred', lw=2.0, label=r"$x_{\rm shock\ front}$ (solver)")
+
     # Plot Fit
-    ax.plot(t_ns_model, x_boundary_fit, ':', color='black', lw=2.2, label=r"$x_{\rm boundary}$ (fit)")
-    ax.plot(t_ns_model, x_piston_fit, ':', color='cyan', lw=2.2, label=r"$x_{\rm piston}$ (fit)")
+    ax.plot(t_ns_model, x_boundary_fit,       ':', color='black',  lw=2.2, label=r"$x_{\rm boundary}$ (fit)")
+    ax.plot(t_ns_model, x_piston_fit,         ':', color='cyan',   lw=2.2, label=r"$x_{\rm piston}$ (fit)")
     ax.plot(t_ns_model, x_ablation_front_fit, ':', color='purple', lw=2.2, label=r"$x_{\rm ablation\ front}$ (fit)")
-    ax.plot(t_ns_model, x_shock_fit, ':', color='orange', lw=2.2, label=r"$x_{\rm shock\ front}$ (fit)")
+    ax.plot(t_ns_model, x_shock_fit,          ':', color='orange', lw=2.2, label=r"$x_{\rm shock\ front}$ (fit)")
     
     ax.set_xlabel(r"$t$ [ns]", fontsize=13)
     ax.set_ylabel(r"$x$ [$\mu$m]", fontsize=13)

@@ -259,7 +259,7 @@ PRESET_TEST_CASES = {
         tau = 0.17,
 
         # initial conditions
-        rho0 = 0.1,
+        rho0 = 19.32,
         p0 = None,
         u0 = None,
         T_initial_Kelvin = 300, # 300 K in Hev

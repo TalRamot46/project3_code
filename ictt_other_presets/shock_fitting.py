@@ -60,11 +60,19 @@ _MENAHEM_DIR = Path(__file__).resolve().parents[1] / "menahem_new"
 if str(_MENAHEM_DIR) not in sys.path:
     sys.path.insert(0, str(_MENAHEM_DIR))
 
-from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
+from project3_code.rad_hydro_sim.problems.presets_utils import get_preset as _orig_get_preset
 from project3_code.rad_hydro_sim.problems.presets_config import (
     PRESET_FIG_9_CONSTANT_FLUX,
     PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE,
 )
+from dataclasses import replace
+def get_preset(preset_name):
+    case, config = _orig_get_preset(preset_name)
+    if preset_name == PRESET_FIG_9_CONSTANT_FLUX:
+        case = replace(case, t_sec_end=1.5e-9, times_for_png=np.array([0.5e-9, 1.0e-9, 1.5e-9], dtype=float))
+    elif preset_name == PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE:
+        case = replace(case, t_sec_end=1.5e-7, times_for_png=np.array([50e-9, 100e-9, 150e-9], dtype=float))
+    return case, config
 from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
 from project3_code.rad_hydro_sim.verification.menahem_comparison import (
     _shock_kwargs_from_case,
@@ -134,12 +142,13 @@ def get_cached_shock_solver(case, case_label):
     if case.P0_Barye is not None:
         p0 = _ns_amplitude_rescale(float(case.P0_Barye), tau)
     else:
-        # Solve subsonic heat wave to find P0
-        print("P0_Barye is None (Marshak case). Solving SubsonicHeatWave first to find piston pressure p0...")
+        # Solve subsonic heat wave to find Pf (front pressure)
+        print("P0_Barye is None (Marshak case). Solving SubsonicHeatWave first to find piston pressure p0 and tau...")
         heat_kwargs = _heat_kwargs_from_case(case)
         sub_solver = SubsonicHeatWave(**heat_kwargs).find_xsi_f()
-        p0 = sub_solver.P0 * (sub_solver.A**sub_solver.a3) * (sub_solver.B**sub_solver.b3)
-        print(f"  Found piston pressure p0 = {p0:.6e} Barye.")
+        p0 = sub_solver.Pf * (sub_solver.A**sub_solver.a3) * (sub_solver.B**sub_solver.b3)
+        tau = sub_solver.c3
+        print(f"  Found piston pressure p0 = {p0:.6e} Barye, tau = {tau:.6f}")
     
     solver = PistonShock(
         rho0=float(case.rho0),
@@ -536,7 +545,7 @@ def calculate_dimensional_fits(mass_grid, t_actual, solver, params):
     return {"density": rho, "pressure": p, "velocity": u, "temperature": T}
 
 
-def plot_dimensional_fit_comparison(history, solver, params, material_hydro_path, case_title):
+def plot_dimensional_fit_comparison(history, case, solver, params, material_hydro_path, case_title):
     """Plot overlay profiles of T, rho, P, u vs m comparing Simulation, Exact Solver, and Analytic fits."""
     print(f"Generating physical shock profiles comparison for {case_title}...")
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
@@ -562,12 +571,21 @@ def plot_dimensional_fit_comparison(history, solver, params, material_hydro_path
         t_actual = history.t[idx_sim]
 
         m_s_exact = solver.shocked_mass(time=t_actual)
-        shock_mask = m_sim <= m_s_exact
+        
+        # If Marshak case, the simulation shock region starts at the ablated mass m_f
+        if case.P0_Barye is None:
+            heat_kwargs = _heat_kwargs_from_case(case)
+            sub_solver = SubsonicHeatWave(**heat_kwargs).find_xsi_f()
+            m_f = sub_solver.ablated_mass(time=t_actual)
+        else:
+            m_f = 0.0
+
+        shock_mask = (m_sim >= m_f) & (m_sim <= m_s_exact)
         m_sim_shock = m_sim[shock_mask][:-2]
 
         sim_rho = history.rho[idx_sim][shock_mask][:-2]
-        sim_p = history.p[idx_sim][shock_mask] [:-2]
-        sim_u = history.u[idx_sim][shock_mask] [:-2]
+        sim_p = history.p[idx_sim][shock_mask][:-2]
+        sim_u = history.u[idx_sim][shock_mask][:-2]
         sim_T = history.T[idx_sim][shock_mask][:-2]
             
         mass_solver = np.linspace(1e-12, m_s_exact, 1000)
@@ -981,7 +999,7 @@ def generate_verification_plots(
     plot_standalone_temperature_fits(params, paths["temperature_fits"], case_title)
     plot_standalone_velocity_fits(params, paths["velocity_fits"], case_title)
     plot_and_fit_self_similar(solver, params, paths["self_similar"], case_title)
-    plot_dimensional_fit_comparison(history, solver, params, paths["dimensional_comparison"], case_title)
+    plot_dimensional_fit_comparison(history, case, solver, params, paths["dimensional_comparison"], case_title)
     plot_relative_errors(solver, params, paths["relative_errors"], case_title)
 
 

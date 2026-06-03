@@ -752,7 +752,7 @@ def run_full_rad_hydro_comparison(
         plot_comparison_slider(
             sim_data,
             ref_data,
-            xaxis="x",
+            xaxis="m",
             show=True,
             title=title_fig,
             extra_data=extra_refs or None,

@@ -58,11 +58,19 @@ _MENAHEM_DIR = Path(__file__).resolve().parents[1] / "menahem_new"
 if str(_MENAHEM_DIR) not in sys.path:
     sys.path.insert(0, str(_MENAHEM_DIR))
 
-from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
+from project3_code.rad_hydro_sim.problems.presets_utils import get_preset as _orig_get_preset
 from project3_code.rad_hydro_sim.problems.presets_config import (
     PRESET_FIG_9_CONSTANT_FLUX,
     PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE,
 )
+from dataclasses import replace
+def get_preset(preset_name):
+    case, config = _orig_get_preset(preset_name)
+    if preset_name == PRESET_FIG_9_CONSTANT_FLUX:
+        case = replace(case, t_sec_end=1.5e-9, times_for_png=np.array([0.5e-9, 1.0e-9, 1.5e-9], dtype=float))
+    elif preset_name == PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE:
+        case = replace(case, t_sec_end=1.5e-7, times_for_png=np.array([50e-9, 100e-9, 150e-9], dtype=float))
+    return case, config
 from project3_code.rad_hydro_sim.verification.menahem_comparison import (
     _heat_kwargs_from_case,
 )

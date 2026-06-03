@@ -19,6 +19,13 @@ from dataclasses import replace
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+import scipy.integrate
+
+# Monkeypatch scipy.integrate.simps and numpy.trapz for compatibility
+if not hasattr(scipy.integrate, "simps"):
+    scipy.integrate.simps = scipy.integrate.simpson
+if not hasattr(np, "trapz"):
+    np.trapz = getattr(np, "trapezoid", None) or scipy.integrate.trapz
 
 # Ensure proper package and solver imports
 _REPO_PARENT = Path(__file__).resolve().parents[2]
@@ -34,11 +41,18 @@ _ICTT_OTHER_DIR = Path(__file__).resolve().parent
 if str(_ICTT_OTHER_DIR) not in sys.path:
     sys.path.insert(0, str(_ICTT_OTHER_DIR))
 
-from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
+from project3_code.rad_hydro_sim.problems.presets_utils import get_preset as _orig_get_preset
 from project3_code.rad_hydro_sim.problems.presets_config import (
     PRESET_FIG_9_CONSTANT_FLUX,
     PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE,
 )
+def get_preset(preset_name):
+    case, config = _orig_get_preset(preset_name)
+    if preset_name == PRESET_FIG_9_CONSTANT_FLUX:
+        case = replace(case, t_sec_end=1.5e-9, times_for_png=np.array([0.5e-9, 1.0e-9, 1.5e-9], dtype=float))
+    elif preset_name == PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE:
+        case = replace(case, t_sec_end=1.5e-7, times_for_png=np.array([50e-9, 100e-9, 150e-9], dtype=float))
+    return case, config
 from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
 from project3_code.rad_hydro_sim.simulation.radiation_step import KELVIN_PER_HEV
 from project3_code.rad_hydro_sim.verification.menahem_comparison import (

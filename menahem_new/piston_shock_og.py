@@ -355,6 +355,8 @@ class PistonShock():
         For the correct xsi_s, the value of P should be equal to 1.0,
         Therefore, the root of integrate_inward(xsi_s)[2]-1=0 is the exact xsi_s of the problem.
         """
+        if hasattr(xsi_s, "item"):
+            xsi_s = float(xsi_s.item())
         assert xsi_s > 0., xsi_s
 
         # Hugoniot - values at the shock

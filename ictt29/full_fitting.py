@@ -58,7 +58,12 @@ USE_CACHE = True  # Set to True to use pre-saved pickle files, False to run agai
 
 
 def get_data():
-    """Run full simulation and build AblationSolver reference solver, or load from cache."""
+    """
+    Run full simulation and build AblationSolver reference solver, or load from cache.
+
+    Returns:
+        tuple: A tuple containing (case, history, ablation_solver)
+    """
     cache_dir = Path("results/ictt/cache")
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_path = cache_dir / "full_fitting_cache.pkl"

@@ -596,14 +596,14 @@ class PistonShock():
         logger.info(f"{self.rep}: eints {(2.-self.omega)*self.U0/denom}")
 
         # cum plot
-        # etot_integral_cum_trapz = scipy.integrate.cumtrapz(y=integrand, x=xsi_vec)
+        etot_integral_cum_trapz = scipy.integrate.cumtrapz(y=integrand, x=xsi_vec)
 
-        # etot_integral_cum = (1-self.omega)*(2.+self.tau)*xsi_vec*integrand -(2.-self.omega) * (P*U-U[0])
-        # etot_integral_cum /= denom
+        etot_integral_cum = (1-self.omega)*(2.+self.tau)*xsi_vec*integrand -(2.-self.omega) * (P*U-U[0])
+        etot_integral_cum /= denom
 
-        # plt.plot(xsi_vec, etot_integral_cum)
-        # plt.plot(0.5*(xsi_vec[1:]+xsi_vec[:-1]), etot_integral_cum_trapz, ls="--")
-        # plt.show()
+        plt.plot(xsi_vec, etot_integral_cum)
+        plt.plot(0.5*(xsi_vec[1:]+xsi_vec[:-1]), etot_integral_cum_trapz, ls="--")
+        plt.show()
 
         return self
 
@@ -1119,3 +1119,4 @@ if __name__ == "__main__":
     # test_shock_position()
     # test_xsi_s()
     # test_self_similar_profiles()
+    # test_profiles() 

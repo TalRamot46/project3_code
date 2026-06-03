@@ -165,24 +165,25 @@ def plot_xt_trajectories(
         rho_unshocked=float(case.rho0),
         gamma=float(case.r) + 1.0,
         smooth_window=5,
-        extrap_t_ns=0.002,
+        extrap_t_ns=0.1,
         extrap_times=times_model,
     )
+
+
     # x_shock_sim[0] is always nan (t=0); align with times_model[1:]
     x_shock_sim_plot = x_shock_sim[1:]   # shape (N_sampled-1,)
 
     # Ablation boundary: left edge of the leftmost cell
     x_boundary_sim = detect_sim_ablation_boundary(x_sim)   # (N_sampled,) cm
 
-    # Ablation front: leftmost cell above the Hugoniot threshold
-    x_ablation_front_sim = detect_sim_ablation_front(
+    # heat / ablation front (Simulation)
+    x_heat_sim = detect_sim_ablation_front(
         rho_sampled,
         m_sampled,
         x_sim,
         rho_unshocked=float(case.rho0),
         gamma=float(case.r) + 1.0,
-        smooth_window=5,
-    )   # (N_sampled,) cm
+    )
 
     # ------------------------------------------------------------------
     # 3)  Analytic-fit front trajectories (optional)
@@ -201,54 +202,57 @@ def plot_xt_trajectories(
     # ------------------------------------------------------------------
     fig, ax = plt.subplots(figsize=(9.5, 6.5))
 
-    # --- background Lagrangian cell trajectories ---
+    # --- background Lagrangian cell trajectories (Simulation vs Solver vs Fit) ---
     NUM_PRESENTED_CELLS = 100
     chosen_cell_indices = np.round(
         np.linspace(0, n_cells - 1, NUM_PRESENTED_CELLS)
     ).astype(int)
 
-    legend_added = False
+    # Compute fit cell trajectories if parameters are available
+    x_fit_all = None
+    if sub_params is not None and shock_params is not None:
+        try:
+            from full_fitting_eulerian import calculate_patched_eulerian_positions_fit
+            x_fit_list = []
+            for t in times_model:
+                t_val = max(float(t), 1e-18)
+                x_f = calculate_patched_eulerian_positions_fit(
+                    mass_grid, t_val, ablation_solver, sub_params, shock_params
+                )
+                x_fit_list.append(x_f)
+            x_fit_all = np.array(x_fit_list)  # Shape (N_sampled, len(mass_grid))
+        except Exception as exc:
+            print(f"  [plot_xt] Could not compute fit cell trajectories: {exc}")
+
     for j in chosen_cell_indices:
-        lbl_sim = "Simulation Cells" if not legend_added else None
-        lbl_men = "Analytic Cells"   if not legend_added else None
         ax.plot(times_model, x_sim[:, j],
-                color="black", lw=0.4, alpha=0.8, label=lbl_sim)
+                color="navy", lw=0.4, alpha=0.8)
         # position_times has shape (len(mass_grid), N_sampled); the first two
         # rows correspond to the two sentinel mass entries prepended in
         # _build_mass_grid, so mass index j maps to position_times[j+2].
         if j + 2 < position_times.shape[0]:
             ax.plot(times_model, position_times[j + 2],
-                    color="blue", lw=0.4, alpha=0.7, label=lbl_men)
-        legend_added = True
+                    color="royalblue", lw=0.4, alpha=0.7)
+        if x_fit_all is not None and j + 2 < x_fit_all.shape[1]:
+            ax.plot(times_model, x_fit_all[:, j + 2],
+                    color="lightskyblue", lw=0.4, alpha=0.6)
 
-    # --- Simulation fronts (solid, bold) ---
-    ax.plot(times_model[1:], x_shock_sim_plot,
-            lw=2.5, c="red",     label="Shock front (simulation)")
-    ax.plot(times_model, x_boundary_sim,
-            lw=2.0, c="black",   label="Ablation boundary (simulation)")
-    ax.plot(times_model, x_ablation_front_sim,
-            lw=2.0, c="fuchsia", label="Ablation front (simulation)", alpha=0.85)
 
-    # --- Analytic solver fronts (dashed) ---
-    ax.plot(times_model, shock_position,
-            lw=2.0, ls="--", c="darkred", label="Shock (solver)")
-    ax.plot(times_model, piston_position,
-            lw=2.0, ls="--", c="green",   label="Piston (solver)")
-    ax.plot(times_model, heat_position,
-            lw=2.0, ls="--", c="purple",  label="Heat wave (solver)")
-    ax.plot(times_model, abs_boundary_position,
-            lw=2.0, ls="--", c="grey",    label="Boundary (solver)")
+    # --- Simulation fronts (solid) ---
+    ax.plot(times_model[1:], x_shock_sim_plot, lw=2.5, c="red", ls="-")
+    ax.plot(times_model, x_heat_sim, lw=2.0, c="green", ls="-")
+    ax.plot(times_model, x_boundary_sim, lw=2.0, c="black", ls="-")
 
-    # --- Fit fronts (dotted), only when params are available ---
+    # --- Solver fronts (dashed) ---
+    ax.plot(times_model, shock_position, lw=2.0, ls="--", c="orange")
+    ax.plot(times_model, heat_position, lw=2.0, ls="--", c="purple")
+    ax.plot(times_model, abs_boundary_position, lw=2.0, ls="--", c="black")
+
+    # --- Fit fronts (dotted) ---
     if fit_fronts is not None:
-        ax.plot(times_model, fit_fronts["shock"],
-                lw=2.0, ls=":", c="orange",  label="Shock (fit)")
-        ax.plot(times_model, fit_fronts["piston"],
-                lw=2.0, ls=":", c="cyan",    label="Piston (fit)")
-        ax.plot(times_model, fit_fronts["ablation_front"],
-                lw=2.0, ls=":", c="violet",  label="Ablation front (fit)")
-        ax.plot(times_model, fit_fronts["boundary"],
-                lw=2.0, ls=":", c="dimgray", label="Boundary (fit)")
+        ax.plot(times_model, fit_fronts["shock"], lw=2.0, ls=":", c="gold")
+        ax.plot(times_model, fit_fronts["ablation_front"], lw=2.0, ls=":", c="deeppink")
+        ax.plot(times_model, fit_fronts["boundary"], lw=2.0, ls=":", c="black")
 
     ax.set_xlabel("time [sec]",     fontsize=12)
     ax.set_ylabel("position [cm]",  fontsize=12)
@@ -257,7 +261,40 @@ def plot_xt_trajectories(
         fontsize=13, fontweight="bold",
     )
     ax.grid(True, alpha=0.25)
-    ax.legend(loc="lower right", fontsize=8.5, ncol=2)
+
+    # --- Structured legend arranged column-first: 3 columns, 4 rows ---
+    # Rows correspond to: heat, shock, grid, boundary
+    _have_fit = fit_fronts is not None
+    _inv = dict(color="none", lw=0)
+
+    legend_handles = [
+        # Column 1: Simulation
+        Line2D([0], [0], color="green", lw=2.0, ls="-", label="heat Simulation"),
+        Line2D([0], [0], color="red", lw=2.0, ls="-", label="shock Simulation"),
+        Line2D([0], [0], color="navy", lw=0.8, label="grid simulation"),
+        Line2D([0], [0], color="black", lw=2.0, ls="-", label="boundary Simulation"),
+        
+        # Column 2: Solver
+        Line2D([0], [0], color="purple", lw=2.0, ls="--", label="heat Solver"),
+        Line2D([0], [0], color="orange", lw=2.0, ls="--", label="shock Solver"),
+        Line2D([0], [0], color="royalblue", lw=0.8, label="grid solver"),
+        Line2D([0], [0], color="black", lw=2.0, ls="--", label="boundary Solver"),
+        
+        # Column 3: Fit
+        Line2D([0], [0], color="deeppink", lw=2.0, ls=":", label="heat Fit") if _have_fit else Line2D([0], [0], **_inv, label=""),
+        Line2D([0], [0], color="gold", lw=2.0, ls=":", label="shock Fit") if _have_fit else Line2D([0], [0], **_inv, label=""),
+        Line2D([0], [0], color="lightskyblue", lw=0.8, label="grid fit"),
+        Line2D([0], [0], color="black", lw=2.0, ls=":", label="boundary Fit") if _have_fit else Line2D([0], [0], **_inv, label=""),
+    ]
+    ax.legend(
+        handles=legend_handles,
+        ncol=3,
+        fontsize=8.0,
+        loc="lower right",
+        handlelength=2.0,
+        columnspacing=0.8,
+        handletextpad=0.4,
+    )
     ax.set_xlim([0.0, times_model[-1]])
     ax.set_ylim([-0.1 * x_sim.max(), x_sim.max()])
 

@@ -13,7 +13,7 @@ mat.sigma=5.670373*10^(-5); %Watt/cm*2/K*4
 mat.r=mat.mu/(mat.beta-1);
 %Define units of the conserved quantity, and derive / define tau.
 %Default is constant temperature:
-% etta1=mat.mu/mat.beta;
-% etta2=(2-3*mat.mu)/mat.beta;
-% etta3=-2/mat.beta;
-% tau = solve_for_tau(etta1,etta2,etta3,mat);
+etta1=mat.mu/mat.beta;
+etta2=(2-3*mat.mu)/mat.beta;
+etta3=-2/mat.beta;
+tau = solve_for_tau(etta1,etta2,etta3,mat);

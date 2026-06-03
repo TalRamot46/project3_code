@@ -19,8 +19,9 @@ detect_sim_ablation_boundary(x_sim)
 detect_sim_ablation_front(history_rho, history_m, x_sim, *, rho_unshocked,
                           gamma, smooth_window=5)
     Detect the ablation / heat-wave front as the left edge of the shocked
-    region by finding the leftmost cell whose density has dropped back to
-    near-ambient after the compressed region.
+    region by finding the leftmost cell whose density is above the Hugoniot
+    compression threshold.
+
 
 detect_sim_shock_front_trajectory(history_rho, history_m, x_sim, *,
                                   rho_unshocked, gamma,
@@ -200,21 +201,34 @@ def detect_sim_ablation_front(
 
     rho_thresh = (
         float(rho_unshocked)
-        * 0.9   # same Hugoniot threshold fraction as find_shock_front
+        * 0.5   # same Hugoniot threshold fraction as find_shock_front
         * (gamma + 1.0) / (gamma - 1.0)
     )
 
     x_ablation_front = np.full(K, np.nan, dtype=float)
-    for k in range(1, K):
-        rhok = _rolling_mean(history_rho[k], smooth_window)
-        compressed_idx = np.flatnonzero(rhok > rho_thresh)
-        if compressed_idx.size > 0:
-            # Leftmost strongly-compressed cell = ablation / heat-wave front.
-            i_left = int(compressed_idx[0])
-            x_ablation_front[k] = float(x_sim[k, i_left])
+    # for k in range(1, K):
+    #     rhok = _rolling_mean(history_rho[k], smooth_window)
+    #     compressed_idx = np.flatnonzero(rhok > rho_thresh)
+    #     if compressed_idx.size > 0:
+    #         # Leftmost strongly-compressed cell = ablation / heat-wave front.
+    #         i_left = int(compressed_idx[0])
+    #         x_ablation_front[k] = float(x_sim[k, i_left])
 
+    # Find the leftmost drop in density gradient
+    rho_grad = np.gradient(history_rho, axis=1)
+    Ncells = history_rho.shape[1]
+    # return the leftmost local maximum that is above its 3 closest neighbors.
+    for k in range(3, K - 3):
+        for i in range(3, Ncells - 3):
+            if rho_grad[k, i] > rho_grad[k, i - 1] and \
+               rho_grad[k, i] > rho_grad[k, i + 1] and \
+               rho_grad[k, i] > rho_grad[k, i - 2] and \
+               rho_grad[k, i] > rho_grad[k, i + 2] and \
+               rho_grad[k, i] > rho_grad[k, i - 3] and \
+               rho_grad[k, i] > rho_grad[k, i + 3]:
+                x_ablation_front[k] = float(x_sim[k, i])
+                break
     return x_ablation_front
-
 
 # ---------------------------------------------------------------------------
 # Shock front trajectory (vectorised over all timesteps)
@@ -228,7 +242,7 @@ def detect_sim_shock_front_trajectory(
     rho_unshocked: float,
     gamma: float,
     smooth_window: int = 5,
-    extrap_t_ns: float = 0.002,
+    extrap_t_ns: float = 0.1,
     extrap_times: np.ndarray | None = None,
 ) -> np.ndarray:
     """Compute the shock-front x-position for every snapshot in the history.

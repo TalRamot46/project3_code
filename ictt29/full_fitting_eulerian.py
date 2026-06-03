@@ -79,7 +79,6 @@ from sim_front_utils import (  # noqa: E402
     find_shock_front,
     _rolling_mean,
     detect_sim_ablation_boundary,
-    detect_sim_ablation_front,
     detect_sim_shock_front_trajectory,
     compute_fit_front_trajectories,
 )
@@ -557,58 +556,41 @@ def plot_fully_patched_comparison_eulerian(
         ax_u.plot(fit_x_um, fit_u, ':', color='#e67e22', lw=2.0)
         ax_T.plot(fit_x_um, fit_T, ':', color='#e67e22', lw=2.0)
 
-        # Front positions to plot as vertical lines
-        heat_position = sol_exact["heat_position"]
-        x_b_sol = (sol_exact["boundary_position"] + heat_position) * 1e4
-        x_af_sol = heat_position * 1e4
-        x_s_sol = sol_exact["shock_position"] * 1e4
-        
-        # Fit fronts
+        x_piston_sim_um = np.nan
+
+        # Piston from solver = heat_position (ablation front = inner edge of shocked region)
+        x_piston_sol_um = sol_exact["heat_position"] * 1e4
+
+        # Piston from fit: compute x_af_fit (the ablation-front position in the fit)
         pos_scale = ss._position_temporal_factor(time=t_actual)
-        m_f = hs.ablated_mass(time=t_actual)
+        m_f    = hs.ablated_mass(time=t_actual)
         xsi_mf = m_f * ss.xsi_over_m(time=t_actual)
-        y_mf = xsi_mf / ss.xsi_s
+        y_mf   = xsi_mf / ss.xsi_s
         _, _, U_fit_sh_mf, rho_fit_sh_mf = shock_fit_by_params(np.array([y_mf]), shock_params)
         V_fit_sh_mf = 1.0 / rho_fit_sh_mf[0]
         x_af_fit = pos_scale * (q1 * xsi_mf * V_fit_sh_mf + q2 * U_fit_sh_mf[0])
-        
-        x_b_fit = (hs.boundary_position(time=t_actual) + x_af_fit) * 1e4
-        x_s_fit = ss.shock_position(time=t_actual) * 1e4
-        
-        # Simulation fronts (Hugoniot_threshold defaults to 0.9 via sim_front_utils)
-        dx_sim = x_sim_center_um[1] - x_sim_center_um[0]
-        x_b_sim = x_sim_center_um[0] - 0.5 * dx_sim
-        rhok_smooth = _rolling_mean(sim_rho, 5)
-        ishock, _ = find_shock_front(rhok_smooth, m_sim, rho_unshocked=float(case.rho0), gamma=float(case.r) + 1.0)
-        x_s_sim = x_sim_center_um[ishock] if ishock >= 1 else np.nan
+        x_piston_fit_um = x_af_fit * 1e4
 
-        # Draw vertical lines for the fronts on all subplots with matching styles
+        # Draw ONE piston vertical line per source on all subplots
         for ax in [ax_rho, ax_p, ax_u, ax_T]:
-            # Ablation boundary
-            ax.axvline(x=x_b_sim, color='#1a5fb4', linestyle='-', lw=1.2, alpha=0.6)
-            ax.axvline(x=x_b_sol, color='#333333', linestyle='--', lw=1.2, alpha=0.6)
-            ax.axvline(x=x_b_fit, color='#e67e22', linestyle=':', lw=1.4, alpha=0.6)
-            
-            # Ablation front / shock piston
-            ax.axvline(x=x_af_sol, color='#333333', linestyle='--', lw=1.2, alpha=0.6)
-            ax.axvline(x=x_af_fit, color='#e67e22', linestyle=':', lw=1.4, alpha=0.6)
-            
-            # Shock front
-            if not np.isnan(x_s_sim):
-                ax.axvline(x=x_s_sim, color='#1a5fb4', linestyle='-', lw=1.2, alpha=0.6)
-            ax.axvline(x=x_s_sol, color='#333333', linestyle='--', lw=1.2, alpha=0.6)
-            ax.axvline(x=x_s_fit, color='#e67e22', linestyle=':', lw=1.4, alpha=0.6)
+            if np.isfinite(x_piston_sim_um):
+                ax.axvline(x=x_piston_sim_um, color='#1a5fb4', linestyle='-',  lw=1.5, alpha=0.7,
+                           label='piston (sim)' if i == 0 else None)
+            ax.axvline(x=x_piston_sol_um,  color='#333333',  linestyle='--', lw=1.5, alpha=0.7,
+                       label='piston (solver)' if i == 0 else None)
+            ax.axvline(x=x_piston_fit_um,  color='#e67e22',  linestyle=':',  lw=1.8, alpha=0.7,
+                       label='piston (fit)' if i == 0 else None)
 
-    # Build clear style/front legend entries
+    # Build legend: profiles + piston lines
     legend_handles = [
-        Line2D([0], [0], color='#1a5fb4', lw=2.5, linestyle='-', label='Simulation (2.0 ns)'),
-        Line2D([0], [0], color='#333333', lw=2.0, linestyle='-', label='Exact Patched Solver'),
-        Line2D([0], [0], color='#e67e22', lw=2.0, linestyle=':', label='Patched Fit'),
-        Line2D([0], [0], color='grey', lw=1.2, linestyle='-', label='Simulation Fronts'),
-        Line2D([0], [0], color='grey', lw=1.2, linestyle='--', label='Solver Fronts'),
-        Line2D([0], [0], color='grey', lw=1.2, linestyle=':', label='Fit Fronts'),
+        Line2D([0], [0], color='#1a5fb4', lw=2.5, linestyle='-',  label='Simulation'),
+        Line2D([0], [0], color='#333333', lw=2.0, linestyle='-',  label='Exact Patched Solver'),
+        Line2D([0], [0], color='#e67e22', lw=2.0, linestyle=':',  label='Patched Fit'),
+        Line2D([0], [0], color='#1a5fb4', lw=1.5, linestyle='-',  alpha=0.7, label='piston (sim)'),
+        Line2D([0], [0], color='#333333', lw=1.5, linestyle='--', alpha=0.7, label='piston (solver)'),
+        Line2D([0], [0], color='#e67e22', lw=1.8, linestyle=':',  alpha=0.7, label='piston (fit)'),
     ]
-    ax_rho.legend(handles=legend_handles, loc="best", fontsize=9.5)
+    ax_rho.legend(handles=legend_handles, loc="best", fontsize=9.5, ncol=2)
 
     # Set y limits based on simulation bounds
     all_sim_rho = []
@@ -647,6 +629,129 @@ def plot_fully_patched_comparison_eulerian(
     plt.close(fig)
 
 
+def plot_multitime_profiles_eulerian(
+    history,
+    ablation_solver,
+    sub_params,
+    shock_params,
+    case,
+    plot_path,
+    case_title,
+    n_times: int = 6,
+):
+    """Plot Eulerian density/pressure/velocity/temperature profiles at several
+    evenly-spaced simulation times, each time shown in a distinct colour.
+
+    Piston positions (sim, solver, fit) are marked as vertical lines in the
+    same colour as the profile with different line styles.
+
+    Parameters
+    ----------
+    n_times:
+        Number of time snapshots to overlay (evenly spaced from 10 % to 100 %
+        of the simulation duration).
+    """
+    print(f"Generating multi-time Eulerian profiles for {case_title}...")
+
+    times_all = np.asarray(history.t, dtype=float)
+    t_max = times_all[-1]
+
+    # Pick n_times equally spaced target times (skip t=0)
+    fracs = np.linspace(0.1, 1.0, n_times)
+    target_times = fracs * t_max
+
+    # Vivid colour palette — one colour per time snapshot
+    palette = [
+        "#e6194b", "#f58231", "#ffe119", "#3cb44b",
+        "#4363d8", "#911eb4", "#42d4f4", "#f032e6",
+        "#a9a9a9", "#800000",
+    ]
+    colours = [palette[i % len(palette)] for i in range(n_times)]
+
+    hs = ablation_solver.heat_solver
+    ss = ablation_solver.shock_solver
+    q1 = 1.0 - ss.omega
+    q2 = (2.0 - ss.omega) / (ss.tau + 2.0)
+
+    p_scale = 1e12
+    u_scale = 1e5
+    T_scale = 1.160451812e6
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    ax_rho, ax_p = axes[0, 0], axes[0, 1]
+    ax_u,   ax_T = axes[1, 0], axes[1, 1]
+    all_axes = [ax_rho, ax_p, ax_u, ax_T]
+    labels   = ["Density [g/cm³]", "Pressure [MBar]", "Velocity [km/s]", "Temperature [HeV]"]
+
+    legend_handles = []
+
+    for i, (t_target, col) in enumerate(zip(target_times, colours)):
+        idx_sim = int(np.argmin(np.abs(times_all - t_target)))
+        t_actual = float(times_all[idx_sim])
+        t_ns     = t_actual * 1e9
+
+        x_sim_raw      = np.asarray(history.x[idx_sim], dtype=float)
+        x_sim_um       = x_sim_raw * 1e4
+        m_sim          = np.asarray(history.m[idx_sim], dtype=float)
+        sim_rho        = np.asarray(history.rho[idx_sim], dtype=float)
+        sim_p          = np.asarray(history.p[idx_sim],   dtype=float) / p_scale
+        sim_u          = np.asarray(history.u[idx_sim],   dtype=float) / u_scale
+        sim_T          = np.asarray(history.T[idx_sim],   dtype=float) / T_scale
+
+        # --- Simulation profiles (solid) ---
+        for ax, ydata in zip(all_axes, [sim_rho, sim_p, sim_u, sim_T]):
+            ax.plot(x_sim_um, ydata, '-', color=col, lw=1.8, alpha=0.85)
+
+        x_piston_sim_um = np.nan
+
+        # Solver piston = heat_position
+        sol = ablation_solver.solve(mass=m_sim, time=t_actual)
+        x_piston_sol_um = float(sol["heat_position"]) * 1e4
+
+        # Fit piston
+        pos_scale = ss._position_temporal_factor(time=t_actual)
+        m_f   = hs.ablated_mass(time=t_actual)
+        xsi_mf = m_f * ss.xsi_over_m(time=t_actual)
+        y_mf   = xsi_mf / ss.xsi_s
+        _, _, U_fit_mf, rho_fit_mf = shock_fit_by_params(np.array([y_mf]), shock_params)
+        x_af_fit = pos_scale * (q1 * xsi_mf / rho_fit_mf[0] + q2 * U_fit_mf[0])
+        x_piston_fit_um = x_af_fit * 1e4
+
+        for ax in all_axes:
+            if np.isfinite(x_piston_sim_um):
+                ax.axvline(x_piston_sim_um, color=col, ls='-',  lw=1.2, alpha=0.7)
+            ax.axvline(x_piston_sol_um,     color=col, ls='--', lw=1.2, alpha=0.7)
+            ax.axvline(x_piston_fit_um,     color=col, ls=':',  lw=1.4, alpha=0.7)
+
+        legend_handles.append(
+            Line2D([0], [0], color=col, lw=2.0, ls='-',
+                   label=f"t = {t_ns:.2f} ns")
+        )
+
+    # Style legend: line-style key
+    legend_handles += [
+        Line2D([0], [0], color='k', lw=1.2, ls='-',  label='piston (sim)'),
+        Line2D([0], [0], color='k', lw=1.2, ls='--', label='piston (solver)'),
+        Line2D([0], [0], color='k', lw=1.4, ls=':',  label='piston (fit)'),
+    ]
+
+    for j, ax in enumerate(all_axes):
+        ax.grid(True, alpha=0.3)
+        ax.set_ylabel(labels[j], fontsize=12)
+        ax.set_xlabel("Eulerian Position $x$ [$\mu$m]", fontsize=12)
+
+    ax_rho.legend(handles=legend_handles, loc="best", fontsize=8.5, ncol=2)
+
+    plt.suptitle(
+        f"Multi-Time Eulerian Profiles (Simulation)\n{case_title}",
+        fontsize=14, fontweight='bold',
+    )
+    plt.tight_layout()
+    fig.savefig(plot_path, dpi=200)
+    print(f"Saved multi-time Eulerian profiles to {plot_path}")
+    plt.close(fig)
+
+
 # =============================================================================
 # Time-Dependent Front Trajectory Plotting
 # =============================================================================
@@ -676,7 +781,7 @@ def plot_front_trajectories_eulerian(history, ablation_solver, sub_params, shock
         rho_unshocked=float(case.rho0),
         gamma=float(case.r) + 1.0,
         smooth_window=5,
-        extrap_t_ns=0.002,
+        extrap_t_ns=0.1,
         extrap_times=times,
     )
     # Convert to µm and apply a light rolling mean to reduce jitter
@@ -685,15 +790,7 @@ def plot_front_trajectories_eulerian(history, ablation_solver, sub_params, shock
     # Ablation boundary: left face of the leftmost cell
     x_boundary_sim = detect_sim_ablation_boundary(x_sim) * 1e4
 
-    # Ablation front: leftmost strongly-compressed cell
-    x_ablation_front_sim = detect_sim_ablation_front(
-        history.rho,
-        history.m,
-        x_sim,
-        rho_unshocked=float(case.rho0),
-        gamma=float(case.r) + 1.0,
-        smooth_window=5,
-    ) * 1e4
+    x_piston_sim = np.full_like(times, np.nan, dtype=float)
 
     # 2) Solver exact front tracking
     x_boundary_sol       = np.zeros_like(times_model)
@@ -718,37 +815,66 @@ def plot_front_trajectories_eulerian(history, ablation_solver, sub_params, shock
     x_piston_fit         = fit_fronts["piston"]         * 1e4
     x_shock_fit          = fit_fronts["shock"]          * 1e4
         
-    # Plot curves
+    # Plot curves — no auto-labels; legend is built manually below
     fig, ax = plt.subplots(figsize=(10, 7))
     t_ns = times * 1e9
     t_ns_model = times_model * 1e9
 
-    # Plot Simulation
-    ax.plot(t_ns, x_boundary_sim,       '-',  color='black',   lw=2.5, label=r"$x_{\rm boundary}$ (simulation)")
-    ax.plot(t_ns, x_ablation_front_sim, '-',  color='fuchsia', lw=2.0, label=r"$x_{\rm ablation\ front}$ (simulation)")
-    ax.plot(t_ns, x_shock_sim,          '-',  color='red',     lw=2.5, label=r"$x_{\rm shock\ front}$ (simulation)")
+    # Simulation (solid)
+    ax.plot(t_ns, x_boundary_sim, '-',  color='black',   lw=2.5)
+    ax.plot(t_ns, x_piston_sim,   '-',  color='blue',    lw=2.0)
+    ax.plot(t_ns, x_shock_sim,    '-',  color='red',     lw=2.5)
 
-    # Plot Solver
-    ax.plot(t_ns_model, x_boundary_sol,       '--', color='grey',    lw=2.0, label=r"$x_{\rm boundary}$ (solver)")
-    ax.plot(t_ns_model, x_piston_sol,         '--', color='blue',    lw=2.0, label=r"$x_{\rm piston}$ (solver)")
-    ax.plot(t_ns_model, x_ablation_front_sol, '--', color='fuchsia', lw=2.0, label=r"$x_{\rm ablation\ front}$ (solver)")
-    ax.plot(t_ns_model, x_shock_sol,          '--', color='darkred', lw=2.0, label=r"$x_{\rm shock\ front}$ (solver)")
+    # Solver (dashed)
+    ax.plot(t_ns_model, x_boundary_sol,       '--', color='grey',    lw=2.0)
+    ax.plot(t_ns_model, x_piston_sol,         '--', color='green',   lw=2.0)
+    ax.plot(t_ns_model, x_shock_sol,          '--', color='darkred', lw=2.0)
+    # Ablation front solver (background reference, no legend entry)
+    ax.plot(t_ns_model, x_ablation_front_sol, '--', color='fuchsia', lw=1.0, alpha=0.35)
 
-    # Plot Fit
-    ax.plot(t_ns_model, x_boundary_fit,       ':', color='black',  lw=2.2, label=r"$x_{\rm boundary}$ (fit)")
-    ax.plot(t_ns_model, x_piston_fit,         ':', color='cyan',   lw=2.2, label=r"$x_{\rm piston}$ (fit)")
-    ax.plot(t_ns_model, x_ablation_front_fit, ':', color='purple', lw=2.2, label=r"$x_{\rm ablation\ front}$ (fit)")
-    ax.plot(t_ns_model, x_shock_fit,          ':', color='orange', lw=2.2, label=r"$x_{\rm shock\ front}$ (fit)")
-    
+    # Fit (dotted)
+    ax.plot(t_ns_model, x_boundary_fit, ':', color='dimgray', lw=2.2)
+    ax.plot(t_ns_model, x_piston_fit,   ':', color='cyan',    lw=2.2)
+    ax.plot(t_ns_model, x_shock_fit,    ':', color='orange',  lw=2.2)
+    # Ablation front fit (background reference, no legend entry)
+    ax.plot(t_ns_model, x_ablation_front_fit, ':', color='purple', lw=1.0, alpha=0.35)
+
     ax.set_xlabel(r"$t$ [ns]", fontsize=13)
     ax.set_ylabel(r"$x$ [$\mu$m]", fontsize=13)
     ax.set_title(f"Front Trajectory Evolution (Simulation vs Solver vs Fit)\n{case_title}", fontsize=14, fontweight='bold')
-    ax.legend(loc="best", fontsize=10, ncol=2)
     ax.grid(True, alpha=0.3)
-    
+
+    # --- Structured legend: rows = front type, columns = source ---
+    # Layout (ncol=3): [Simulation | Solver | Fit] per row
+    legend_handles = [
+        # Row: shock
+        Line2D([0], [0], color='red',     lw=2.5, ls='-',  label='shock Simulation'),
+        Line2D([0], [0], color='darkred', lw=2.0, ls='--', label='shock Solver'),
+        Line2D([0], [0], color='orange',  lw=2.2, ls=':',  label='shock Fit'),
+
+        # Row: piston
+        Line2D([0], [0], color='blue',    lw=2.0, ls='-',  label='piston Simulation'),
+        Line2D([0], [0], color='green',   lw=2.0, ls='--', label='piston Solver'),
+        Line2D([0], [0], color='cyan',    lw=2.2, ls=':',  label='piston Fit'),
+
+        # Row: boundary
+        Line2D([0], [0], color='black',   lw=2.5, ls='-',  label='boundary Simulation'),
+        Line2D([0], [0], color='grey',    lw=2.0, ls='--', label='boundary Solver'),
+        Line2D([0], [0], color='dimgray', lw=2.2, ls=':',  label='boundary Fit'),
+    ]
+    ax.legend(
+        handles=legend_handles,
+        ncol=3,
+        fontsize=10,
+        loc='best',
+        handlelength=2.2,
+        columnspacing=1.0,
+        handletextpad=0.5,
+    )
+
     # Limit time window
     ax.set_xlim(0, times[-1] * 1e9)
-    
+
     fig.tight_layout()
     fig.savefig(plot_path, dpi=200)
     print(f"Saved front trajectories plot in Eulerian to {plot_path}")
@@ -810,6 +936,19 @@ def run_preset_workflow(preset_name, case_label, case_title):
         case=case,
         plot_path=str(plot_path_trajectories),
         case_title=case_title,
+    )
+
+    # 6) Plot 4: Multi-time Eulerian profiles (simulation, colour-coded by time)
+    plot_path_multitime = ev_dir / f"{case_label}_multitime_profiles_eulerian.png"
+    plot_multitime_profiles_eulerian(
+        history=history,
+        ablation_solver=ablation_solver,
+        sub_params=sub_params,
+        shock_params=shock_params,
+        case=case,
+        plot_path=str(plot_path_multitime),
+        case_title=case_title,
+        n_times=6,
     )
 
 

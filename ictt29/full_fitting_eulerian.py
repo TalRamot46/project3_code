@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import os
 import sys
-sys.setrecursionlimit(10000)
+sys.setrecursionlimit(200000)
 import pickle
 import time
 from pathlib import Path
@@ -196,64 +196,12 @@ def calculate_patched_eulerian_positions_fit(mass_grid, t_actual, ablation_solve
 # Data Loading and Management
 # =============================================================================
 
-def get_data():
+from data_loader import get_sim_history, get_ablation_solver
+
+def get_data(preset_name, case_label):
     """Run full simulation and build AblationSolver reference solver, or load from cache."""
-    cache_dir = Path("results/ictt/cache")
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_path = cache_dir / "full_fitting_cache.pkl"
-
-    case, config = get_preset(PRESET_FIG_8_CONSTANT_TEMPERATURE)
-
-    if USE_CACHE and cache_path.exists():
-        print(f"Loading cached simulation history and solver from {cache_path}...")
-        try:
-            class CustomUnpickler(pickle.Unpickler):
-                def find_class(self, module, name):
-                    if 'numpy._core' in module:
-                        module = module.replace('numpy._core', 'numpy.core')
-                    return super().find_class(module, name)
-            with open(cache_path, "rb") as f:
-                data = CustomUnpickler(f).load()
-            solver = data["solver"]
-            if solver is not None:
-                # Re-bind ODE solvers containing method callbacks
-                if hasattr(solver.heat_solver, "fode"):
-                    solver.heat_solver.ode_solver = scipy.integrate.ode(solver.heat_solver.fode).set_integrator(solver.heat_solver.ode_scheme)
-                if hasattr(solver.shock_solver, "fode"):
-                    solver.shock_solver.ode_solver = scipy.integrate.ode(solver.shock_solver.fode).set_integrator(solver.shock_solver.ode_scheme)
-            print("Loaded successfully from cache.")
-            return data["case"], data["history"], solver
-        except Exception as e:
-            print(f"Failed to load cache: {e}. Re-running simulation...")
-
-    print("Running 1D Rad-Hydro Simulation...")
-    config = replace(config, show_plot=False, show_slider=False)
-    _, _, _, history = simulate_rad_hydro(rad_hydro_case=case, simulation_config=config)
-
-    print("Instantiating AblationSolver reference solver...")
-    ablation_solver = AblationSolver(**_ablation_kwargs_from_case(case))
-
-    cache_data = {"case": case, "history": history, "solver": ablation_solver}
-    print(f"Saving simulation cache to {cache_path}...")
-    try:
-        # Detach un-picklable ODE solver components temporarily
-        heat_ode = getattr(ablation_solver.heat_solver, "ode_solver", None)
-        shock_ode = getattr(ablation_solver.shock_solver, "ode_solver", None)
-        if hasattr(ablation_solver.heat_solver, "ode_solver"):
-            del ablation_solver.heat_solver.ode_solver
-        if hasattr(ablation_solver.shock_solver, "ode_solver"):
-            del ablation_solver.shock_solver.ode_solver
-
-        with open(cache_path, "wb") as f:
-            pickle.dump(cache_data, f, protocol=pickle.HIGHEST_PROTOCOL)
-
-        if heat_ode is not None:
-            ablation_solver.heat_solver.ode_solver = heat_ode
-        if shock_ode is not None:
-            ablation_solver.shock_solver.ode_solver = shock_ode
-    except Exception as e:
-        print(f"Failed to save simulation cache: {e}")
-
+    case, history = get_sim_history(preset_name, case_label)
+    ablation_solver = get_ablation_solver(case, case_label)
     return case, history, ablation_solver
 
 
@@ -307,7 +255,8 @@ def plot_patched_dimensional_fit_comparison_eulerian(
     print(f"Generating physical patched profiles comparison in Eulerian for {case_title}...")
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
 
-    target_times = [2.0e-9]
+    t_max = max(history.t)
+    target_times = [t_max]
     sim_colors = ["#1a5fb4"]
 
     ax_rho = axes[0, 0]
@@ -544,7 +493,8 @@ def plot_fully_patched_comparison_eulerian(
     print(f"Generating physical fully patched comparison in Eulerian for {case_title}...")
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
 
-    target_times = [2.0e-9]
+    t_max = max(history.t)
+    target_times = [t_max]
     sim_colors = ["#1a5fb4"]
 
     ax_rho = axes[0, 0]
@@ -853,9 +803,9 @@ def plot_front_trajectories_eulerian(history, ablation_solver, sub_params, shock
 # Main Execution Workflow
 # =============================================================================
 
-def run_preset_workflow():
+def run_preset_workflow(preset_name, case_label, case_title):
     """Run simulation, load reference solvers, run fitting pipelines, and plot eulerian profiles and trajectories."""
-    case, history, ablation_solver = get_data()
+    case, history, ablation_solver = get_data(preset_name, case_label)
 
     # 1) Run Subsonic fitting pipeline using ablation_solver.heat_solver
     print("--- Running Subsonic Ablation Fitting ---")
@@ -871,7 +821,7 @@ def run_preset_workflow():
     dv_dir.mkdir(parents=True, exist_ok=True)
 
     # 3) Plot 1: Subsonic & Shock Overlays in Eulerian coordinate
-    plot_path_overlays = dv_dir / "fig_8_patched_fit_comparison_eulerian.png"
+    plot_path_overlays = dv_dir / f"{case_label}_patched_fit_comparison_eulerian.png"
     plot_patched_dimensional_fit_comparison_eulerian(
         history=history,
         ablation_solver=ablation_solver,
@@ -879,11 +829,11 @@ def run_preset_workflow():
         shock_params=shock_params,
         case=case,
         plot_path=str(plot_path_overlays),
-        case_title="Fig 8 Constant Temperature Drive (tau=0)",
+        case_title=case_title,
     )
 
     # 4) Plot 2: Fully Patched seamless profiles in Eulerian coordinate
-    plot_path_patched = dv_dir / "fig_8_fully_patched_comparison_eulerian.png"
+    plot_path_patched = dv_dir / f"{case_label}_fully_patched_comparison_eulerian.png"
     plot_fully_patched_comparison_eulerian(
         history=history,
         ablation_solver=ablation_solver,
@@ -891,11 +841,11 @@ def run_preset_workflow():
         shock_params=shock_params,
         case=case,
         plot_path=str(plot_path_patched),
-        case_title="Fig 8 Constant Temperature Drive (tau=0)",
+        case_title=case_title,
     )
     
     # 5) Plot 3: Time-dependent front trajectories in Eulerian coordinate
-    plot_path_trajectories = dv_dir / "fig_8_front_trajectories_eulerian.png"
+    plot_path_trajectories = dv_dir / f"{case_label}_front_trajectories_eulerian.png"
     plot_front_trajectories_eulerian(
         history=history,
         ablation_solver=ablation_solver,
@@ -903,12 +853,31 @@ def run_preset_workflow():
         shock_params=shock_params,
         case=case,
         plot_path=str(plot_path_trajectories),
-        case_title="Fig 8 Constant Temperature Drive (tau=0)",
+        case_title=case_title,
     )
 
 
 def main():
-    run_preset_workflow()
+    from project3_code.rad_hydro_sim.problems.presets_config import (
+        PRESET_FIG_8_CONSTANT_TEMPERATURE,
+        PRESET_FIG_9_CONSTANT_FLUX,
+        PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE,
+    )
+    run_preset_workflow(
+        PRESET_FIG_8_CONSTANT_TEMPERATURE,
+        "const_T",
+        "Fig 8 Constant Temperature Drive"
+    )
+    run_preset_workflow(
+        PRESET_FIG_9_CONSTANT_FLUX,
+        "const_S",
+        "Fig 9 Constant Flux Drive"
+    )
+    run_preset_workflow(
+        PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE,
+        "const_P_shock",
+        "Fig 10 Constant Ablation Pressure Drive"
+    )
     print("\nPatched eulerian ablation and shock simulations, fittings, comparisons, and plots generated successfully!")
 
 

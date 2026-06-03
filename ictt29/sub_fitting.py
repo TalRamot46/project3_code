@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import sys
+sys.setrecursionlimit(200000)
 import pickle
 from pathlib import Path
 import numpy as np
@@ -56,6 +57,8 @@ if str(_MENAHEM_DIR) not in sys.path:
 from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
 from project3_code.rad_hydro_sim.problems.presets_config import (
     PRESET_FIG_8_CONSTANT_TEMPERATURE,
+    PRESET_FIG_9_CONSTANT_FLUX,
+    PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE,
 )
 from project3_code.rad_hydro_sim.verification.menahem_comparison import (
     _heat_kwargs_from_case,
@@ -68,88 +71,11 @@ from project3_code.menahem_new.subsonic_heat_wave_og import SubsonicHeatWave
 USE_CACHE = True
 
 
-def get_cached_sub_solver(case, case_label):
-    """Solve subsonic similarity ODEs once and cache the solver object (with found xsi_f)."""
-    cache_dir = Path("results/ictt/cache")
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    solver_cache_path = cache_dir / f"{case_label}_sub_similarity_solver.pkl"
-
-    if USE_CACHE and solver_cache_path.exists():
-        print(f"Loading cached subsonic similarity solver from {solver_cache_path}...")
-        try:
-            with open(solver_cache_path, "rb") as f:
-                solver = pickle.load(f)
-            # Re-bind the ODE solver which contains method callbacks
-            if solver is not None:
-                solver.ode_solver = scipy.integrate.ode(solver.fode).set_integrator(solver.ode_scheme)
-            print("Similarity solver loaded successfully.")
-            return solver
-        except Exception as e:
-            print(f"Failed to load solver cache: {e}. Re-solving subsonic ODEs...")
-
-    print("Solving subsonic similarity ODEs (finding xsi_f via shooting method)...")
-    heat_kwargs = _heat_kwargs_from_case(case)
-    solver = SubsonicHeatWave(**heat_kwargs).find_xsi_f()
-
-    # Save cache by removing ode_solver temporarily to avoid pickling issues
-    try:
-        ode_solver = getattr(solver, "ode_solver", None)
-        if hasattr(solver, "ode_solver"):
-            del solver.ode_solver
-        with open(solver_cache_path, "wb") as f:
-            pickle.dump(solver, f, protocol=pickle.HIGHEST_PROTOCOL)
-        if ode_solver is not None:
-            solver.ode_solver = ode_solver
-        print(f"Saved subsonic similarity solver to cache: {solver_cache_path}")
-    except Exception as e:
-        print(f"Failed to save solver cache: {e}")
-
-    return solver
-
 def run_simulation_and_references(preset_name: str, case_label: str):
     """Run full simulation and build SubsonicHeatWave reference solver, or load from cache."""
-    cache_dir = Path("results/ictt/cache")
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_path = cache_dir / f"{case_label}_cache.pkl"
-
-    case, config = get_preset(preset_name)
-    print(cache_path)
-    print(USE_CACHE)
-    if USE_CACHE and cache_path.exists():
-        print(f"Loading cached simulation and reference data from {cache_path}...")
-        try:
-            with open(cache_path, "rb") as f:
-                data = pickle.load(f)
-            solver = data["solver"]
-            # Re-bind the ODE solver which contains method callbacks
-            if solver is not None:
-                solver.ode_solver = scipy.integrate.ode(solver.fode).set_integrator(solver.ode_scheme)
-            print("Loaded successfully from cache.")
-            return data["case"], data["history"], solver
-        except Exception as e:
-            print(f"Failed to load cache: {e}. Re-running simulation...")
-
-    # Run simulation
-    print("Running simulation...")
-    _, _, _, history = simulate_rad_hydro(rad_hydro_case=case, simulation_config=config)
-
-    # Get subsonic solver
-    solver = get_cached_sub_solver(case, case_label)
-
-    cache_data = {"case": case, "history": history, "solver": solver}
-    print(f"Saving simulation and reference data cache to {cache_path}...")
-    try:
-        # SubsonicHeatWave solver contains an un-picklable ode_solver, detach temporarily
-        ode_solver = getattr(solver, "ode_solver", None)
-        if hasattr(solver, "ode_solver"):
-            del solver.ode_solver
-        with open(cache_path, "wb") as f:
-            pickle.dump(cache_data, f, protocol=pickle.HIGHEST_PROTOCOL)
-        if ode_solver is not None:
-            solver.ode_solver = ode_solver
-    except Exception as e:
-        print(f"Failed to save cache: {e}")
-
+    from data_loader import get_sim_history, get_sub_similarity_solver
+    case, history = get_sim_history(preset_name, case_label)
+    solver = get_sub_similarity_solver(case, case_label)
     return case, history, solver
 
 def dimensionless_density_from_eos(T, P, beta=1.6, mu=0.14):
@@ -585,7 +511,8 @@ def plot_dimensional_fit_comparison(history, solver, case, params, dimensional_f
     print(f"Generating physical subsonic profiles comparison for {case_title}...")
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     
-    target_times = [1.0e-9, 1.5e-9, 2.0e-9]
+    t_max = max(history.t)
+    target_times = [0.5 * t_max, 0.75 * t_max, t_max]
     sim_colors = ["royalblue", "darkorange", "crimson"]
     
     ax_rho = axes[0, 0]
@@ -666,7 +593,7 @@ def plot_dimensional_fit_comparison(history, solver, case, params, dimensional_f
 
     # Build time legend entries using plasma colors
     time_handles = [
-        Line2D([0], [0], color=sim_colors[k], lw=2, label=f"{target_times[k]*1e9:.1f} ns")
+        Line2D([0], [0], color=sim_colors[k], lw=2, label=f"{target_times[k]*1e9:.3f} ns")
         for k in range(len(target_times))
     ]
 
@@ -1061,8 +988,18 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
 def main():
     run_preset_workflow(
         PRESET_FIG_8_CONSTANT_TEMPERATURE,
-        "heat_const_T",
-        "Ablation heat wave region"
+        "const_T",
+        "Fig 8 Constant Temperature Drive"
+    )
+    # run_preset_workflow(
+    #     PRESET_FIG_9_CONSTANT_FLUX,
+    #     "const_S",
+    #     "Fig 9 Constant Flux Drive"
+    # )
+    run_preset_workflow(
+        PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE,
+        "const_P_shock",
+        "Fig 10 Constant Ablation Pressure Drive"
     )
     print("\nAll custom subsonic simulations, SubsonicHeatWave comparisons, plotting, fitting, and exports completed successfully!")
 

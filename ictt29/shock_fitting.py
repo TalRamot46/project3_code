@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 import sys
+sys.setrecursionlimit(200000)
 import pickle
 import time
 from pathlib import Path
@@ -55,8 +56,9 @@ if str(_MENAHEM_DIR) not in sys.path:
 
 from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
 from project3_code.rad_hydro_sim.problems.presets_config import (
-    PRESET_CONSTANT_PRESSURE,
-    PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE,
+    PRESET_FIG_8_CONSTANT_TEMPERATURE,
+    PRESET_FIG_9_CONSTANT_FLUX,
+    PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE,
 )
 from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
 from project3_code.rad_hydro_sim.verification.menahem_comparison import (
@@ -73,50 +75,7 @@ USE_CACHE = True
 Y_FIT_MIN = 0.1   # Configure the lower bound for fitting Temperature T
 FITTING_OPTION = "FIT_RHO_AROUND_PISTON"  # Literal["FIT_TEMP_AROUND_PISTON", "FIT_RHO_AROUND_PISTON", "FIT_RHO_ALL_AROUND"]
 
-def get_cached_shock_solver(case, case_label):
-    """Solve shock similarity ODEs once and cache the solver object (with found xsi_s)."""
-    cache_dir = Path("results/ictt/cache")
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    solver_cache_path = cache_dir / f"{case_label}_shock_similarity_solver.pkl"
-    
-    if USE_CACHE and solver_cache_path.exists():
-        print(f"Loading cached shock similarity solver from {solver_cache_path}...")
-        try:
-            with open(solver_cache_path, "rb") as f:
-                solver = pickle.load(f)
-            # Re-bind the ODE solver which contains method callbacks
-            solver.ode_solver = scipy.integrate.ode(solver.fode).set_integrator(solver.ode_scheme)
-            print("Similarity solver loaded successfully.")
-            return solver
-        except Exception as e:
-            print(f"Failed to load solver cache: {e}. Re-solving shock ODEs...")
-            
-    print("Solving shock similarity ODEs (finding xsi_s via root-finding)...")
-    tau = float(case.tau or 0.0)
-    p0 = _ns_amplitude_rescale(float(case.P0_Barye), tau)
-    omega = float(getattr(case, "omega", 0.0))
-    gamma = float(case.r) + 1.0
-    
-    solver = PistonShock(
-        rho0=float(case.rho0),
-        omega=omega,
-        p0=p0,
-        tau=tau,
-        gamma=gamma
-    )
-    
-    # Save cache by removing ode_solver temporarily to avoid pickling issues
-    try:
-        ode_solver = solver.ode_solver
-        del solver.ode_solver
-        with open(solver_cache_path, "wb") as f:
-            pickle.dump(solver, f, protocol=pickle.HIGHEST_PROTOCOL)
-        solver.ode_solver = ode_solver
-        print(f"Saved shock similarity solver to cache: {solver_cache_path}")
-    except Exception as e:
-        print(f"Failed to save solver cache: {e}")
-        
-    return solver
+# Deleted (Functionality merged into data_loader.py)
 
 def dimensional_temperature_from_eos(P, V, beta=1.6, mu=0.14, r=0.25, f=6730.91):
     return (P * V**(1-mu) / (r*f))**(1./beta)
@@ -523,12 +482,13 @@ def calculate_dimensional_fits(mass_grid, t_actual, solver, params):
     return {"density": rho, "pressure": p, "velocity": u, "temperature": T}
 
 
-def plot_dimensional_fit_comparison(history, solver, params, material_hydro_path, case_title):
+def plot_dimensional_fit_comparison(history, solver, case, params, material_hydro_path, case_title):
     """Plot overlay profiles of T, rho, P, u vs m comparing Simulation, Exact Solver, and Analytic fits."""
     print(f"Generating physical shock profiles comparison for {case_title}...")
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     
-    target_times = [1.0e-9, 1.5e-9, 2.0e-9]
+    t_max = max(history.t)
+    target_times = [0.5 * t_max, 0.75 * t_max, t_max]
     sim_colors = ["royalblue", "darkorange", "crimson"]
     
     ax_rho = axes[0, 0]
@@ -551,6 +511,7 @@ def plot_dimensional_fit_comparison(history, solver, params, material_hydro_path
 
         # shock front for shock solver
         m_s_exact = solver.shocked_mass(time=t_actual)
+
         shock_mask = m_sim <= m_s_exact
         m_sim_shock = m_sim[shock_mask][:-2]
 
@@ -577,14 +538,14 @@ def plot_dimensional_fit_comparison(history, solver, params, material_hydro_path
         show_label = i == 0
         
         # Plot Density
-        ax_rho.plot(m_sim_shock * 1e3, sim_rho, '-', color=sim_color, markersize=3, alpha=0.7, label=f"Simulation ({t_target*1e9:.1f} ns)" if show_label else None)
+        ax_rho.plot(m_sim_shock * 1e3, sim_rho, '-', color=sim_color, markersize=3, alpha=0.7, label=f"Simulation ({t_target*1e9:.3f} ns)" if show_label else None)
         ax_rho.plot(mass_solver * 1e3, exact_rho, '--', color='black', lw=2.0, label="Exact Solver" if show_label else None)
         ax_rho.plot(mass_solver * 1e3, fit_rho, '.', color='forestgreen', lw=0.5, alpha=0.5, label="Analytic Fit" if show_label else None)
         
         # Plot Pressure
         ax_p.plot(m_sim_shock * 1e3, sim_p / p_scale, '-', color=sim_color, markersize=3, alpha=0.7)
         ax_p.plot(mass_solver * 1e3, exact_p / p_scale, '--', color='black', lw=2.0)
-        ax_p.plot(mass_solver * 1e3, fit_p / p_scale, '.', color='forestgreen', lw=0.5, alpha=0.5)
+        ax_p.plot((mass_solver) * 1e3, fit_p / p_scale, '.', color='forestgreen', lw=0.5, alpha=0.5)
         
         # Plot Velocity
         ax_u.plot(m_sim_shock * 1e3, sim_u / u_scale, '-', color=sim_color, markersize=3, alpha=0.7)
@@ -603,7 +564,7 @@ def plot_dimensional_fit_comparison(history, solver, params, material_hydro_path
         
     # Build time legend entries using plasma colors
     time_handles = [
-        Line2D([0], [0], color=sim_colors[k], lw=2, label=f"{target_times[k]*1e9:.1f} ns")
+        Line2D([0], [0], color=sim_colors[k], lw=2, label=f"{target_times[k]*1e9:.3f} ns")
         for k in range(len(target_times))
     ]
     
@@ -925,48 +886,9 @@ def plot_relative_errors(solver, params, relative_errors_path, case_title):
 
 def run_simulation_and_references(preset_name: str, case_label: str):
     """Run full simulation and build PistonShock reference solver, or load from cache."""
-    cache_dir = Path("results/ictt/cache")
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_path = cache_dir / f"{case_label}_cache.pkl"
-
-    case, config = get_preset(preset_name)
-
-    if USE_CACHE and cache_path.exists():
-        print(f"Loading cached simulation and reference data from {cache_path}...")
-        try:
-            with open(cache_path, "rb") as f:
-                data = pickle.load(f)
-            solver = data["solver"]
-            # Re-bind the ODE solver which contains method callbacks
-            if not hasattr(solver, "ode_solver") or solver.ode_solver is None:
-                solver.ode_solver = scipy.integrate.ode(solver.fode).set_integrator(solver.ode_scheme)
-            return data["case"], data["history"], solver
-        except Exception as e:
-            print(f"Failed to load cache: {e}. Re-running simulation...")
-
-    # Run simulation
-    print("Running simulation...")
-    _, _, _, history = simulate_rad_hydro(rad_hydro_case=case, simulation_config=config)
-
-    # Get PistonShock solver
-    print("Getting cached PistonShock solver...")
-    solver = get_cached_shock_solver(case, case_label)
-
-    cache_data = {"case": case, "history": history, "solver": solver}
-    if USE_CACHE:
-        print(f"Saving simulation and reference data cache to {cache_path}...")
-        try:
-            # PistonShock solver contains an un-picklable ode_solver, detach temporarily
-            ode_solver = getattr(solver, "ode_solver", None)
-            if hasattr(solver, "ode_solver"):
-                del solver.ode_solver
-            with open(cache_path, "wb") as f:
-                pickle.dump(cache_data, f, protocol=pickle.HIGHEST_PROTOCOL)
-            if ode_solver is not None:
-                solver.ode_solver = ode_solver
-        except Exception as e:
-            print(f"Failed to save cache: {e}")
-
+    from data_loader import get_sim_history, get_shock_similarity_solver
+    case, history = get_sim_history(preset_name, case_label)
+    solver = get_shock_similarity_solver(case, case_label)
     return case, history, solver
 
 
@@ -1007,7 +929,7 @@ def generate_verification_plots(
     plot_and_fit_self_similar(solver, params, paths["self_similar"], case_title)
 
     # 4) Dimensional fit comparison
-    plot_dimensional_fit_comparison(history, solver, params, paths["dimensional_comparison"], case_title)
+    plot_dimensional_fit_comparison(history, solver, case, params, paths["dimensional_comparison"], case_title)
 
     # 5) Relative errors of self-similar fits
     plot_relative_errors(solver, params, paths["relative_errors"], case_title)
@@ -1035,9 +957,19 @@ def run_preset_workflow(preset_name: str, case_label: str, case_title: str):
 
 def main():
     run_preset_workflow(
-        PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE,
-        "shock_const_T",
-        "Shock wave region"
+        PRESET_FIG_8_CONSTANT_TEMPERATURE,
+        "const_T",
+        "Fig 8 Constant Temperature Drive"
+    )
+    run_preset_workflow(
+        PRESET_FIG_9_CONSTANT_FLUX,
+        "const_S",
+        "Fig 9 Constant Flux Drive"
+    )
+    run_preset_workflow(
+        PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE,
+        "const_P_shock",
+        "Fig 10 Constant Ablation Pressure Drive"
     )
     print("\nAll custom simulations, PistonShock comparisons, plotting, fitting, and exports completed successfully!")
 

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import os
 import sys
-sys.setrecursionlimit(10000)
+sys.setrecursionlimit(200000)
 import pickle
 import time
 from pathlib import Path
@@ -57,78 +57,12 @@ from shock_fitting import perform_shock_fitting, calculate_dimensional_fits as c
 USE_CACHE = True  # Set to True to use pre-saved pickle files, False to run again
 
 
-def get_data():
-    """
-    Run full simulation and build AblationSolver reference solver, or load from cache.
+from data_loader import get_sim_history, get_ablation_solver
 
-    Returns:
-        tuple: A tuple containing (case, history, ablation_solver)
-    """
-    cache_dir = Path("results/ictt/cache")
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_path = cache_dir / "full_fitting_cache.pkl"
-
-    case, config = get_preset(PRESET_FIG_8_CONSTANT_TEMPERATURE)
-
-    if USE_CACHE and cache_path.exists():
-        print(f"Loading cached simulation history and solver from {cache_path}...")
-        try:
-            import sys
-            import numpy
-            try:
-                import numpy._core
-                numpy.core = numpy._core
-                sys.modules['numpy.core'] = numpy._core
-                sys.modules['numpy.core.numeric'] = numpy._core.numeric
-                sys.modules['numpy.core.multiarray'] = numpy._core.multiarray
-            except ImportError:
-                sys.modules['numpy._core'] = sys.modules.get('numpy.core')
-                sys.modules['numpy._core.numeric'] = sys.modules.get('numpy.core.numeric')
-                sys.modules['numpy._core.multiarray'] = sys.modules.get('numpy.core.multiarray')
-            with open(cache_path, "rb") as f:
-                data = pickle.load(f)
-            solver = data["solver"]
-            if solver is not None:
-                # Re-bind ODE solvers containing method callbacks
-                if hasattr(solver.heat_solver, "fode"):
-                    import scipy.integrate
-                    solver.heat_solver.ode_solver = scipy.integrate.ode(solver.heat_solver.fode).set_integrator(solver.heat_solver.ode_scheme)
-                if hasattr(solver.shock_solver, "fode"):
-                    import scipy.integrate
-                    solver.shock_solver.ode_solver = scipy.integrate.ode(solver.shock_solver.fode).set_integrator(solver.shock_solver.ode_scheme)
-            print("Loaded successfully from cache.")
-            return data["case"], data["history"], solver
-        except Exception as e:
-            print(f"Failed to load cache: {e}. Re-running simulation...")
-
-    print("Running 1D Rad-Hydro Simulation...")
-    config = replace(config, show_plot=False, show_slider=False)
-    _, _, _, history = simulate_rad_hydro(rad_hydro_case=case, simulation_config=config)
-
-    print("Instantiating AblationSolver reference solver...")
-    ablation_solver = AblationSolver(**_ablation_kwargs_from_case(case))
-
-    cache_data = {"case": case, "history": history, "solver": ablation_solver}
-    print(f"Saving simulation cache to {cache_path}...")
-    try:
-        # Detach un-picklable ODE solver components temporarily
-        heat_ode = getattr(ablation_solver.heat_solver, "ode_solver", None)
-        shock_ode = getattr(ablation_solver.shock_solver, "ode_solver", None)
-        if hasattr(ablation_solver.heat_solver, "ode_solver"):
-            del ablation_solver.heat_solver.ode_solver
-        if hasattr(ablation_solver.shock_solver, "ode_solver"):
-            del ablation_solver.shock_solver.ode_solver
-
-        with open(cache_path, "wb") as f:
-            pickle.dump(cache_data, f, protocol=pickle.HIGHEST_PROTOCOL)
-
-        if heat_ode is not None:
-            ablation_solver.heat_solver.ode_solver = heat_ode
-        if shock_ode is not None:
-            ablation_solver.shock_solver.ode_solver = shock_ode
-    except Exception as e:
-        print(f"Failed to save simulation cache: {e}")
-
+def get_data(preset_name, case_label):
+    """Run full simulation and build AblationSolver reference solver, or load from cache."""
+    case, history = get_sim_history(preset_name, case_label)
+    ablation_solver = get_ablation_solver(case, case_label)
     return case, history, ablation_solver
 
 
@@ -182,7 +116,8 @@ def plot_patched_dimensional_fit_comparison(
     print(f"Generating physical patched profiles comparison for {case_title}...")
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
 
-    target_times = [1.0e-9, 1.5e-9, 2.0e-9]
+    t_max = max(history.t)
+    target_times = [0.5 * t_max, 0.75 * t_max, t_max]
     sim_colors = ["royalblue", "darkorange", "crimson"]
 
     ax_rho = axes[0, 0]
@@ -275,7 +210,7 @@ def plot_patched_dimensional_fit_comparison(
 
     # Build time legend entries
     time_handles = [
-        Line2D([0], [0], color=sim_colors[k], lw=2, label=f"{target_times[k]*1e9:.1f} ns")
+        Line2D([0], [0], color=sim_colors[k], lw=2, label=f"{target_times[k]*1e9:.3f} ns")
         for k in range(len(target_times))
     ]
     style_handles = [
@@ -339,7 +274,8 @@ def plot_fully_patched_comparison(
     print(f"Generating physical fully patched comparison for {case_title}...")
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
 
-    target_times = [1.0e-9, 1.5e-9, 2.0e-9]
+    t_max = max(history.t)
+    target_times = [0.5 * t_max, 0.75 * t_max, t_max]
     sim_colors = ["royalblue", "darkorange", "crimson"]
 
     ax_rho = axes[0, 0]
@@ -400,7 +336,7 @@ def plot_fully_patched_comparison(
 
     # Build time legend entries
     time_handles = [
-        Line2D([0], [0], color=sim_colors[k], lw=2, label=f"{target_times[k]*1e9:.1f} ns")
+        Line2D([0], [0], color=sim_colors[k], lw=2, label=f"{target_times[k]*1e9:.3f} ns")
         for k in range(len(target_times))
     ]
     style_handles = [
@@ -446,9 +382,9 @@ def plot_fully_patched_comparison(
     plt.close(fig)
 
 
-def run_preset_workflow():
+def run_preset_workflow(preset_name, case_label, case_title):
     """Run simulation, solve patched similarity models, run fitting pipelines, and plot both formats."""
-    case, history, ablation_solver = get_data()
+    case, history, ablation_solver = get_data(preset_name, case_label)
 
     # 1) Run Subsonic fitting pipeline using ablation_solver.heat_solver
     print("--- Running Subsonic Ablation Fitting ---")
@@ -464,7 +400,7 @@ def run_preset_workflow():
     dv_dir.mkdir(parents=True, exist_ok=True)
 
     # 3) Plot 1: Subsonic & Shock Overlays
-    plot_path_overlays = dv_dir / "fig_8_patched_fit_comparison.png"
+    plot_path_overlays = dv_dir / f"{case_label}_patched_fit_comparison.png"
     plot_patched_dimensional_fit_comparison(
         history=history,
         ablation_solver=ablation_solver,
@@ -472,11 +408,11 @@ def run_preset_workflow():
         shock_params=shock_params,
         case=case,
         plot_path=str(plot_path_overlays),
-        case_title="Fig 8 Constant Temperature Drive (tau=0)",
+        case_title=case_title,
     )
 
     # 4) Plot 2: Fully Patched seamless profiles compared to AblationSolver
-    plot_path_patched = dv_dir / "fig_8_fully_patched_comparison.png"
+    plot_path_patched = dv_dir / f"{case_label}_fully_patched_comparison.png"
     plot_fully_patched_comparison(
         history=history,
         ablation_solver=ablation_solver,
@@ -484,12 +420,31 @@ def run_preset_workflow():
         shock_params=shock_params,
         case=case,
         plot_path=str(plot_path_patched),
-        case_title="Fig 8 Constant Temperature Drive (tau=0)",
+        case_title=case_title,
     )
 
 
 def main():
-    run_preset_workflow()
+    from project3_code.rad_hydro_sim.problems.presets_config import (
+        PRESET_FIG_8_CONSTANT_TEMPERATURE,
+        PRESET_FIG_9_CONSTANT_FLUX,
+        PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE,
+    )
+    run_preset_workflow(
+        PRESET_FIG_8_CONSTANT_TEMPERATURE,
+        "const_T",
+        "Fig 8 Constant Temperature Drive"
+    )
+    run_preset_workflow(
+        PRESET_FIG_9_CONSTANT_FLUX,
+        "const_S",
+        "Fig 9 Constant Flux Drive"
+    )
+    run_preset_workflow(
+        PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE,
+        "const_P_shock",
+        "Fig 10 Constant Ablation Pressure Drive"
+    )
     print("\nPatched ablation and shock simulations, fittings, comparisons, and plots generated successfully!")
 
 

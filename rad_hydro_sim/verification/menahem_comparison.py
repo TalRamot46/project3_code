@@ -46,6 +46,45 @@ _MENAHEM_DIR = Path(__file__).resolve().parents[2] / "menahem_new"
 if str(_MENAHEM_DIR) not in sys.path:
     sys.path.insert(0, str(_MENAHEM_DIR))
 
+# Monkeypatch PistonShock to handle NumPy array inputs gracefully
+def _patch_piston_shock(piston_shock_module):
+    if hasattr(piston_shock_module, "PistonShock"):
+        cls = piston_shock_module.PistonShock
+        original_fxsi_s = cls.fxsi_s
+        def patched_fxsi_s(self, xsi_s):
+            if hasattr(xsi_s, "item"):
+                xsi_s = float(xsi_s.item())
+            elif isinstance(xsi_s, (list, np.ndarray)) and len(xsi_s) == 1:
+                xsi_s = float(xsi_s[0])
+            else:
+                xsi_s = float(xsi_s)
+            return original_fxsi_s(self, xsi_s)
+        cls.fxsi_s = patched_fxsi_s
+
+try:
+    import project3_code.menahem_new.piston_shock_og as ps_og1
+    _patch_piston_shock(ps_og1)
+except ImportError:
+    pass
+
+try:
+    import piston_shock_og as ps_og2
+    _patch_piston_shock(ps_og2)
+except ImportError:
+    pass
+
+try:
+    import project3_code.menahem_new.piston_shock as ps1
+    _patch_piston_shock(ps1)
+except ImportError:
+    pass
+
+try:
+    import piston_shock as ps2
+    _patch_piston_shock(ps2)
+except ImportError:
+    pass
+
 from project3_code.rad_hydro_sim.verification.radiation_data import RadiationSimData
 from project3_code.rad_hydro_sim.verification.hydro_data import RadHydroSimData
 from project3_code.hydro_sim.verification.compare_shock_plots import HydroSimData
@@ -172,7 +211,7 @@ def run_menahem_subsonic_reference(
     (same conventions as the 1D Diffusion / Supersonic references).
     """
     try:
-        from subsonic_heat_wave import SubsonicHeatWave  # type: ignore
+        from subsonic_heat_wave_og import SubsonicHeatWave  # type: ignore
     except ImportError as exc:
         print(f"  Could not import Menahem SubsonicHeatWave: {exc}; skipping.")
         return None
@@ -230,7 +269,7 @@ def run_menahem_shock_reference(
 ) -> Optional[HydroSimData]:
     """Build hydro-only reference from Menahem's ``PistonShock``."""
     try:
-        from piston_shock import PistonShock  # type: ignore
+        from piston_shock_og import PistonShock  # type: ignore
     except ImportError as exc:
         print(f"  Could not import Menahem PistonShock: {exc}; skipping.")
         return None
@@ -321,10 +360,10 @@ def run_menahem_piecewise_reference(
         u = np.asarray(sol["velocity"], dtype=float)
         e = np.asarray(sol["sie"], dtype=float)
         T_K = np.asarray(sol["temperature"], dtype=float)
-        # Eulerian positions: Menahem anchors the ablation boundary at a
-        # negative x; shift so the boundary sits at x=0 (rad_hydro convention).
+        # Eulerian positions: Keep in absolute laboratory frame (no shift),
+        # matching the simulation's absolute laboratory frame history.x.
         pos = np.asarray(sol["position"], dtype=float)
-        x = pos - float(sol["boundary_position"])
+        x = pos
 
         T_HeV = T_K / KELVIN_PER_HEV
         T_HeV = np.where(np.isfinite(T_HeV), T_HeV, 0.0)

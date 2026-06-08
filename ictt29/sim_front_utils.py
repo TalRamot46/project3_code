@@ -49,6 +49,7 @@ __all__ = [
     "find_shock_front",
     "detect_sim_ablation_boundary",
     "detect_sim_ablation_front",
+    "detect_sim_piston_trajectory",
     "detect_sim_shock_front_trajectory",
     "compute_fit_front_trajectories",
     "_rolling_mean",
@@ -127,6 +128,10 @@ def find_shock_front(
     if np.isfinite(drho_dm[i_steep]):
         return i_steep, float(rho_arr[i_steep])
     return -1, float("nan")
+
+
+    # use power law conitnuation at early times 
+    
 
 
 # ---------------------------------------------------------------------------
@@ -242,7 +247,7 @@ def detect_sim_shock_front_trajectory(
     rho_unshocked: float,
     gamma: float,
     smooth_window: int = 5,
-    extrap_t_ns: float = 0.1,
+    extrap_t_ns: float = 0.002,
     extrap_times: np.ndarray | None = None,
 ) -> np.ndarray:
     """Compute the shock-front x-position for every snapshot in the history.

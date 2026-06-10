@@ -31,8 +31,8 @@ from project3_code.rad_hydro_sim.problems.presets_config import (
 )
 from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
 from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
-from project3_code.menahem_new.piston_shock import PistonShock
-from project3_code.menahem_new.ablation_solver import AblationSolver
+from project3_code.menahem_new.piston_shock_og import PistonShock
+from project3_code.menahem_new.ablation_solver_og import AblationSolver
 
 S_PER_NS = 1e-9
 

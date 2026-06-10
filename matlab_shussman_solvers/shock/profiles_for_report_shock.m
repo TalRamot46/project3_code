@@ -1,4 +1,4 @@
-Au;
+Cu;
 [m0,mw,e0,ew,u0,uw,xsi,z,utilda,ufront,t,x] = manager(mat,Pw(3));
 
 t = flipud(t);

@@ -41,12 +41,13 @@ def main():
     print("1) Solving similarity ODEs and extracting optimal fits...")
     
     # 1. SOLVE similarity ODEs & RUN CURVE FITTING via sub_fitting / shock_fitting
+    import data_loader
     case_heat, _ = get_preset(PRESET_FIG_8_CONSTANT_TEMPERATURE)
-    solver_heat = sub_fitting.get_cached_sub_solver(case_heat, "heat_const_T")
+    solver_heat = data_loader.get_sub_similarity_solver(case_heat, "heat_const_T")
     params_heat = sub_fitting.perform_subsonic_fitting(solver_heat)
     
     case_shock, _ = get_preset(PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE)
-    solver_shock = shock_fitting.get_cached_shock_solver(case_shock, "shock_const_T")
+    solver_shock = data_loader.get_shock_similarity_solver(case_shock, "shock_const_T")
     params_shock = shock_fitting.perform_shock_fitting(solver_shock)
     
     # 2. SUBSONIC SCALING CONSTANTS AND conversions (t = 1 ns)
@@ -458,6 +459,90 @@ def main():
     # Subsonic Temperature converted to Kelvin
     T0_kelvin = 1.0 * KELVIN_PER_HEV
     latex_content = latex_content.replace("__T0_KELVIN__", fmt_latex_scientific(T0_kelvin))
+
+    # 3d. INTEGRATED ENERGIES CALCULATIONS & PRINTS & REPLACEMENTS
+    # Subsonic Ablation energies
+    C_E_ablation = A_h**(2*a_u - a_mf) * B_h**(2*b_u - b_mf)
+    power_E_ablation = 2*c_u - c_mf
+    
+    ekin_integral_ablation = solver_heat.energy_kinetic_intgeral
+    ein_integral_ablation = solver_heat.energy_internal_intgeral
+    etot_integral_anal_ablation = ekin_integral_ablation + ein_integral_ablation
+    
+    ekin_coeff_ablation = C_E_ablation * (1e-9)**power_E_ablation * ekin_integral_ablation
+    eint_coeff_ablation = C_E_ablation * (1e-9)**power_E_ablation * ein_integral_ablation
+    etot_coeff_ablation = C_E_ablation * (1e-9)**power_E_ablation * etot_integral_anal_ablation
+    
+    # Shock Compressed energies
+    import scipy.integrate
+    omega_s = solver_shock.omega
+    r_s = solver_shock.r
+    C_E_shock = (v0_s)**(1.0 / (2.0 - omega_s)) * (p0_s)**((3.0 - omega_s) / (2.0 - omega_s))
+    power_E_shock = (3.0 * tau_s - tau_s * omega_s + 2.0) / (2.0 - omega_s)
+    
+    y_grid_shock = np.linspace(0.0, 1.0, 500)
+    xsi_vec_shock = y_grid_shock * xsi_s_val
+    xsi_vec_shock[0] = 1e-10
+    V_shock, U_shock, P_shock = solver_shock.get_self_similar_profiles(xsi_vec=xsi_vec_shock)
+    
+    integrand_kin_shock = 0.5 * U_shock**2
+    integrand_in_shock = P_shock * V_shock / r_s
+    
+    ekin_integral_shock = scipy.integrate.simps(y=integrand_kin_shock, x=xsi_vec_shock)
+    ein_integral_shock = scipy.integrate.simps(y=integrand_in_shock, x=xsi_vec_shock)
+    etot_integral_shock = ekin_integral_shock + ein_integral_shock
+    
+    ekin_coeff_shock = C_E_shock * (1e-9)**power_E_shock * ekin_integral_shock
+    eint_coeff_shock = C_E_shock * (1e-9)**power_E_shock * ein_integral_shock
+    etot_coeff_shock = C_E_shock * (1e-9)**power_E_shock * etot_integral_shock
+
+    # print("\n" + "=" * 80)
+    # print("  INTEGRATED ENERGIES IN ABLATION REGIME")
+    # print("=" * 80)
+    # print("Kinetic Energy E_k(t):")
+    # print("  Level 1: E_k(t) = A^(2a2-a) * B^(2b2-b) * t^(2c2-c) * integral_0^xsi_f (U(xsi)^2 / 2) dxsi")
+    # print(f"  Level 2: E_k(t) = {C_E_ablation:.5e} * t^{float(power_E_ablation):.5f} * {ekin_integral_ablation:.5f}")
+    # print(f"  Level 3: E_k(t) = {ekin_coeff_ablation:.5e} * (t_ns)^{float(power_E_ablation):.5f} erg/cm^2")
+    
+    # print("\nInternal Energy E_in(t):")
+    # print("  Level 1: E_in(t) = A^(2a2-a) * B^(2b2-b) * t^(2c2-c) * integral_0^xsi_f (P(xsi) * V(xsi) / r) dxsi")
+    # print(f"  Level 2: E_in(t) = {C_E_ablation:.5e} * t^{float(power_E_ablation):.5f} * {ein_integral_ablation:.5f}")
+    # print(f"  Level 3: E_in(t) = {eint_coeff_ablation:.5e} * (t_ns)^{float(power_E_ablation):.5f} erg/cm^2")
+
+    # print("\nTotal Energy E_tot(t):")
+    # print("  Level 1: E_tot(t) = A^(2a2-a) * B^(2b2-b) * t^(2c2-c) * integral_0^xsi_f (U(xsi)^2 / 2 + P(xsi) * V(xsi) / r) dxsi")
+    # print(f"  Level 2: E_tot(t) = {C_E_ablation:.5e} * t^{float(power_E_ablation):.5f} * {etot_integral_anal_ablation:.5f}")
+    # print(f"  Level 3: E_tot(t) = {etot_coeff_ablation:.5e} * (t_ns)^{float(power_E_ablation):.5f} erg/cm^2")
+    # print("=" * 80 + "\n")
+
+    # print("=" * 80)
+    # print("  INTEGRATED ENERGIES IN SHOCK REGIME")
+    # print("=" * 80)
+    # print("Kinetic Energy E_k(t):")
+    # print("  Level 1: E_k(t) = v0**(1/(2-omega)) * p0**((3-omega)/(2-omega)) * t**((3*tau - tau*omega + 2)/(2-omega)) * integral_0^xsi_s (U(xsi)^2 / 2) dxsi")
+    # print(f"  Level 2: E_k(t) = {C_E_shock:.5e} * t^{float(power_E_shock):.5f} * {ekin_integral_shock:.5f}")
+    # print(f"  Level 3: E_k(t) = {ekin_coeff_shock:.5e} * (t_ns)^{float(power_E_shock):.5f} erg/cm^2")
+    
+    # print("\nInternal Energy E_in(t):")
+    # print("  Level 1: E_in(t) = v0**(1/(2-omega)) * p0**((3-omega)/(2-omega)) * t**((3*tau - tau*omega + 2)/(2-omega)) * integral_0^xsi_s (P(xsi) * V(xsi) / r) dxsi")
+    # print(f"  Level 2: E_in(t) = {C_E_shock:.5e} * t^{float(power_E_shock):.5f} * {ein_integral_shock:.5f}")
+    # print(f"  Level 3: E_in(t) = {eint_coeff_shock:.5e} * (t_ns)^{float(power_E_shock):.5f} erg/cm^2")
+
+    # print("\nTotal Energy E_tot(t):")
+    # print("  Level 1: E_tot(t) = E_in(t) + E_k(t) = v0**(1/(2-omega)) * p0**((3-omega)/(2-omega)) * t**((3*tau - tau*omega + 2)/(2-omega)) * integral_0^xsi_s (P(xsi)*V(xsi)/r + U(xsi)^2/2) dxsi")
+    # print(f"  Level 2: E_tot(t) = {C_E_shock:.5e} * t^{float(power_E_shock):.5f} * {etot_integral_shock:.5f}")
+    # print(f"  Level 3: E_tot(t) = {etot_coeff_shock:.5e} * (t_ns)^{float(power_E_shock):.5f} erg/cm^2")
+    # print("=" * 80 + "\n")
+
+    # Integrated Energies replacements
+    latex_content = latex_content.replace("__C_E_KIN_SUB__", fmt_latex_scientific(ekin_coeff_ablation))
+    latex_content = latex_content.replace("__C_E_INT_SUB__", fmt_latex_scientific(eint_coeff_ablation))
+    latex_content = latex_content.replace("__C_E_TOT_SUB__", fmt_latex_scientific(etot_coeff_ablation))
+    latex_content = latex_content.replace("__C_E_KIN_SHOCK__", fmt_latex_scientific(ekin_coeff_shock))
+    latex_content = latex_content.replace("__C_E_INT_SHOCK__", fmt_latex_scientific(eint_coeff_shock))
+    latex_content = latex_content.replace("__C_E_TOT_SHOCK__", fmt_latex_scientific(etot_coeff_shock))
+    latex_content = latex_content.replace("__RATIO_E_SUB__", f"{ekin_integral_ablation / ein_integral_ablation:.5f}")
+    latex_content = latex_content.replace("__RATIO_E_SHOCK__", f"{ekin_integral_shock / ein_integral_shock:.5f}")
     
     # Target file paths
     tex_path = doc_dir / "piecewise_analytic_formulas.tex"

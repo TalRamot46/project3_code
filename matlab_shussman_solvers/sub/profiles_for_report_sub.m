@@ -1,6 +1,6 @@
 close all;
 clear all;
-Au;
+Cu;
 tau=0.0;
 [m0,mw,e0,ew,P0,Pw,V0,Vw,u0,uw,xsi,z,Ptilda,utilda,B,t,x] = manager(mat,tau);
 times=[0.1];

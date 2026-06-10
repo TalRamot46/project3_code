@@ -182,7 +182,8 @@ def get_shock_similarity_solver(case, case_label: str):
         print("Solving shock similarity ODEs (finding xsi_s via root-finding)...")
         tau = float(case.tau or 0.0)
         if case.P0_Barye is not None:
-            p0 = _ns_amplitude_rescale(float(case.P0_Barye), tau)
+            p0s = _ns_amplitude_rescale(float(case.P0_Barye), tau)
+            tau_s = tau
         else:
             print("P0_Barye is None (Marshak case). Solving SubsonicHeatWave first to find piston pressure p0 and tau...")
             sub_solver = get_sub_similarity_solver(case, case_label)

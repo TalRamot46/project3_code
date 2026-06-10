@@ -265,7 +265,7 @@ def _get_or_create_subsonic_heat_wave_solver(rad_hydro_case: RadHydroCase):
     )
     
     if case_key not in _subsonic_heat_wave_cache:
-        from project3_code.menahem_new.subsonic_heat_wave import SubsonicHeatWave
+        from project3_code.menahem_new.subsonic_heat_wave_og import SubsonicHeatWave
         
         # Initialize the solver with case parameters
         # Note: Tb is T0_Kelvin, and gamma = r + 1

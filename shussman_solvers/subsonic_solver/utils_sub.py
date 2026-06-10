@@ -10,7 +10,8 @@ from scipy.integrate import solve_ivp
 
 def trapz(y: np.ndarray, x: np.ndarray) -> float:
     """Trapezoidal integration: integrand y, abscissa x. MATLAB trapz(t, y)."""
-    return float(np.trapezoid(np.asarray(y, dtype=float), np.asarray(x, dtype=float)))
+    trap_func = getattr(np, "trapezoid", None) or getattr(np, "trapz")
+    return float(trap_func(np.asarray(y, dtype=float), np.asarray(x, dtype=float)))
 
 
 def mid(x: np.ndarray) -> np.ndarray:

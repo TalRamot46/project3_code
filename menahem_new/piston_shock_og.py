@@ -8,6 +8,12 @@ import logging
 logging.basicConfig(level = logging.INFO)
 logger = logging.getLogger('PistonShock')
 
+import scipy.integrate
+
+# Fallback pattern for modern vs legacy SciPy versions
+if not hasattr(scipy.integrate, "simps"):
+    scipy.integrate.simps = scipy.integrate.simpson
+    
 class NumericalParameters:
     xsi_origin = 1e-50
     xsi_s_initial_guess = 1.

@@ -32,7 +32,7 @@ from comparison.rt_menahem_vs_radhydro import (
     _build_mass_grid_uniform,
     _ns_amplitude_rescale,
 )
-from project3_code.menahem_solvers.ablation_solver import AblationSolver
+from project3_code.menahem_new.ablation_solver_og import AblationSolver
 from project3_code.rad_hydro_sim.problems.presets_config import (
     PRESET_MENAHEM_ABLATION_COMPARISON,
 )

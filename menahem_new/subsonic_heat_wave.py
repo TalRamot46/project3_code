@@ -1,4 +1,10 @@
 import numpy as np
+# Symmetrical trapz <-> trapezoid compatibility
+if not hasattr(np, "trapezoid") and hasattr(np, "trapz"):
+    np.trapezoid = np.trapz
+elif not hasattr(np, "trapz") and hasattr(np, "trapezoid"):
+    np.trapz = np.trapezoid
+
 import sys
 import scipy.integrate
 import scipy.optimize

@@ -388,7 +388,8 @@ def compute_front_half_and_energy(stored_Um, stored_T):
         # 1 / cm^2 = 10^-2 / mm^2
         # => erg/cm^2 = 10^-11 hJ/mm^2
         # => integrate Um (erg/cm^3) over z (cm) gives erg/cm^2 = 10^-11 hJ/mm^2
-        total_energy = np.trapezoid(Ui, z)
+        trap_func = getattr(np, "trapezoid", None) or getattr(np, "trapz")
+        total_energy = trap_func(Ui, z)
         total_energy_hJ_mm2 = total_energy * 1e-11  # convert erg/cm^2 to hJ/mm^2
         total_energies.append(total_energy_hJ_mm2)
 

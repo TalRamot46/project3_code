@@ -17,9 +17,9 @@ import sys
 from pathlib import Path
 from matplotlib import pyplot as plt
 
-from subsonic_heat_wave import SubsonicHeatWave, Units
-from piston_shock import PistonShock
-from ablation_solver import AblationSolver
+from subsonic_heat_wave_og import SubsonicHeatWave, Units
+from piston_shock_og import PistonShock
+from ablation_solver_og import AblationSolver
 
 KELVIN_PER_HEV = 1.160451812e6
 

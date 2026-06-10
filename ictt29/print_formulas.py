@@ -18,9 +18,9 @@ sys.path.insert(0, str(_REPO_ROOT.parent))  # Enables "project3_code" package re
 sys.path.insert(0, str(_REPO_ROOT))
 sys.path.insert(0, str(_REPO_ROOT / "menahem_new"))
 
-from subsonic_heat_wave import SubsonicHeatWave, Units
-from piston_shock import PistonShock
-from ablation_solver import AblationSolver
+from subsonic_heat_wave_og import SubsonicHeatWave, Units
+from piston_shock_og import PistonShock
+from ablation_solver_og import AblationSolver
 
 # =============================================================================
 # PHYSICAL CONSTANTS & SETUP
@@ -250,6 +250,9 @@ def print_eulerian_and_energy_formulas(hs: SubsonicHeatWave, ss: PistonShock):
     print(f"  Level 2: E_tot(t) = {C_E:.5e} * t^{float(power_E):.5f} * [{float(S0):.5f} / {float(power_E):.5f}]")
     etot_coeff = C_E * float(etot_integral_anal)
     print(f"  Level 3: E_tot(t) = {etot_coeff:.5e} * (t_ns)^{float(power_E):.5f} erg/cm^2")
+
+
+    
 
     # 3. Albedo
     print("\n[3. Albedo alpha_albedo(t)]")

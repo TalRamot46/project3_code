@@ -963,8 +963,8 @@ def main() -> None:
     # MODE = VerificationMode.RADIATION_ONLY
     # MODE = VerificationMode.HYDRO_ONLY
 
-    REFERENCE_SOLVER = ReferenceSolver.BOTH
-    # REFERENCE_SOLVER = ReferenceSolver.SHUSSMAN
+    # REFERENCE_SOLVER = ReferenceSolver.BOTH
+    REFERENCE_SOLVER = ReferenceSolver.SHUSSMAN
     # REFERENCE_SOLVER = ReferenceSolver.MENAHEM
 
     run_comparison(
@@ -974,7 +974,7 @@ def main() -> None:
         skip_supersonic=False,
         skip_hydro_sim=False,
         skip_shock_solver=False,
-        skip_shussman=True,
+        skip_shussman=False,
         skip_menahem=False,
         compare_force_black_cases=False,
         show_plot=True,

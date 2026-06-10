@@ -40,6 +40,17 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+import scipy.integrate
+
+if not hasattr(scipy.integrate, "simps"):
+    scipy.integrate.simps = scipy.integrate.simpson
+if not hasattr(scipy.integrate, "cumtrapz"):
+    scipy.integrate.cumtrapz = scipy.integrate.cumulative_trapezoid
+if not hasattr(np, "trapz"):
+    if hasattr(scipy.integrate, "trapezoid"):
+        np.trapz = scipy.integrate.trapezoid
+    elif hasattr(np, "trapezoid"):
+        np.trapz = np.trapezoid
 
 # Menahem modules are a flat directory (no __init__.py); add it to sys.path.
 _MENAHEM_DIR = Path(__file__).resolve().parents[2] / "menahem_new"
@@ -73,17 +84,7 @@ try:
 except ImportError:
     pass
 
-try:
-    import project3_code.menahem_new.piston_shock as ps1
-    _patch_piston_shock(ps1)
-except ImportError:
-    pass
 
-try:
-    import piston_shock as ps2
-    _patch_piston_shock(ps2)
-except ImportError:
-    pass
 
 from project3_code.rad_hydro_sim.verification.radiation_data import RadiationSimData
 from project3_code.rad_hydro_sim.verification.hydro_data import RadHydroSimData

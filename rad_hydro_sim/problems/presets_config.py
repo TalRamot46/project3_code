@@ -160,7 +160,7 @@ PRESET_TEST_CASES = {
         title=f"Power-law pressure drive (P0 = 2.71 MBar, τ=-0.447)",
         geom=planar(),
     ),
-    PRESET_COPPER_CONST_TEMPERATURE: RadHydroCase(
+    PRESET_FIG_8_CONSTANT_TEMPERATURE: RadHydroCase(
         # Rosen's opacity parameters
         g_Kelvin = 1.0 / (7200 * KELVIN_PER_HEV**1.5),
         alpha = 1.5,
@@ -169,46 +169,6 @@ PRESET_TEST_CASES = {
         # Rosen's specific energy parameters
         f_Kelvin = 3.4e13 / (KELVIN_PER_HEV**1.6),
         beta_Rosen = 1.6,
-        mu = 0.14,
-
-        # coupling factor
-        chi = 1000,
-
-        # Boundary conditions
-        T0_Kelvin = 1* KELVIN_PER_HEV,
-        P0_Barye = None,
-        tau = 0.00,
-
-        # initial conditions
-        rho0 = 19.32,
-        p0 = None,
-        u0 = None,
-        T_initial_Kelvin = 300, # 300 K in Hev
-
-        # adiabatic index
-        r = 0.25, # r = \gamma_adiabatic - 1
-
-        # grid parameters
-        x_min = 0,
-        x_max = 2.5e-2 / 19.32,
-        t_sec_end = 2e-9,
-
-        initial_condition="temperature, density",
-        scenario="full_rad_hydro",
-        title=r"Fig 8 comparison ($T_0 = 1$ HeV, $\tau = 0$, $Au$, early time)",
-        geom=planar(),
-        times_for_png=np.array([0.05e-9, 0.1e-9, 0.15e-9], dtype=float),
-        bc_type="Marshak"
-    ),
-    PRESET_FIG_8_CONSTANT_TEMPERATURE: RadHydroCase(
-        # Rosen's opacity parameters
-        g_Kelvin = 1.0 / (7200 * KELVIN_PER_HEV**1.5),
-        alpha = 2.21,
-        lambda_ = 0.29,
-
-        # Rosen's specific energy parameters
-        f_Kelvin = 5.7e13 / (KELVIN_PER_HEV**1.35),
-        beta_Rosen = 1.35,
         mu = 0.14, # ensure
 
         # coupling factor
@@ -240,6 +200,47 @@ PRESET_TEST_CASES = {
         times_for_png=np.array([0.05e-9, 0.1e-9, 0.15e-9], dtype=float),
         bc_type="Marshak"
     ),
+    PRESET_COPPER_CONST_TEMPERATURE: RadHydroCase(
+        # Rosen's opacity parameters
+        g_Kelvin = 1.0 / (2237 * KELVIN_PER_HEV**1.35),
+        alpha = 2.21,
+        lambda_ = 0.29,
+
+        # Rosen's specific energy parameters
+        f_Kelvin = 5.7e13 / (KELVIN_PER_HEV**1.35),
+        beta_Rosen = 1.35,
+        mu = 0.14, # ensure
+
+        # coupling factor
+        chi = 1000,
+
+        # Boundary conditions
+        T0_Kelvin = 1* KELVIN_PER_HEV,
+        P0_Barye = None,
+        tau = 0.00,
+
+        # initial conditions
+        rho0 = 19.32,
+        p0 = None,
+        u0 = None,
+        T_initial_Kelvin = 300, # 300 K in Hev
+
+        # adiabatic index
+        r = 0.4, # r = \gamma_adiabatic - 1
+
+        # grid parameters
+        x_min = 0,
+        x_max = 3.5e-3 / 19.32,
+        t_sec_end = 2e-9,
+
+        initial_condition="temperature, density",
+        scenario="full_rad_hydro",
+        title=r"Cupper constant temprature ($T_0 = 1$ HeV, $\tau = 0$, $Cu$)",
+        geom=planar(),
+        times_for_png=np.array([0.05e-9, 0.1e-9, 0.15e-9], dtype=float),
+        bc_type="Marshak"
+    ),
+
     PRESET_FIG_9_CONSTANT_FLUX: RadHydroCase(
         # Rosen's opacity parameters
         g_Kelvin = 1.0 / (7200 * KELVIN_PER_HEV**1.5),

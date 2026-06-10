@@ -24,7 +24,7 @@ _MENAHEM_SOLVERS_DIR = Path(__file__).resolve().parents[1] / "menahem_new"
 if str(_MENAHEM_SOLVERS_DIR) not in sys.path:
     sys.path.insert(0, str(_MENAHEM_SOLVERS_DIR))
 
-from project3_code.menahem_new.subsonic_heat_wave import SubsonicHeatWave
+from project3_code.menahem_new.subsonic_heat_wave_og import SubsonicHeatWave
 from project3_code.rad_hydro_sim.output_paths import get_menahem_reproduction_figures_dir
 from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
 from project3_code.rad_hydro_sim.simulation.iterator import (

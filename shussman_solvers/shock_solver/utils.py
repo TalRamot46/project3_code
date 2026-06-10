@@ -119,7 +119,8 @@ def integrate_ode(
     return sol
 
 def trapz(y, x):
-    return float(np.trapezoid(y, x))
+    trap_func = getattr(np, "trapezoid", None) or getattr(np, "trapz")
+    return float(trap_func(y, x))
 
 def ensure_finite(arr: np.ndarray, name: str = "array"):
     if not np.all(np.isfinite(arr)):

@@ -811,6 +811,7 @@ def plot_standalone_velocity_fits(params, standalone_path, case_title):
     #         err_curve = np.abs((U_fit - U_valid) / (U_valid + 1e-15))
     #         ax_sa2.plot(y_bulk, err_curve, colors_u[i], label=f"Fit {i} (Avg: {avg_err:.3e})", lw=lw)
 
+
     ax_sa1.set_xlabel(r"Normalized coordinate $y = \xi / \xi_f$", fontsize=12)
     ax_sa1.set_ylabel(r"Velocity $U(y)$ [dimensionless]", fontsize=12)
     ax_sa1.legend(loc='best', fontsize=8.0, ncol=2)

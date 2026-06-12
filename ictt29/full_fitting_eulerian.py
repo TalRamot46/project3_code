@@ -79,6 +79,7 @@ from sim_front_utils import (  # noqa: E402
     find_shock_front,
     _rolling_mean,
     detect_sim_ablation_boundary,
+    detect_sim_ablation_front,
     detect_sim_shock_front_trajectory,
     compute_fit_front_trajectories,
 )
@@ -411,7 +412,7 @@ def plot_patched_dimensional_fit_comparison_eulerian(
         Line2D([0], [0], color='grey', lw=1.2, linestyle='--', label='Solver Fronts'),
         Line2D([0], [0], color='grey', lw=1.2, linestyle=':', label='Fit Fronts'),
     ]
-    ax_rho.legend(handles=legend_handles, loc="upper left", fontsize=11)
+    ax_rho.legend(handles=legend_handles, loc="lower left", fontsize=11)
 
     # Set y limits based on simulation bounds
     all_sim_rho = []
@@ -443,7 +444,7 @@ def plot_patched_dimensional_fit_comparison_eulerian(
         ax.grid(True, alpha=0.3)
         ax.set_title(titles[j], fontsize=14, fontweight='bold')
         ax.set_ylabel(math_labels[j], fontsize=13)
-        ax.set_xlabel("Eulerian Position Coordinate $x$ [$\mu$m]", fontsize=13)
+        ax.set_xlabel(r"Eulerian Position Coordinate $x$ [$\mu$m]", fontsize=13)
         ax.tick_params(labelsize=11)
 
     plt.suptitle(f"Unified Patched Ablation & Shock Verification in Eulerian Coordinate\n{case_title}", fontsize=16, fontweight='bold')
@@ -581,51 +582,35 @@ def plot_fully_patched_comparison_eulerian(
             ax_u.plot(fit_x_um, np.abs(fit_u), ':', color='#e67e22', lw=2.0)
             ax_T.plot(fit_x_um, fit_T, ':', color='#e67e22', lw=2.0)
 
-        x_piston_sim_um = np.nan
+        # Solver fronts (ablation front and shock front)
+        x_af_sol_um = sol_exact["heat_position"] * 1e4
+        x_sf_sol_um = sol_exact["shock_position"] * 1e4
 
-        # Piston from solver = heat_position (ablation front = inner edge of shocked region)
-        x_piston_sol_um = sol_exact["heat_position"] * 1e4
-
-        # Piston from fit: compute x_af_fit (the ablation-front position in the fit)
-        pos_scale = ss._position_temporal_factor(time=t_actual)
-        m_f    = hs.ablated_mass(time=t_actual)
-        xsi_mf = m_f * ss.xsi_over_m(time=t_actual)
-        y_mf   = xsi_mf / ss.xsi_s
-        _, _, U_fit_sh_mf, rho_fit_sh_mf = shock_fit_by_params(np.array([y_mf]), shock_params)
-        V_fit_sh_mf = 1.0 / rho_fit_sh_mf[0]
-        x_af_fit = pos_scale * (q1 * xsi_mf * V_fit_sh_mf + q2 * U_fit_sh_mf[0])
-        x_piston_fit_um = x_af_fit * 1e4
-
-        # Draw ONE piston vertical line per source on all subplots
+        # Draw vertical dashed lines for ablation and shock fronts from the solver
         for ax in [ax_rho, ax_p, ax_u, ax_T]:
-            if np.isfinite(x_piston_sim_um):
-                ax.axvline(x=x_piston_sim_um, color='#1a5fb4', linestyle='-',  lw=1.5, alpha=0.7,
-                           label='piston (sim)' if i == 0 else None)
-            ax.axvline(x=x_piston_sol_um,  color='#333333',  linestyle='--', lw=1.5, alpha=0.7,
-                       label='piston (solver)' if i == 0 else None)
-            if not compare_imc:
-                ax.axvline(x=x_piston_fit_um,  color='#e67e22',  linestyle=':',  lw=1.8, alpha=0.7,
-                           label='piston (fit)' if i == 0 else None)
+            ax.axvline(x=x_af_sol_um, color='#333333', linestyle='--', lw=1.5, alpha=0.7,
+                       label='ablation front (solver)' if i == 0 else None)
+            ax.axvline(x=x_sf_sol_um, color='#e63946', linestyle='--', lw=1.5, alpha=0.7,
+                       label='shock front (solver)' if i == 0 else None)
 
-    # Build legend: profiles + piston lines
+    # Build legend: profiles + front lines
     if compare_imc:
         legend_handles = [
             Line2D([0], [0], color='#1a5fb4', lw=2.5, linestyle='-',  label='Simulation'),
             Line2D([0], [0], color='#333333', lw=2.0, linestyle='-',  label='Exact Patched Solver'),
             Line2D([0], [0], color='forestgreen', lw=1.8, linestyle='--', label='IMC (2 ns)'),
-            Line2D([0], [0], color='#1a5fb4', lw=1.5, linestyle='-',  alpha=0.7, label='piston (sim)'),
-            Line2D([0], [0], color='#333333', lw=1.5, linestyle='--', alpha=0.7, label='piston (solver)'),
+            Line2D([0], [0], color='#333333', lw=1.5, linestyle='--', alpha=0.7, label='ablation front (solver)'),
+            Line2D([0], [0], color='#e63946', lw=1.5, linestyle='--', alpha=0.7, label='shock front (solver)'),
         ]
     else:
         legend_handles = [
             Line2D([0], [0], color='#1a5fb4', lw=2.5, linestyle='-',  label='Simulation'),
             Line2D([0], [0], color='#333333', lw=2.0, linestyle='-',  label='Exact Patched Solver'),
             Line2D([0], [0], color='#e67e22', lw=2.0, linestyle=':',  label='Patched Fit'),
-            Line2D([0], [0], color='#1a5fb4', lw=1.5, linestyle='-',  alpha=0.7, label='piston (sim)'),
-            Line2D([0], [0], color='#333333', lw=1.5, linestyle='--', alpha=0.7, label='piston (solver)'),
-            Line2D([0], [0], color='#e67e22', lw=1.8, linestyle=':',  alpha=0.7, label='piston (fit)'),
+            Line2D([0], [0], color='#333333', lw=1.5, linestyle='--', alpha=0.7, label='ablation front (solver)'),
+            Line2D([0], [0], color='#e63946', lw=1.5, linestyle='--', alpha=0.7, label='shock front (solver)'),
         ]
-    ax_rho.legend(handles=legend_handles, loc="upper left", fontsize=11, ncol=2)
+    ax_rho.legend(handles=legend_handles, loc="lower left", fontsize=11, ncol=2)
 
     # Set y limits based on simulation bounds
     all_sim_rho = []
@@ -645,14 +630,12 @@ def plot_fully_patched_comparison_eulerian(
     max_sim_T = np.max(all_sim_T)
 
     ax_rho.set_yscale('log')
-    ax_p.set_yscale('log')
-    ax_u.set_yscale('log')
-    ax_T.set_yscale('log')
+    # Keep other graphs linear as requested
 
     ax_rho.set_ylim(1e-5, max_sim_rho * 2.0)
-    ax_p.set_ylim(1e-6, max_sim_p * 2.0)
-    ax_u.set_ylim(1e-1, max_sim_u_abs * 2.0)
-    ax_T.set_ylim(1e-4, max_sim_T * 2.0)
+    ax_p.set_ylim(-0.05 * max_sim_p, max_sim_p * 1.15)
+    ax_u.set_ylim(-0.05 * max_sim_u_abs, max_sim_u_abs * 1.15)
+    ax_T.set_ylim(-0.05 * max_sim_T, max_sim_T * 1.15)
 
     # Styling
     titles = ["Density", "Pressure", "Velocity", "Temperature"]
@@ -661,7 +644,8 @@ def plot_fully_patched_comparison_eulerian(
         ax.grid(True, alpha=0.3)
         ax.set_title(titles[j], fontsize=14, fontweight='bold')
         ax.set_ylabel(math_labels[j], fontsize=13)
-        ax.set_xlabel("Eulerian Position Coordinate $x$ [$\mu$m]", fontsize=13)
+        ax.set_xlabel(r"Eulerian Position Coordinate $x$ [$\mu$m]", fontsize=13)
+        ax.set_xlim(left=-10.0, right=20)
         ax.tick_params(labelsize=11)
 
     if compare_imc:
@@ -788,7 +772,7 @@ def plot_multitime_profiles_eulerian(
     for j, ax in enumerate(all_axes):
         ax.set_title(titles[j], fontsize=14, fontweight='bold')
         ax.set_ylabel(math_labels[j], fontsize=13)
-        ax.set_xlabel("Eulerian Position $x$ [$\mu$m]", fontsize=13)
+        ax.set_xlabel(r"Eulerian Position $x$ [$\mu$m]", fontsize=13)
         ax.tick_params(labelsize=11)
 
     ax_rho.legend(handles=legend_handles, loc="upper left", fontsize=11, ncol=2)
@@ -932,6 +916,140 @@ def plot_front_trajectories_eulerian(history, ablation_solver, sub_params, shock
     plt.close(fig)
 
 
+def plot_fronts_vs_time_comparison(history, ablation_solver, sub_params, shock_params, case, plot_path, case_title):
+    """
+    Plots front positions (x in um) and front mass coordinates (m in mg/cm2) vs time,
+    comparing Simulation, Solver, and Fits.
+    """
+    print(f"Generating time-dependent front comparisons for {case_title}...")
+    times = np.asarray(history.t, dtype=float)
+    x_sim = np.asarray(history.x, dtype=float)
+    t_ns = times * 1e9
+    
+    n_cells = x_sim.shape[1]
+    mass_grid = _build_mass_grid(case, num_cells=n_cells)
+    times_model = _get_equally_spaced_elements(times, 200)
+    t_ns_model = times_model * 1e9
+
+    # 1) Simulation shock front and ablation front detection
+    # Shock front (position and mass)
+    x_shock_sim_raw = detect_sim_shock_front_trajectory(
+        history.rho,
+        history.m,
+        x_sim,
+        rho_unshocked=float(case.rho0),
+        gamma=float(case.r) + 1.0,
+        smooth_window=5,
+        extrap_t_ns=0.1,
+        extrap_times=times,
+    )
+    x_shock_sim_um = _rolling_mean(x_shock_sim_raw * 1e4, 3)
+    
+    m_shock_sim_mg = np.full_like(times, np.nan, dtype=float)
+    for k in range(len(times)):
+        rhok = _rolling_mean(history.rho[k], 5)
+        ishock, _ = find_shock_front(
+            rhok,
+            history.m[k],
+            rho_unshocked=float(case.rho0),
+            gamma=float(case.r) + 1.0,
+        )
+        if ishock >= 1:
+            m_shock_sim_mg[k] = history.m[k][ishock] * 1e3 # g/cm2 -> mg/cm2
+
+    # Ablation front (position and mass)
+    x_ablation_sim_raw = detect_sim_ablation_front(
+        history.rho,
+        history.m,
+        x_sim,
+        rho_unshocked=float(case.rho0),
+        gamma=float(case.r) + 1.0,
+        smooth_window=5,
+    )
+    x_ablation_sim_um = x_ablation_sim_raw * 1e4
+    
+    m_ablation_sim_mg = np.full_like(times, np.nan, dtype=float)
+    for k in range(len(times)):
+        if np.isfinite(x_ablation_sim_raw[k]):
+            i_ab = np.nanargmin(np.abs(x_sim[k] - x_ablation_sim_raw[k]))
+            m_ablation_sim_mg[k] = history.m[k][i_ab] * 1e3
+
+    # Apply rolling mean to clean up any minor detection jitter
+    x_ablation_sim_um = _rolling_mean(x_ablation_sim_um, 3)
+    m_ablation_sim_mg = _rolling_mean(m_ablation_sim_mg, 3)
+
+    # 2) Solver fronts
+    x_ablation_sol = np.zeros_like(times_model)
+    x_shock_sol = np.zeros_like(times_model)
+    m_ablation_sol_mg = np.zeros_like(times_model)
+    m_shock_sol_mg = np.zeros_like(times_model)
+
+    for i, t in enumerate(times_model):
+        t_val = max(float(t), 1e-18)
+        sol = ablation_solver.solve(mass=mass_grid, time=t_val)
+        x_ablation_sol[i] = sol["heat_position"] * 1e4
+        x_shock_sol[i] = sol["shock_position"] * 1e4
+        m_ablation_sol_mg[i] = ablation_solver.heat_solver.ablated_mass(time=t_val) * 1e3
+        m_shock_sol_mg[i] = ablation_solver.shock_solver.shocked_mass(time=t_val) * 1e3
+
+    # 3) Fit fronts
+    fit_fronts = compute_fit_front_trajectories(
+        times_model, ablation_solver, sub_params, shock_params
+    )
+    x_ablation_fit = fit_fronts["ablation_front"] * 1e4
+    x_shock_fit = fit_fronts["shock"] * 1e4
+    # Fits use the same ablated/shocked mass formulas as solver
+    m_ablation_fit_mg = m_ablation_sol_mg
+    m_shock_fit_mg = m_shock_sol_mg
+
+    # 4) Plotting
+    fig, (ax_x, ax_m) = plt.subplots(1, 2, figsize=(14, 6.5))
+
+    # Left Panel: Position x
+    # Simulation (solid)
+    ax_x.plot(t_ns, x_ablation_sim_um, '-', color='#1a5fb4', lw=2.5, label='Ablation Sim')
+    ax_x.plot(t_ns, x_shock_sim_um, '-', color='#e63946', lw=2.5, label='Shock Sim')
+    # Solver (dashed)
+    ax_x.plot(t_ns_model, x_ablation_sol, '--', color='#333333', lw=2.0, label='Ablation Solver')
+    ax_x.plot(t_ns_model, x_shock_sol, '--', color='#8b0000', lw=2.0, label='Shock Solver')
+    # Fit (dotted)
+    ax_x.plot(t_ns_model, x_ablation_fit, ':', color='#26a269', lw=2.2, label='Ablation Fit')
+    ax_x.plot(t_ns_model, x_shock_fit, ':', color='#e67e22', lw=2.2, label='Shock Fit')
+
+    ax_x.set_title("Front Position $x$", fontsize=14, fontweight='bold')
+    ax_x.set_ylabel(r"$x$ [$\mu$m]", fontsize=13)
+    ax_x.set_xlabel(r"$t$ [ns]", fontsize=13)
+    ax_x.grid(True, alpha=0.3)
+    ax_x.tick_params(labelsize=11)
+    ax_x.legend(loc='best', fontsize=11)
+    ax_x.set_xlim(0, t_ns[-1])
+
+    # Right Panel: Mass Coordinate m
+    # Simulation (solid)
+    ax_m.plot(t_ns, m_ablation_sim_mg, '-', color='#1a5fb4', lw=2.5, label='Ablation Sim')
+    ax_m.plot(t_ns, m_shock_sim_mg, '-', color='#e63946', lw=2.5, label='Shock Sim')
+    # Solver (dashed)
+    ax_m.plot(t_ns_model, m_ablation_sol_mg, '--', color='#333333', lw=2.0, label='Ablation Solver')
+    ax_m.plot(t_ns_model, m_shock_sol_mg, '--', color='#8b0000', lw=2.0, label='Shock Solver')
+    # Fit (dotted)
+    ax_m.plot(t_ns_model, m_ablation_fit_mg, ':', color='#26a269', lw=2.2, label='Ablation Fit')
+    ax_m.plot(t_ns_model, m_shock_fit_mg, ':', color='#e67e22', lw=2.2, label='Shock Fit')
+
+    ax_m.set_title("Front Mass Coordinate $m$", fontsize=14, fontweight='bold')
+    ax_m.set_ylabel(r"$m$ [mg/cm²]", fontsize=13)
+    ax_m.set_xlabel(r"$t$ [ns]", fontsize=13)
+    ax_m.grid(True, alpha=0.3)
+    ax_m.tick_params(labelsize=11)
+    ax_m.legend(loc='best', fontsize=11)
+    ax_m.set_xlim(0, t_ns[-1])
+
+    plt.suptitle(f"Front Trajectory & Mass Coordinate Comparison\n{case_title}", fontsize=16, fontweight='bold')
+    plt.tight_layout()
+    fig.savefig(plot_path, dpi=200)
+    print(f"Saved front position and mass comparisons vs time to {plot_path}")
+    plt.close(fig)
+
+
 # =============================================================================
 # Main Execution Workflow
 # =============================================================================
@@ -987,6 +1105,18 @@ def run_preset_workflow(preset_name, case_label, case_title, compare_imc=False, 
         shock_params=shock_params,
         case=case,
         plot_path=str(plot_path_trajectories),
+        case_title=case_title,
+    )
+
+    # Plot 3b: Front Position and Mass Coordinate vs Time (2 subplots)
+    plot_path_fronts_vs_time = ev_dir / f"{case_label}_fronts_vs_time.png"
+    plot_fronts_vs_time_comparison(
+        history=history,
+        ablation_solver=ablation_solver,
+        sub_params=sub_params,
+        shock_params=shock_params,
+        case=case,
+        plot_path=str(plot_path_fronts_vs_time),
         case_title=case_title,
     )
 

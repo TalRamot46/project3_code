@@ -598,24 +598,27 @@ def plot_dimensional_fit_comparison(history, solver, case, params, dimensional_f
     ]
 
     # Styling
-    labels = ["Density [g/cm$^3$]", "Pressure [MBar]", "Velocity [km/s]", "Temperature [HeV]"]
+    titles = ["Density", "Pressure", "Velocity", "Temperature"]
+    math_labels = [r"$\rho$ [g/cm$^3$]", r"$P$ [MBar]", r"$u$ [km/s]", r"$T$ [HeV]"]
     for j, ax in enumerate([ax_rho, ax_p, ax_u, ax_T]):
         ax.grid(True, alpha=0.3)
-        ax.set_ylabel(labels[j], fontsize=12)
-        ax.set_xlabel("Lagrangian Mass Coordinate $m$ [mg/cm$^2$]", fontsize=12)
+        ax.set_title(titles[j], fontsize=14, fontweight='bold')
+        ax.set_ylabel(math_labels[j], fontsize=13)
+        ax.set_xlabel("Lagrangian Mass Coordinate $m$ [mg/cm$^2$]", fontsize=13)
+        ax.tick_params(labelsize=11)
         if j == 0:
             style_handles = [
                 Line2D([0], [0], color='black', lw=2, linestyle='--', label='Exact Solver'),
                 Line2D([0], [0], color='forestgreen', lw=2, linestyle='--', label='Analytic Fit'),
             ]
-            ax.legend(handles=time_handles + style_handles, loc="upper left")
+            ax.legend(handles=time_handles + style_handles, loc="upper left", fontsize=11)
             
     # Style inset
     # axins.grid(True, alpha=0.3)
     # axins.set_title("Zoom near front", fontsize=9)
     # ax_rho.indicate_inset_zoom(axins, edgecolor="black")
             
-    plt.suptitle(f"Subsonic Ablation Region Verification\n{case_title}", fontsize=14, fontweight='bold')
+    plt.suptitle(f"Subsonic Ablation Region Verification\n{case_title}", fontsize=16, fontweight='bold')
     plt.tight_layout()
     fig.savefig(dimensional_fit_path, dpi=200)
     print(f"Saved dimensional subsonic profiles comparison to {dimensional_fit_path}")
@@ -655,27 +658,27 @@ def plot_and_fit_self_similar(solver, params, self_similar_path, case_title):
     ax = axes[0, 0]
     ax.plot(y_valid, T_valid, 'b-', label='Numerical Solver', lw=2)
     ax.plot(y_valid, T_fit, 'r--', label='Analytical Fit', lw=1.5)
-    ax.set_ylabel(r"Temperature $T(y)$ [dimensionless]", fontsize=12)
-    ax.set_title("Subsonic: Temperature", fontsize=13, fontweight='bold')
+    ax.set_ylabel(r"$T(y)$", fontsize=13)
+    ax.set_title("Subsonic: Temperature", fontsize=14, fontweight='bold')
     lbl_T = f"$T(y) \\approx [(1-y)(1+{popt_T[0]:.5f}y)]^{{10/39}}$\nAvg Err: {avg_T:.4e}, Max Err: {max_T:.4e}"
-    ax.text(0.05, 0.05, lbl_T, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=9.5)
+    ax.text(0.05, 0.05, lbl_T, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=11)
     
     # Panel (0,1): Density
     ax = axes[0, 1]
     ax.plot(y_rho, rho_valid, 'b-', label='Numerical Solver', lw=2)
     ax.plot(y_rho, rho_fit, 'r--', label='EOS Derived Fit', lw=1.5)
-    ax.set_ylabel(r"Density $\rho(y)$ [dimensionless]", fontsize=12)
-    ax.set_title("Subsonic: Density", fontsize=13, fontweight='bold')
+    ax.set_ylabel(r"$\rho(y)$", fontsize=13)
+    ax.set_title("Subsonic: Density", fontsize=14, fontweight='bold')
     lbl_rho = r"$\rho(y) \approx \left(\frac{P(y)}{rfT(y)^{\beta}}\right)^{\frac{1}{1+\mu}}$" + f"\nAvg Err: {avg_rho:.4e}, Max Err: {max_rho:.4e}"
-    ax.text(0.05, 0.05, lbl_rho, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=9.5)
+    ax.text(0.05, 0.05, lbl_rho, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=11)
     
     # Panel (1,0): Pressure
     ax = axes[1, 0]
     ax.plot(y_valid, P_valid, 'b-', label='Numerical Solver', lw=2)
     ax.plot(y_valid, P_fit, 'r--', label='Analytical Fit', lw=1.5)
-    ax.set_ylabel(r"Pressure $P(y)$ [dimensionless]", fontsize=12)
+    ax.set_ylabel(r"$P(y)$", fontsize=13)
     best_p = params["best_p"]
-    ax.set_title(f"Subsonic: Pressure ({best_p['name']})", fontsize=13, fontweight='bold')
+    ax.set_title(f"Subsonic: Pressure ({best_p['name']})", fontsize=14, fontweight='bold')
     
     P_0_val, P_f_val = P_valid[0], P_valid[-1]
     p_popt = best_p["popt"]
@@ -701,14 +704,14 @@ def plot_and_fit_self_similar(solver, params, self_similar_path, case_title):
         p_formula = r"$P(y) \approx W P_{left} + (1-W) P_{right}$"
         
     lbl_P = p_formula + f"\nAvg Err: {avg_P:.4e}, Max Err: {max_P:.4e}"
-    ax.text(0.05, 0.70, lbl_P, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=9.5)
+    ax.text(0.05, 0.70, lbl_P, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=11)
     
     # Panel (1,1): Velocity
     ax = axes[1, 1]
     ax.plot(y_valid, U_valid, 'b-', label='Numerical Solver', lw=2)
     ax.plot(y_valid, U_fit, 'r--', label='Optimized Fit', lw=1.5)
-    ax.set_ylabel(r"Velocity $U(y)$ [dimensionless]", fontsize=12)
-    ax.set_title(f"Subsonic: Velocity ({best_u['name']})", fontsize=13, fontweight='bold')
+    ax.set_ylabel(r"$U(y)$", fontsize=13)
+    ax.set_title(f"Subsonic: Velocity ({best_u['name']})", fontsize=14, fontweight='bold')
     
     # Format the dynamic velocity formula in latex
     u_0_val, u_f_val = U_valid[0], U_valid[-1]
@@ -748,14 +751,15 @@ def plot_and_fit_self_similar(solver, params, self_similar_path, case_title):
         u_formula = r"$U(y) \approx Piecewise\ 3-Sec\ Hermite\ C^1$"
         
     lbl_U = u_formula + f"\nAvg Err: {avg_U:.4e}, Max Err: {max_U:.4e}"
-    ax.text(0.05, 0.70, lbl_U, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=9.5)
+    ax.text(0.05, 0.70, lbl_U, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=11)
     
     for ax in axes.flat:
-        ax.set_xlabel(r"Normalized coordinate $y = \xi / \xi_f$", fontsize=11)
+        ax.set_xlabel(r"Normalized coordinate $y = \xi / \xi_f$", fontsize=13)
         ax.grid(True, alpha=0.25)
-        ax.legend(loc='best', fontsize=9.5)
+        ax.legend(loc='best', fontsize=11)
+        ax.tick_params(labelsize=11)
         
-    fig.suptitle(f"Subsonic self-similar Profiles & Analytical Fits\n{case_title}", fontsize=15, fontweight='bold')
+    fig.suptitle(f"Subsonic self-similar Profiles & Analytical Fits\n{case_title}", fontsize=16, fontweight='bold')
     plt.tight_layout()
     fig.savefig(self_similar_path, dpi=200)
     plt.close(fig)

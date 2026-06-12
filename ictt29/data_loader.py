@@ -40,16 +40,23 @@ class CustomUnpickler(pickle.Unpickler):
         return super().find_class(module, name)
 
 
-def get_sim_history(preset_name: str, case_label: str):
+def get_sim_history(preset_name: str, case_label: str, N: int = None):
     """
     Load or run 1D Rad-Hydro simulation history.
     Saves to {case_label}_sim_history.npz.
     """
+    case, config = get_preset(preset_name)
+    if N is not None:
+        config = replace(config, N=N)
+
     cache_dir = Path("results/ictt/cache")
     cache_dir.mkdir(parents=True, exist_ok=True)
-    sim_cache_path = cache_dir / f"{case_label}_sim_history.npz"
-
-    case, config = get_preset(preset_name)
+    
+    sim_cache_path = cache_dir / f"{case_label}_sim_history_N{config.N}.npz"
+    if not sim_cache_path.exists() and config.N == 1000:
+        legacy_path = cache_dir / f"{case_label}_sim_history.npz"
+        if legacy_path.exists():
+            sim_cache_path = legacy_path
 
     history = None
     if USE_CACHE and sim_cache_path.exists():

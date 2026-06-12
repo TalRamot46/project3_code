@@ -171,9 +171,9 @@ def calculate_patched_eulerian_positions_fit(mass_grid, t_actual, ablation_solve
 
 from data_loader import get_sim_history, get_ablation_solver
 
-def get_data(preset_name, case_label):
+def get_data(preset_name, case_label, N=None):
     """Run full simulation and build AblationSolver reference solver, or load from cache."""
-    case, history = get_sim_history(preset_name, case_label)
+    case, history = get_sim_history(preset_name, case_label, N=N)
     ablation_solver = get_ablation_solver(case, case_label)
     return case, history, ablation_solver
 
@@ -411,7 +411,7 @@ def plot_patched_dimensional_fit_comparison_eulerian(
         Line2D([0], [0], color='grey', lw=1.2, linestyle='--', label='Solver Fronts'),
         Line2D([0], [0], color='grey', lw=1.2, linestyle=':', label='Fit Fronts'),
     ]
-    ax_rho.legend(handles=legend_handles, loc="best", fontsize=9.5)
+    ax_rho.legend(handles=legend_handles, loc="upper left", fontsize=11)
 
     # Set y limits based on simulation bounds
     all_sim_rho = []
@@ -437,13 +437,16 @@ def plot_patched_dimensional_fit_comparison_eulerian(
     ax_T.set_ylim(-0.05 * max_sim_T, max_sim_T * 1.15)
 
     # Styling
-    labels = ["Density [g/cm³]", "Pressure [MBar]", "Velocity [km/s]", "Temperature [HeV]"]
+    titles = ["Density", "Pressure", "Velocity", "Temperature"]
+    math_labels = [r"$\rho$ [g/cm³]", r"$P$ [MBar]", r"$u$ [km/s]", r"$T$ [HeV]"]
     for j, ax in enumerate([ax_rho, ax_p, ax_u, ax_T]):
         ax.grid(True, alpha=0.3)
-        ax.set_ylabel(labels[j], fontsize=12)
-        ax.set_xlabel("Eulerian Position Coordinate $x$ [$\mu$m]", fontsize=12)
+        ax.set_title(titles[j], fontsize=14, fontweight='bold')
+        ax.set_ylabel(math_labels[j], fontsize=13)
+        ax.set_xlabel("Eulerian Position Coordinate $x$ [$\mu$m]", fontsize=13)
+        ax.tick_params(labelsize=11)
 
-    plt.suptitle(f"Unified Patched Ablation & Shock Verification in Eulerian Coordinate\n{case_title}", fontsize=14, fontweight='bold')
+    plt.suptitle(f"Unified Patched Ablation & Shock Verification in Eulerian Coordinate\n{case_title}", fontsize=16, fontweight='bold')
     plt.tight_layout()
     fig.savefig(plot_path, dpi=200)
     print(f"Saved region overlays plot in Eulerian to {plot_path}")
@@ -458,10 +461,11 @@ def plot_fully_patched_comparison_eulerian(
     case,
     plot_path,
     case_title,
+    compare_imc=False,
 ):
     """
     Plots a unified 2x2 comparison showing the fully patched (seamless) profiles vs Eulerian coordinate x.
-    Compares Rad-Hydro Simulation, AblationSolver (exact patched), and fully patched Fits.
+    Compares Rad-Hydro Simulation, AblationSolver (exact patched), and fully patched Fits or IMC data.
     """
     print(f"Generating physical fully patched comparison in Eulerian for {case_title}...")
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
@@ -541,20 +545,41 @@ def plot_fully_patched_comparison_eulerian(
         # Plot Simulation (entire domain) - Blue
         ax_rho.plot(x_sim_center_um, sim_rho, '-', color='#1a5fb4', lw=2.2)
         ax_p.plot(x_sim_center_um, sim_p, '-', color='#1a5fb4', lw=2.2)
-        ax_u.plot(x_sim_center_um, sim_u, '-', color='#1a5fb4', lw=2.2)
+        ax_u.plot(x_sim_center_um, np.abs(sim_u), '-', color='#1a5fb4', lw=2.2)
         ax_T.plot(x_sim_center_um, sim_T, '-', color='#1a5fb4', lw=2.2)
 
         # Plot Exact patched solver (solid black)
         ax_rho.plot(exact_x_um, exact_rho, '-', color='#333333', lw=2.0)
         ax_p.plot(exact_x_um, exact_p, '-', color='#333333', lw=2.0)
-        ax_u.plot(exact_x_um, exact_u, '-', color='#333333', lw=2.0)
+        ax_u.plot(exact_x_um, np.abs(exact_u), '-', color='#333333', lw=2.0)
         ax_T.plot(exact_x_um, exact_T, '-', color='#333333', lw=2.0)
 
-        # Plot Patched fits (dotted orange)
-        ax_rho.plot(fit_x_um, fit_rho, ':', color='#e67e22', lw=2.0)
-        ax_p.plot(fit_x_um, fit_p, ':', color='#e67e22', lw=2.0)
-        ax_u.plot(fit_x_um, fit_u, ':', color='#e67e22', lw=2.0)
-        ax_T.plot(fit_x_um, fit_T, ':', color='#e67e22', lw=2.0)
+        if compare_imc:
+            # IMC replaces the fits. We only plot it for the final target time step (t_actual ~ 2.0 ns)
+            if i == len(target_times) - 1:
+                from project3_code.shteinberg_comparison.shteinberg_comparison import extract_steinberg_IMC_for_num_cells
+                num_cells = len(m_sim)
+                st_imc = extract_steinberg_IMC_for_num_cells(num_cells)
+                if st_imc is None:
+                    st_imc = extract_steinberg_IMC_for_num_cells(1024)
+                
+                if st_imc is not None:
+                    imc_x_um = st_imc["x"] * 1e4
+                    imc_rho = st_imc["density"]
+                    imc_p = st_imc["pressure"] / p_scale
+                    imc_u = st_imc["velocity_x"] / u_scale
+                    imc_T = st_imc["temperature"] / T_scale
+
+                    ax_rho.plot(imc_x_um, imc_rho, '--', color='forestgreen', lw=1.8)
+                    ax_p.plot(imc_x_um, imc_p, '--', color='forestgreen', lw=1.8)
+                    ax_u.plot(imc_x_um, np.abs(imc_u), '--', color='forestgreen', lw=1.8)
+                    ax_T.plot(imc_x_um, imc_T, '--', color='forestgreen', lw=1.8)
+        else:
+            # Plot Patched fits (dotted orange)
+            ax_rho.plot(fit_x_um, fit_rho, ':', color='#e67e22', lw=2.0)
+            ax_p.plot(fit_x_um, fit_p, ':', color='#e67e22', lw=2.0)
+            ax_u.plot(fit_x_um, np.abs(fit_u), ':', color='#e67e22', lw=2.0)
+            ax_T.plot(fit_x_um, fit_T, ':', color='#e67e22', lw=2.0)
 
         x_piston_sim_um = np.nan
 
@@ -578,19 +603,29 @@ def plot_fully_patched_comparison_eulerian(
                            label='piston (sim)' if i == 0 else None)
             ax.axvline(x=x_piston_sol_um,  color='#333333',  linestyle='--', lw=1.5, alpha=0.7,
                        label='piston (solver)' if i == 0 else None)
-            ax.axvline(x=x_piston_fit_um,  color='#e67e22',  linestyle=':',  lw=1.8, alpha=0.7,
-                       label='piston (fit)' if i == 0 else None)
+            if not compare_imc:
+                ax.axvline(x=x_piston_fit_um,  color='#e67e22',  linestyle=':',  lw=1.8, alpha=0.7,
+                           label='piston (fit)' if i == 0 else None)
 
     # Build legend: profiles + piston lines
-    legend_handles = [
-        Line2D([0], [0], color='#1a5fb4', lw=2.5, linestyle='-',  label='Simulation'),
-        Line2D([0], [0], color='#333333', lw=2.0, linestyle='-',  label='Exact Patched Solver'),
-        Line2D([0], [0], color='#e67e22', lw=2.0, linestyle=':',  label='Patched Fit'),
-        Line2D([0], [0], color='#1a5fb4', lw=1.5, linestyle='-',  alpha=0.7, label='piston (sim)'),
-        Line2D([0], [0], color='#333333', lw=1.5, linestyle='--', alpha=0.7, label='piston (solver)'),
-        Line2D([0], [0], color='#e67e22', lw=1.8, linestyle=':',  alpha=0.7, label='piston (fit)'),
-    ]
-    ax_rho.legend(handles=legend_handles, loc="best", fontsize=9.5, ncol=2)
+    if compare_imc:
+        legend_handles = [
+            Line2D([0], [0], color='#1a5fb4', lw=2.5, linestyle='-',  label='Simulation'),
+            Line2D([0], [0], color='#333333', lw=2.0, linestyle='-',  label='Exact Patched Solver'),
+            Line2D([0], [0], color='forestgreen', lw=1.8, linestyle='--', label='IMC (2 ns)'),
+            Line2D([0], [0], color='#1a5fb4', lw=1.5, linestyle='-',  alpha=0.7, label='piston (sim)'),
+            Line2D([0], [0], color='#333333', lw=1.5, linestyle='--', alpha=0.7, label='piston (solver)'),
+        ]
+    else:
+        legend_handles = [
+            Line2D([0], [0], color='#1a5fb4', lw=2.5, linestyle='-',  label='Simulation'),
+            Line2D([0], [0], color='#333333', lw=2.0, linestyle='-',  label='Exact Patched Solver'),
+            Line2D([0], [0], color='#e67e22', lw=2.0, linestyle=':',  label='Patched Fit'),
+            Line2D([0], [0], color='#1a5fb4', lw=1.5, linestyle='-',  alpha=0.7, label='piston (sim)'),
+            Line2D([0], [0], color='#333333', lw=1.5, linestyle='--', alpha=0.7, label='piston (solver)'),
+            Line2D([0], [0], color='#e67e22', lw=1.8, linestyle=':',  alpha=0.7, label='piston (fit)'),
+        ]
+    ax_rho.legend(handles=legend_handles, loc="upper left", fontsize=11, ncol=2)
 
     # Set y limits based on simulation bounds
     all_sim_rho = []
@@ -606,23 +641,33 @@ def plot_fully_patched_comparison_eulerian(
 
     max_sim_rho = np.max(all_sim_rho)
     max_sim_p = np.max(all_sim_p)
-    min_sim_u = np.min(all_sim_u)
-    max_sim_u = np.max(all_sim_u)
+    max_sim_u_abs = np.max(np.abs(all_sim_u))
     max_sim_T = np.max(all_sim_T)
 
-    ax_rho.set_ylim(-5.0, max_sim_rho * 1.15)
-    ax_p.set_ylim(-0.05 * max_sim_p, max_sim_p * 1.15)
-    ax_u.set_ylim(min_sim_u * 1.15 - 5.0, max_sim_u + 10.0)
-    ax_T.set_ylim(-0.05 * max_sim_T, max_sim_T * 1.15)
+    ax_rho.set_yscale('log')
+    ax_p.set_yscale('log')
+    ax_u.set_yscale('log')
+    ax_T.set_yscale('log')
+
+    ax_rho.set_ylim(1e-5, max_sim_rho * 2.0)
+    ax_p.set_ylim(1e-6, max_sim_p * 2.0)
+    ax_u.set_ylim(1e-1, max_sim_u_abs * 2.0)
+    ax_T.set_ylim(1e-4, max_sim_T * 2.0)
 
     # Styling
-    labels = ["Density [g/cm³]", "Pressure [MBar]", "Velocity [km/s]", "Temperature [HeV]"]
+    titles = ["Density", "Pressure", "Velocity", "Temperature"]
+    math_labels = [r"$\rho$ [g/cm³]", r"$P$ [MBar]", r"$|u|$ [km/s]", r"$T$ [HeV]"]
     for j, ax in enumerate([ax_rho, ax_p, ax_u, ax_T]):
         ax.grid(True, alpha=0.3)
-        ax.set_ylabel(labels[j], fontsize=12)
-        ax.set_xlabel("Eulerian Position Coordinate $x$ [$\mu$m]", fontsize=12)
+        ax.set_title(titles[j], fontsize=14, fontweight='bold')
+        ax.set_ylabel(math_labels[j], fontsize=13)
+        ax.set_xlabel("Eulerian Position Coordinate $x$ [$\mu$m]", fontsize=13)
+        ax.tick_params(labelsize=11)
 
-    plt.suptitle(f"Unified Patched Ablation & Shock Verification (Fully Patched) in Eulerian Coordinate\n{case_title}", fontsize=14, fontweight='bold')
+    if compare_imc:
+        plt.suptitle(f"Unified Patched Ablation & Shock Verification vs IMC in Eulerian Coordinate\n{case_title}", fontsize=16, fontweight='bold')
+    else:
+        plt.suptitle(f"Unified Patched Ablation & Shock Verification (Fully Patched) in Eulerian Coordinate\n{case_title}", fontsize=16, fontweight='bold')
     plt.tight_layout()
     fig.savefig(plot_path, dpi=200)
     print(f"Saved fully patched comparison plot in Eulerian to {plot_path}")
@@ -737,14 +782,20 @@ def plot_multitime_profiles_eulerian(
 
     for j, ax in enumerate(all_axes):
         ax.grid(True, alpha=0.3)
-        ax.set_ylabel(labels[j], fontsize=12)
-        ax.set_xlabel("Eulerian Position $x$ [$\mu$m]", fontsize=12)
+        
+    titles = ["Density", "Pressure", "Velocity", "Temperature"]
+    math_labels = [r"$\rho$ [g/cm³]", r"$P$ [MBar]", r"$u$ [km/s]", r"$T$ [HeV]"]
+    for j, ax in enumerate(all_axes):
+        ax.set_title(titles[j], fontsize=14, fontweight='bold')
+        ax.set_ylabel(math_labels[j], fontsize=13)
+        ax.set_xlabel("Eulerian Position $x$ [$\mu$m]", fontsize=13)
+        ax.tick_params(labelsize=11)
 
-    ax_rho.legend(handles=legend_handles, loc="best", fontsize=8.5, ncol=2)
+    ax_rho.legend(handles=legend_handles, loc="upper left", fontsize=11, ncol=2)
 
     plt.suptitle(
         f"Multi-Time Eulerian Profiles (Simulation)\n{case_title}",
-        fontsize=14, fontweight='bold',
+        fontsize=16, fontweight='bold',
     )
     plt.tight_layout()
     fig.savefig(plot_path, dpi=200)
@@ -885,9 +936,9 @@ def plot_front_trajectories_eulerian(history, ablation_solver, sub_params, shock
 # Main Execution Workflow
 # =============================================================================
 
-def run_preset_workflow(preset_name, case_label, case_title):
+def run_preset_workflow(preset_name, case_label, case_title, compare_imc=False, N=None):
     """Run simulation, load reference solvers, run fitting pipelines, and plot eulerian profiles and trajectories."""
-    case, history, ablation_solver = get_data(preset_name, case_label)
+    case, history, ablation_solver = get_data(preset_name, case_label, N=N)
 
     # 1) Run Subsonic fitting pipeline using ablation_solver.heat_solver
     print("--- Running Subsonic Ablation Fitting ---")
@@ -924,6 +975,7 @@ def run_preset_workflow(preset_name, case_label, case_title):
         case=case,
         plot_path=str(plot_path_patched),
         case_title=case_title,
+        compare_imc=compare_imc,
     )
     
     # 5) Plot 3: Time-dependent front trajectories in Eulerian coordinate
@@ -961,17 +1013,21 @@ def main():
     run_preset_workflow(
         PRESET_FIG_8_CONSTANT_TEMPERATURE,
         "const_T",
-        "Fig 8 Constant Temperature Drive"
+        "Fig 8 Constant Temperature Drive",
+        compare_imc=True,
+        N=1024,
     )
     run_preset_workflow(
         PRESET_FIG_9_CONSTANT_FLUX,
         "const_S",
-        "Fig 9 Constant Flux Drive"
+        "Fig 9 Constant Flux Drive",
+        compare_imc=False,
     )
     run_preset_workflow(
         PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE,
         "const_P_shock",
-        "Fig 10 Constant Ablation Pressure Drive"
+        "Fig 10 Constant Ablation Pressure Drive",
+        compare_imc=False,
     )
     print("\nPatched eulerian ablation and shock simulations, fittings, comparisons, and plots generated successfully!")
 

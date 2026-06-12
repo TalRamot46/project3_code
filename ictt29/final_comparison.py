@@ -265,18 +265,18 @@ def main():
     v_shk_T = ax_T.axvline(fits["m_s"], color='red', ls='--', alpha=0.7)
     
     # Styling and Labels
-    ax_rho.set_ylabel(r"$\rho$ [g/cm³]", fontsize=12)
-    ax_p.set_ylabel(r"$P$ [MBar]", fontsize=12)
-    ax_u.set_ylabel(r"$u$ [km/s]", fontsize=12)
-    ax_T.set_ylabel(r"$T$ [Kelvin]", fontsize=12)
-    
-    for ax in [ax_rho, ax_p, ax_u, ax_T]:
-        ax.set_xlabel(r"Mass coordinate $m$ [g/cm²]", fontsize=11)
+    titles = ["Density", "Pressure", "Velocity", "Temperature"]
+    math_labels = [r"$\rho$ [g/cm³]", r"$P$ [MBar]", r"$u$ [km/s]", r"$T$ [Kelvin]"]
+    for j, ax in enumerate([ax_rho, ax_p, ax_u, ax_T]):
         ax.grid(True, alpha=0.25)
-        ax.legend(loc='best', fontsize=9)
+        ax.set_title(titles[j], fontsize=14, fontweight='bold')
+        ax.set_ylabel(math_labels[j], fontsize=13)
+        ax.set_xlabel(r"Mass coordinate $m$ [g/cm²]", fontsize=13)
+        ax.legend(loc='best', fontsize=11)
+        ax.tick_params(labelsize=11)
         ax.ticklabel_format(axis='x', style='sci', scilimits=(0,0))
         
-    title = fig.suptitle(f"Level 3 Piecewise Analytical Fits vs Simulation & Solver\nTime: {t_init*1e9:.3f} ns", fontsize=14, fontweight='bold')
+    title = fig.suptitle(f"Level 3 Piecewise Analytical Fits vs Simulation & Solver\nTime: {t_init*1e9:.3f} ns", fontsize=16, fontweight='bold')
     
     # Set y limits nicely
     ax_rho.set_ylim(-10, 200)

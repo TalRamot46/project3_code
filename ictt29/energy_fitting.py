@@ -168,11 +168,12 @@ def plot_dimensionless_energy(sub_data, shock_data, path, case_title):
     popt = sub_data["popt_trapz"]
     ax.plot(sub_data["y_grid"], sub_data["trapz_power_law"], 'm--', 
             label=f'Direct Fit: {popt[0]:.4f}$y^{{{popt[1]:.3f}}}$', lw=1.5)
-    ax.set_ylabel("Dimensionless Cumulative Energy $E_{\\text{cum}}(y)$")
-    ax.set_xlabel("Normalized coordinate $y = \\xi / \\xi_f$")
-    ax.set_title("Subsonic Heat Wave: Cumulative Energy Profiles", fontweight='bold')
+    ax.set_ylabel("Dimensionless Cumulative Energy $E_{\\text{cum}}(y)$", fontsize=13)
+    ax.set_xlabel("Normalized coordinate $y = \\xi / \\xi_f$", fontsize=13)
+    ax.set_title("Subsonic Heat Wave: Cumulative Energy Profiles", fontsize=14, fontweight='bold')
     ax.grid(True, alpha=0.3)
-    ax.legend(loc='upper left')
+    ax.legend(loc='upper left', fontsize=11)
+    ax.tick_params(labelsize=11)
     
     # Panel 0,1: Subsonic Relative Errors
     ax = axes[0, 1]
@@ -188,11 +189,12 @@ def plot_dimensionless_energy(sub_data, shock_data, path, case_title):
     
     ax.set_yscale('log')
     ax.set_ylim(1e-6, 1.0)
-    ax.set_ylabel("Relative Error")
-    ax.set_xlabel("Normalized coordinate $y = \\xi / \\xi_f$")
-    ax.set_title("Subsonic Heat Wave: Relative Errors (semi-log)", fontweight='bold')
+    ax.set_ylabel("Relative Error", fontsize=13)
+    ax.set_xlabel("Normalized coordinate $y = \\xi / \\xi_f$", fontsize=13)
+    ax.set_title("Subsonic Heat Wave: Relative Errors (semi-log)", fontsize=14, fontweight='bold')
     ax.grid(True, which="both", ls=":", alpha=0.5)
-    ax.legend(loc='lower left')
+    ax.legend(loc='lower left', fontsize=11)
+    ax.tick_params(labelsize=11)
     
     # Panel 1,0: Shock Profiles
     ax = axes[1, 0]
@@ -203,11 +205,12 @@ def plot_dimensionless_energy(sub_data, shock_data, path, case_title):
     popt = shock_data["popt_trapz"]
     ax.plot(shock_data["y_grid"], shock_data["trapz_power_law"], 'm--', 
             label=f'Direct Fit: {popt[0]:.4f}$y^{{{popt[1]:.3f}}}$', lw=1.5)
-    ax.set_ylabel("Dimensionless Cumulative Energy $E_{\\text{cum}}(y)$")
-    ax.set_xlabel("Normalized coordinate $y = \\xi / \\xi_s$")
-    ax.set_title("Piston Shock: Cumulative Energy Profiles", fontweight='bold')
+    ax.set_ylabel("Dimensionless Cumulative Energy $E_{\\text{cum}}(y)$", fontsize=13)
+    ax.set_xlabel("Normalized coordinate $y = \\xi / \\xi_s$", fontsize=13)
+    ax.set_title("Piston Shock: Cumulative Energy Profiles", fontsize=14, fontweight='bold')
     ax.grid(True, alpha=0.3)
-    ax.legend(loc='upper left')
+    ax.legend(loc='upper left', fontsize=11)
+    ax.tick_params(labelsize=11)
     
     # Panel 1,1: Shock Relative Errors
     ax = axes[1, 1]
@@ -223,14 +226,15 @@ def plot_dimensionless_energy(sub_data, shock_data, path, case_title):
     
     ax.set_yscale('log')
     ax.set_ylim(1e-6, 1.0)
-    ax.set_ylabel("Relative Error")
-    ax.set_xlabel("Normalized coordinate $y = \\xi / \\xi_s$")
-    ax.set_title("Piston Shock: Relative Errors (semi-log)", fontweight='bold')
+    ax.set_ylabel("Relative Error", fontsize=13)
+    ax.set_xlabel("Normalized coordinate $y = \\xi / \\xi_s$", fontsize=13)
+    ax.set_title("Piston Shock: Relative Errors (semi-log)", fontsize=14, fontweight='bold')
     ax.grid(True, which="both", ls=":", alpha=0.5)
-    ax.legend(loc='lower left')
+    ax.legend(loc='lower left', fontsize=11)
+    ax.tick_params(labelsize=11)
     
     plt.suptitle(f"Dimensionless Cumulative Energy Comparisons & Fitting Relative Errors\n{case_title}", 
-                 fontsize=14, fontweight='bold')
+                 fontsize=16, fontweight='bold')
     plt.tight_layout()
     fig.savefig(path, dpi=200)
     plt.close(fig)

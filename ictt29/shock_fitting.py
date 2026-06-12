@@ -569,17 +569,20 @@ def plot_dimensional_fit_comparison(history, solver, case, params, material_hydr
     ]
     
     # Styling
-    labels = ["Density [g/cm$^3$]", "Pressure [MBar]", "Velocity [km/s]", "Temperature [HeV]"]
+    titles = ["Density", "Pressure", "Velocity", "Temperature"]
+    math_labels = [r"$\rho$ [g/cm$^3$]", r"$P$ [MBar]", r"$u$ [km/s]", r"$T$ [HeV]"]
     for j, ax in enumerate([ax_rho, ax_p, ax_u, ax_T]):
         ax.grid(True, alpha=0.3)
-        ax.set_ylabel(labels[j], fontsize=12)
-        ax.set_xlabel("Lagrangian Mass Coordinate $m$ [mg/cm$^2$]", fontsize=12)
+        ax.set_title(titles[j], fontsize=14, fontweight='bold')
+        ax.set_ylabel(math_labels[j], fontsize=13)
+        ax.set_xlabel("Lagrangian Mass Coordinate $m$ [mg/cm$^2$]", fontsize=13)
+        ax.tick_params(labelsize=11)
         if j == 0:
             style_handles = [
                 Line2D([0], [0], color='black', lw=2, linestyle='--', label='Exact Solver'),
                 Line2D([0], [0], color='forestgreen', lw=2, linestyle='--', label='Analytic Fit'),
             ]
-            ax.legend(handles=time_handles + style_handles, loc="upper left")
+            ax.legend(handles=time_handles + style_handles, loc="upper left", fontsize=11)
             
     # Style temperature inset — zoom to first 20% of the mass range at the latest time
     last_m_s = solver.xsi_s / solver.xsi_over_m(time=target_times[-1])
@@ -591,7 +594,7 @@ def plot_dimensional_fit_comparison(history, solver, case, params, material_hydr
     axins_T.tick_params(labelsize=8)
     ax_T.indicate_inset_zoom(axins_T, edgecolor="black")
             
-    plt.suptitle(f"Shock Region Verification\n{case_title}", fontsize=14, fontweight='bold')
+    plt.suptitle(f"Shock Region Verification\n{case_title}", fontsize=16, fontweight='bold')
     plt.tight_layout()
     fig.savefig(material_hydro_path, dpi=200)
     print(f"Saved dimensional shock profiles comparison to {material_hydro_path}")
@@ -642,10 +645,10 @@ def plot_and_fit_self_similar(solver, params, self_similar_path, case_title):
     if np.any(low_mask):
         ax.plot(y_valid[low_mask], T_fit[low_mask], '--', color='darkorange', label=f'EOS Derived (y < {Y_FIT_MIN:.1f})', lw=1.5)
     ax.plot(y_valid[high_mask], T_fit[high_mask], 'r--', label=f'Analytical Fit (y >= {Y_FIT_MIN:.1f})', lw=1.5)
-    ax.set_ylabel(r"Temperature $T(y)$ [dimensionless]", fontsize=12)
-    ax.set_title(f"Shock: Temperature ({best_T['name']})", fontsize=13, fontweight='bold')
+    ax.set_ylabel(r"$T(y)$", fontsize=13)
+    ax.set_title(f"Shock: Temperature ({best_T['name']})", fontsize=14, fontweight='bold')
     lbl_T = f"${best_T['latex']}$\n(y >= {Y_FIT_MIN:.1f}) Avg: {avg_T_high:.4e}, Max: {max_T_high:.4e}\n(y < {Y_FIT_MIN:.1f}) Avg: {avg_T_low:.4e}, Max: {max_T_low:.4e}"
-    ax.text(0.05, 0.05, lbl_T, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=9.5)
+    ax.text(0.05, 0.05, lbl_T, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=11)
     
     # Close-up inset around Y_FIT_MIN
     ax_inset = ax.inset_axes([0.45, 0.45, 0.48, 0.48])
@@ -669,26 +672,26 @@ def plot_and_fit_self_similar(solver, params, self_similar_path, case_title):
     if np.any(low_mask):
         ax.plot(y_valid[low_mask], rho_fit[low_mask], '--', color='darkorange', label=f'Power Law Fit (y < {Y_FIT_MIN:.1f})', lw=1.5)
     ax.plot(y_valid[high_mask], rho_fit[high_mask], 'r--', label=f'EOS Derived (y >= {Y_FIT_MIN:.1f})', lw=1.5)
-    ax.set_ylabel(r"Density $\rho(y)$ [dimensionless]", fontsize=12)
-    ax.set_title("Shock: Density", fontsize=13, fontweight='bold')
+    ax.set_ylabel(r"$\rho(y)$", fontsize=13)
+    ax.set_title("Shock: Density", fontsize=14, fontweight='bold')
     lbl_R = r"$\rho(y)$" + f"\n(y >= {Y_FIT_MIN:.1f}) Avg: {avg_rho_high:.4e}, Max: {max_rho_high:.4e}\n(y < {Y_FIT_MIN:.1f}) Avg: {avg_rho_low:.4e}, Max: {max_rho_low:.4e}"
-    ax.text(0.05, 0.05, lbl_R, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=9.5)
+    ax.text(0.05, 0.05, lbl_R, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=11)
     
     # Panel (1,0): Pressure
     ax = axes[1, 0]
     ax.plot(y_valid, P_valid, 'b-', label='Numerical Solver', lw=2)
     ax.plot(y_valid, P_fit, 'r--', label='Analytical Fit', lw=1.5)
-    ax.set_ylabel(r"Pressure $P(y)$ [dimensionless]", fontsize=12)
-    ax.set_title("Shock: Pressure", fontsize=13, fontweight='bold')
+    ax.set_ylabel(r"$P(y)$", fontsize=13)
+    ax.set_title("Shock: Pressure", fontsize=14, fontweight='bold')
     lbl_P = f"$P(y) \\approx 1.0 - (1.0 - P_s) y^{{{popt_P[0]:.5f}}}$\nAvg Err: {avg_P:.4e}, Max Err: {max_P:.4e}"
-    ax.text(0.05, 0.05, lbl_P, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=9.5)
+    ax.text(0.05, 0.05, lbl_P, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=11)
     
     # Panel (1,1): Velocity
     ax = axes[1, 1]
     ax.plot(y_valid, U_valid, 'b-', label='Numerical Solver', lw=2)
     ax.plot(y_valid, U_fit, 'r--', label='Optimized Fit', lw=1.5)
-    ax.set_ylabel(r"Velocity $U(y)$ [dimensionless]", fontsize=12)
-    ax.set_title(f"Shock: Velocity ({best_u['name']})", fontsize=13, fontweight='bold')
+    ax.set_ylabel(r"$U(y)$", fontsize=13)
+    ax.set_title(f"Shock: Velocity ({best_u['name']})", fontsize=14, fontweight='bold')
     
     # Format the dynamic velocity formula in latex
     if best_u["id"] == 1:
@@ -705,14 +708,15 @@ def plot_and_fit_self_similar(solver, params, self_similar_path, case_title):
         u_formula = f"$U(y) \\approx {best_u['popt'][0]:.5f} (1 - y^{{{best_u['popt'][1]:.5f}}})^{{{best_u['popt'][2]:.5f}}} + U_s y$"
         
     lbl_U = u_formula + f"\nAvg Err: {avg_U:.4e}\nMax Err: {max_U:.4e}"
-    ax.text(0.05, 0.05, lbl_U, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=9.5)
+    ax.text(0.05, 0.05, lbl_U, bbox=dict(facecolor='white', alpha=0.8, edgecolor='grey'), transform=ax.transAxes, fontsize=11)
     
     for ax in axes.flat:
-        ax.set_xlabel(r"Normalized coordinate $y = \xi / \xi_s$", fontsize=11)
+        ax.set_xlabel(r"Normalized coordinate $y = \xi / \xi_s$", fontsize=13)
         ax.grid(True, alpha=0.25)
-        ax.legend(loc='best', fontsize=9.5)
+        ax.legend(loc='best', fontsize=11)
+        ax.tick_params(labelsize=11)
         
-    fig.suptitle(f"Shock self-similar Profiles & Analytical Fits\n{case_title}", fontsize=15, fontweight='bold')
+    fig.suptitle(f"Shock self-similar Profiles & Analytical Fits\n{case_title}", fontsize=16, fontweight='bold')
     plt.tight_layout()
     fig.savefig(self_similar_path, dpi=200)
     plt.close(fig)

@@ -219,7 +219,7 @@ def plot_patched_dimensional_fit_comparison(
         Line2D([0], [0], color='black', lw=1.8, linestyle='--', label='Shock Solver'),
         Line2D([0], [0], color='forestgreen', lw=1.8, linestyle='--', label='Shock Fit'),
     ]
-    ax_rho.legend(handles=time_handles + style_handles, loc="best", fontsize=9.5)
+    ax_rho.legend(handles=time_handles + style_handles, loc="upper left", fontsize=11)
 
     # Set y limits based on simulation bounds to prevent singularities from blowing up the y-axis
     all_sim_rho = []
@@ -245,13 +245,16 @@ def plot_patched_dimensional_fit_comparison(
     ax_T.set_ylim(-0.05 * max_sim_T, max_sim_T * 1.15)
 
     # Styling
-    labels = ["Density [g/cm³]", "Pressure [MBar]", "Velocity [km/s]", "Temperature [HeV]"]
+    titles = ["Density", "Pressure", "Velocity", "Temperature"]
+    math_labels = [r"$\rho$ [g/cm³]", r"$P$ [MBar]", r"$u$ [km/s]", r"$T$ [HeV]"]
     for j, ax in enumerate([ax_rho, ax_p, ax_u, ax_T]):
         ax.grid(True, alpha=0.3)
-        ax.set_ylabel(labels[j], fontsize=12)
-        ax.set_xlabel("Lagrangian Mass Coordinate $m$ [mg/cm²]", fontsize=12)
+        ax.set_title(titles[j], fontsize=14, fontweight='bold')
+        ax.set_ylabel(math_labels[j], fontsize=13)
+        ax.set_xlabel("Lagrangian Mass Coordinate $m$ [mg/cm²]", fontsize=13)
+        ax.tick_params(labelsize=11)
 
-    plt.suptitle(f"Unified Patched Ablation & Shock Verification (Region Overlays)\n{case_title}", fontsize=14, fontweight='bold')
+    plt.suptitle(f"Unified Patched Ablation & Shock Verification (Region Overlays)\n{case_title}", fontsize=16, fontweight='bold')
     plt.tight_layout()
     fig.savefig(plot_path, dpi=200)
     print(f"Saved region overlays plot to {plot_path}")
@@ -359,20 +362,20 @@ def plot_fully_patched_comparison(
 
     # Build time legend entries
     time_handles = [
-        Line2D([0], [0], color=sim_colors[k], lw=2, label=f"{target_times[k]*1e9:.3f} ns")
+        Line2D([0], [0], color=sim_colors[k], lw=2, label=f"Simulation ({target_times[k]*1e9:.1f} ns)")
         for k in range(len(target_times))
     ]
     if compare_imc:
         style_handles = [
             Line2D([0], [0], color='black', lw=2, linestyle='-', label='Analytic'),
-            Line2D([0], [0], color='forestgreen', lw=1.8, linestyle='--', label='IMC (Steinberg)'),
+            Line2D([0], [0], color='forestgreen', lw=1.8, linestyle='--', label='IMC (2 ns)'),
         ]
     else:
         style_handles = [
             Line2D([0], [0], color='black', lw=2, linestyle='-', label='Analytic'),
             Line2D([0], [0], color='forestgreen', lw=1.8, linestyle='--', label='Patched Fit'),
         ]
-    ax_rho.legend(handles=time_handles + style_handles, loc="best", fontsize=9.5)
+    ax_rho.legend(handles=time_handles + style_handles, loc="upper left", fontsize=11)
 
     # Set y limits based on simulation bounds to prevent singularities from blowing up the y-axis
     all_sim_rho = []
@@ -398,19 +401,256 @@ def plot_fully_patched_comparison(
     ax_T.set_ylim(-0.05 * max_sim_T, max_sim_T * 1.15)
 
     # Styling
-    labels = ["Density [g/cm³]", "Pressure [MBar]", "Velocity [km/s]", "Temperature [HeV]"]
+    titles = ["Density", "Pressure", "Velocity", "Temperature"]
+    math_labels = [r"$\rho$ [g/cm³]", r"$P$ [MBar]", r"$u$ [km/s]", r"$T$ [HeV]"]
     for j, ax in enumerate([ax_rho, ax_p, ax_u, ax_T]):
         ax.grid(True, alpha=0.3)
-        ax.set_ylabel(labels[j], fontsize=12)
-        ax.set_xlabel("Lagrangian Mass Coordinate $m$ [mg/cm²]", fontsize=12)
+        ax.set_title(titles[j], fontsize=14, fontweight='bold')
+        ax.set_ylabel(math_labels[j], fontsize=13)
+        ax.set_xlabel("Lagrangian Mass Coordinate $m$ [mg/cm²]", fontsize=13)
+        ax.tick_params(labelsize=11)
 
     if compare_imc:
-        plt.suptitle(f"Unified Patched Ablation & Shock Verification vs IMC\n{case_title}", fontsize=14, fontweight='bold')
+        plt.suptitle(f"Unified Patched Ablation & Shock Verification vs IMC\n{case_title}", fontsize=16, fontweight='bold')
     else:
-        plt.suptitle(f"Unified Patched Ablation & Shock Verification (Fully Patched)\n{case_title}", fontsize=14, fontweight='bold')
+        plt.suptitle(f"Unified Patched Ablation & Shock Verification (Fully Patched)\n{case_title}", fontsize=16, fontweight='bold')
     plt.tight_layout()
     fig.savefig(plot_path, dpi=200)
     print(f"Saved fully patched comparison plot to {plot_path}")
+    plt.close(fig)
+
+
+def plot_fully_patched_zoomed_comparison(
+    history,
+    ablation_solver,
+    sub_params,
+    shock_params,
+    case,
+    plot_path,
+    case_title,
+    region,  # 'ablation' or 'shock'
+    compare_imc=True,
+):
+    """
+    Plots a zoomed 2x2 comparison showing either the ablation (m < m_f) or shock (m > m_f) region.
+    The curves are cut at the ablation front m_f(t) for each target time.
+    """
+    print(f"Generating physical fully patched zoomed comparison ({region}) for {case_title}...")
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+
+    t_max = max(history.t)
+    target_times = [0.5 * t_max, 0.75 * t_max, t_max]
+    sim_colors = ["royalblue", "darkorange", "crimson"]
+
+    ax_rho = axes[0, 0]
+    ax_p = axes[0, 1]
+    ax_u = axes[1, 0]
+    ax_T = axes[1, 1]
+
+    p_scale = 1e12
+    u_scale = 1e5
+    T_scale = 1.160451812e6
+
+    # Collect points for dynamic y-limiting
+    all_rho = []
+    all_p = []
+    all_u = []
+    all_T = []
+
+    for i, (t_target, sim_color) in enumerate(zip(target_times, sim_colors)):
+        idx_sim = np.argmin(np.abs(np.array(history.t) - t_target))
+        m_sim = history.m[idx_sim]
+        t_actual = history.t[idx_sim]
+
+        sim_rho = history.rho[idx_sim]
+        sim_p = history.p[idx_sim] / p_scale
+        sim_u = history.u[idx_sim] / u_scale
+        sim_T = history.T[idx_sim] / T_scale
+
+        # Get ablation front at this actual time
+        m_f = ablation_solver.heat_solver.ablated_mass(time=t_actual)
+
+        # Apply mask based on region
+        if region == 'ablation':
+            mask_sim = m_sim <= m_f * 0.95
+        else:
+            mask_sim = m_sim > m_f * 1.05
+
+        # Plot Simulation
+        show_label = i == 0
+        ax_rho.plot(m_sim[mask_sim] * 1e3, sim_rho[mask_sim], '-', color=sim_color, alpha=0.8, label=f"Simulation ({t_target*1e9:.1f} ns)" if show_label else None)
+        ax_p.plot(m_sim[mask_sim] * 1e3, sim_p[mask_sim], '-', color=sim_color, alpha=0.8)
+        ax_u.plot(m_sim[mask_sim] * 1e3, sim_u[mask_sim], '-', color=sim_color, alpha=0.8)
+        ax_T.plot(m_sim[mask_sim] * 1e3, sim_T[mask_sim], '-', color=sim_color, alpha=0.8)
+
+        # Collect simulation points
+        if len(sim_rho[mask_sim]) > 0:
+            all_rho.extend(sim_rho[mask_sim])
+            all_p.extend(sim_p[mask_sim])
+            all_u.extend(sim_u[mask_sim])
+            all_T.extend(sim_T[mask_sim])
+
+        # Define grid
+        mass_solver = np.linspace(1e-12, m_sim[-1], 1000)
+
+        # Solve fully patched exact profiles from AblationSolver
+        sol_exact = ablation_solver.solve(mass=mass_solver, time=t_actual)
+        exact_rho = sol_exact["density"]
+        exact_p = sol_exact["pressure"] / p_scale
+        exact_u = sol_exact["velocity"] / u_scale
+        exact_T = sol_exact["temperature"] / T_scale
+
+        if region == 'ablation':
+            mask_solver = (mass_solver <= m_f * 0.95) & (mass_solver >= 0.02 * m_f)
+        else:
+            mask_solver = (mass_solver > m_f * 1.05)
+        # if region == 'ablation':
+        #     mask_solver = mass_solver >= 0.05 * m_f
+ 
+
+        # Plot Exact patched solver (solid black)
+        ax_rho.plot(mass_solver[mask_solver] * 1e3, exact_rho[mask_solver], '-', color='black', lw=2.0, label="Exact Patched Solver" if show_label else None)
+        ax_p.plot(mass_solver[mask_solver] * 1e3, exact_p[mask_solver], '-', color='black', lw=2.0)
+        ax_u.plot(mass_solver[mask_solver] * 1e3, exact_u[mask_solver], '-', color='black', lw=2.0)
+        ax_T.plot(mass_solver[mask_solver] * 1e3, exact_T[mask_solver], '-', color='black', lw=2.0)
+
+        # Collect solver points
+        if len(exact_rho[mask_solver]) > 0:
+            all_rho.extend(exact_rho[mask_solver])
+            all_p.extend(exact_p[mask_solver])
+            all_u.extend(exact_u[mask_solver])
+            all_T.extend(exact_T[mask_solver])
+
+        if compare_imc:
+            # IMC replaces the fits. We only plot it for the final target time step (t_actual ~ 2.0 ns)
+            if i == len(target_times) - 1:
+                from project3_code.shteinberg_comparison.shteinberg_comparison import extract_steinberg_IMC_for_num_cells
+                num_cells = len(m_sim)
+                st_imc = extract_steinberg_IMC_for_num_cells(num_cells)
+                if st_imc is None:
+                    st_imc = extract_steinberg_IMC_for_num_cells(1024)
+                
+                if st_imc is not None:
+                    imc_m = st_imc["mass_coord"] * 1e3 # convert to mg/cm^2
+                    imc_rho = st_imc["density"]
+                    imc_p = st_imc["pressure"] / p_scale
+                    imc_u = st_imc["velocity_x"] / u_scale
+                    imc_T = st_imc["temperature"] / T_scale
+
+                    if region == 'ablation':
+                        mask_imc = (imc_m / 1e3) <= m_f * 0.95
+                    else:
+                        mask_imc = (imc_m / 1e3) > m_f * 1.05
+
+                    ax_rho.plot(imc_m[mask_imc], imc_rho[mask_imc], '--', color='forestgreen', lw=1.8)
+                    ax_p.plot(imc_m[mask_imc], imc_p[mask_imc], '--', color='forestgreen', lw=1.8)
+                    ax_u.plot(imc_m[mask_imc], imc_u[mask_imc], '--', color='forestgreen', lw=1.8)
+                    ax_T.plot(imc_m[mask_imc], imc_T[mask_imc], '--', color='forestgreen', lw=1.8)
+
+                    if len(imc_rho[mask_imc]) > 0:
+                        all_rho.extend(imc_rho[mask_imc])
+                        all_p.extend(imc_p[mask_imc])
+                        all_u.extend(imc_u[mask_imc])
+                        all_T.extend(imc_T[mask_imc])
+        else:
+            # Solve and plot patched fits
+            fits = calculate_patched_dimensional_fits(mass_solver, t_actual, ablation_solver, sub_params, shock_params)
+            fit_rho = fits["density"]
+            fit_p = fits["pressure"] / p_scale
+            fit_u = fits["velocity"] / u_scale
+            fit_T = fits["temperature"] / T_scale
+
+            ax_rho.plot(mass_solver[mask_solver] * 1e3, fit_rho[mask_solver], '--', color='forestgreen', lw=1.8, label="Patched Fit" if show_label else None)
+            ax_p.plot(mass_solver[mask_solver] * 1e3, fit_p[mask_solver], '--', color='forestgreen', lw=1.8)
+            ax_u.plot(mass_solver[mask_solver] * 1e3, fit_u[mask_solver], '--', color='forestgreen', lw=1.8)
+            ax_T.plot(mass_solver[mask_solver] * 1e3, fit_T[mask_solver], '--', color='forestgreen', lw=1.8)
+
+            if len(fit_rho[mask_solver]) > 0:
+                all_rho.extend(fit_rho[mask_solver])
+                all_p.extend(fit_p[mask_solver])
+                all_u.extend(fit_u[mask_solver])
+                all_T.extend(fit_T[mask_solver])
+
+    # Build time legend entries
+    time_handles = [
+        Line2D([0], [0], color=sim_colors[k], lw=2, label=f"Simulation ({target_times[k]*1e9:.1f} ns)")
+        for k in range(len(target_times))
+    ]
+    if compare_imc:
+        style_handles = [
+            Line2D([0], [0], color='black', lw=2, linestyle='-', label='Analytic'),
+            Line2D([0], [0], color='forestgreen', lw=1.8, linestyle='--', label='IMC (2 ns)'),
+        ]
+    else:
+        style_handles = [
+            Line2D([0], [0], color='black', lw=2, linestyle='-', label='Analytic'),
+            Line2D([0], [0], color='forestgreen', lw=1.8, linestyle='--', label='Patched Fit'),
+        ]
+    ax_rho.legend(handles=time_handles + style_handles, loc="upper left", fontsize=11)
+
+    # Set x-limits
+    m_f_times = [ablation_solver.heat_solver.ablated_mass(time=history.t[np.argmin(np.abs(np.array(history.t) - t_tgt))]) for t_tgt in target_times]
+    m_f_min = min(m_f_times)
+    m_f_max = max(m_f_times)
+    m_sim_max = history.m[np.argmin(np.abs(np.array(history.t) - target_times[-1]))][-1]
+
+    if region == 'ablation':
+        for ax in [ax_rho, ax_p, ax_u, ax_T]:
+            ax.set_xlim(0.0, m_f_max * 1.15 * 1e3)
+    elif region == 'shock':
+        for ax in [ax_rho, ax_p, ax_u, ax_T]:
+            ax.set_xlim(m_f_min * 0.95 * 1e3, m_sim_max * 1.02 * 1e3)
+
+    # Clean up and compute y-limits dynamically
+    all_rho = np.array(all_rho)
+    all_rho = all_rho[np.isfinite(all_rho)]
+    if len(all_rho) > 0:
+        min_rho, max_rho = np.min(all_rho), np.max(all_rho)
+        d_rho = max_rho - min_rho
+        ax_rho.set_ylim(min_rho - 0.1 * d_rho - 1e-6, max_rho + 0.1 * d_rho + 1e-6)
+
+    all_p = np.array(all_p)
+    all_p = all_p[np.isfinite(all_p)]
+    if len(all_p) > 0:
+        min_p, max_p = np.min(all_p), np.max(all_p)
+        d_p = max_p - min_p
+        ax_p.set_ylim(min_p - 0.1 * d_p - 1e-6, max_p + 0.1 * d_p + 1e-6)
+
+    all_u = np.array(all_u)
+    all_u = all_u[np.isfinite(all_u)]
+    if len(all_u) > 0:
+        min_u, max_u = np.min(all_u), np.max(all_u)
+        d_u = max_u - min_u
+        ax_u.set_ylim(min_u - 0.1 * d_u - 1e-6, max_u + 0.1 * d_u + 1e-6)
+
+    all_T = np.array(all_T)
+    all_T = all_T[np.isfinite(all_T)]
+    if len(all_T) > 0:
+        min_T, max_T = np.min(all_T), np.max(all_T)
+        d_T = max_T - min_T
+        ax_T.set_ylim(min_T - 0.1 * d_T - 1e-6, max_T + 0.1 * d_T + 1e-6)
+
+    # Styling
+    titles = ["Density", "Pressure", "Velocity", "Temperature"]
+    math_labels = [r"$\rho$ [g/cm³]", r"$P$ [MBar]", r"$u$ [km/s]", r"$T$ [HeV]"]
+    for j, ax in enumerate([ax_rho, ax_p, ax_u, ax_T]):
+        ax.grid(True, alpha=0.3)
+        ax.set_title(titles[j], fontsize=14, fontweight='bold')
+        ax.set_ylabel(math_labels[j], fontsize=13)
+        ax.set_xlabel("Lagrangian Mass Coordinate $m$ [mg/cm²]", fontsize=13)
+        ax.tick_params(labelsize=11)
+
+    region_title = "Ablation Region ($m < m_f$)" if region == 'ablation' else "Shift Region ($m > m_f$)"
+    # Wait, it was "Shock Region ($m > m_f$)" let's check and restore. Let's keep "Shock Region"
+    region_title = "Ablation Region ($m < m_f$)" if region == 'ablation' else "Shock Region ($m > m_f$)"
+    if compare_imc:
+        plt.suptitle(f"Unified Patched Ablation & Shock Verification vs IMC - {region_title}\n{case_title}", fontsize=16, fontweight='bold')
+    else:
+        plt.suptitle(f"Unified Patched Ablation & Shock Verification (Fully Patched) - {region_title}\n{case_title}", fontsize=16, fontweight='bold')
+    
+    plt.tight_layout()
+    fig.savefig(plot_path, dpi=200)
+    print(f"Saved fully patched zoomed ({region}) comparison plot to {plot_path}")
     plt.close(fig)
 
 
@@ -434,13 +674,7 @@ def run_preset_workflow(preset_name, case_label, case_title):
     # 3) Plot 1: Subsonic & Shock Overlays (Disabled as requested: no need for patched comparison with regions not actually separated)
     # plot_path_overlays = dv_dir / f"{case_label}_patched_fit_comparison.png"
     # plot_patched_dimensional_fit_comparison(
-    #     history=history,
-    #     ablation_solver=ablation_solver,
-    #     sub_params=sub_params,
-    #     shock_params=shock_params,
-    #     case=case,
-    #     plot_path=str(plot_path_overlays),
-    #     case_title=case_title,
+    #     ...
     # )
 
     # 4) Plot 2: Fully Patched seamless profiles compared to AblationSolver
@@ -454,6 +688,35 @@ def run_preset_workflow(preset_name, case_label, case_title):
         plot_path=str(plot_path_patched),
         case_title=case_title,
     )
+
+    # 5) Plot 3 & 4: Zoomed comparison plots under compare_imc=True (only for const_T case)
+    if case_label == "const_T":
+        plot_path_zoomed_ablation = dv_dir / f"{case_label}_fully_patched_zoomed_ablation.png"
+        plot_fully_patched_zoomed_comparison(
+            history=history,
+            ablation_solver=ablation_solver,
+            sub_params=sub_params,
+            shock_params=shock_params,
+            case=case,
+            plot_path=str(plot_path_zoomed_ablation),
+            case_title=case_title,
+            region='ablation',
+            compare_imc=True,
+        )
+
+        plot_path_zoomed_shock = dv_dir / f"{case_label}_fully_patched_zoomed_shock.png"
+        plot_fully_patched_zoomed_comparison(
+            history=history,
+            ablation_solver=ablation_solver,
+            sub_params=sub_params,
+            shock_params=shock_params,
+            case=case,
+            plot_path=str(plot_path_zoomed_shock),
+            case_title=case_title,
+            region='shock',
+            compare_imc=True,
+        )
+
 
 
 def main():

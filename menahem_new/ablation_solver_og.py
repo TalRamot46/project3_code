@@ -532,12 +532,12 @@ def test_profiles():
     times *= time_scale
 
     plt.figure("position")
-    for pos in position_times:
+    for pos in position_times[::50]:
         plt.plot(times[1:], pos, c="k",    lw=0.5)#, marker="o", markersize=1.)
-    plt.plot(times[1:], shock_position,    lw=2.5, ls="--", c="r", label="shock")
-    plt.plot(times[1:], heat_position,     lw=2.5, ls="--", c="fuchsia", label="heat")
-    plt.plot(times[1:], piston_position,   lw=1.5, ls="--", c="b", label="piston")
-    plt.plot(times[1:], boundary_position, lw=1.5, ls="--", c="k", label="boundary")
+    plt.plot(times[1:], shock_position,    lw=2.5, ls="--", c="blue", label="shock")
+    plt.plot(times[1:], heat_position,     lw=2.5, ls="--", c="red", label="heat")
+    # plt.plot(times[1:], piston_position,   lw=1.5, ls="--", c="b", label="piston")
+    # plt.plot(times[1:], boundary_position, lw=1.5, ls="--", c="k", label="boundary")
 
     plt.legend()
     plt.xlabel("time [ns]")
@@ -550,9 +550,23 @@ def test_profiles():
     plt.suptitle(solver.heat_solver.title, fontsize=12)
     plt.show()
 
-    plt.figure("ablation simulation")
     
-    # plt.plot(times[len(times)/2],
+    num_chosen_cells = 20
+    plt.figure("ablation simulation")
+    chosen_cells = np.linspace(0, num_cells, num_chosen_cells, dtype=int)
+    chosen_times = [0.1, 0.2, 0.3, 0.4,0.5, 0.6,0.7, 0.8,0.9]
+    times_choices = [int(t*len(times)) for t in chosen_times]
+    colors_viridis = plt.cm.plasma(np.linspace(0, 1, len(times_choices)))
+    for time_idx in times_choices:
+        cells = position_times[chosen_cells, time_idx]
+        time = times[time_idx]
+        time_arr = np.full_like(cells, time)
+        plt.scatter(cells, time_arr, color=colors_viridis[int(time_idx/len(times)*10)-1],label=f't={time:.2f} ns')
+    plt.legend()
+    plt.xlabel('Position [$\mu$m]')
+    plt.ylabel('Time [ns]')
+    plt.xscale('log')
+    plt.show()
 
     # plt.plot(np.log(times[1:]), np.log(heat_position),    lw=2.5, ls="--", c="r", label="shock/heat")
     # plt.plot(np.log(times[1:]), np.log(shock_position),    lw=2.5, ls="--", c="r", label="shock/heat")

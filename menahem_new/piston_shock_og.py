@@ -323,7 +323,7 @@ class PistonShock():
         the self similar ODE, written as a first order 
         form ODE in the dx/dxsi=F(x, xsi), where x=(V, U, P) or (rho, U, P)
         """
-        assert xsi >= NumericalParameters.xsi_origin, xsi
+        # assert xsi >= NumericalParameters.xsi_origin, xsi
         w, tau, r = self.omega, self.tau, self.r
 
         U, P = x[1], x[2]
@@ -347,7 +347,7 @@ class PistonShock():
         else:
             V = x[0]
             X = xsi * V
-            delta1 = V*(c1*a2*X - c2*a  - c3/xsi)
+            delta1 = V*(c1*a2*X - c2*a  - c3/(xsi+1e-30))
 
         delta = a3*xsi*X - b
         delta2 =  (c3*a -c1*b)*V   + c2*a2*X

@@ -266,10 +266,11 @@ def plot_fully_patched_comparison(
     case,
     plot_path,
     case_title,
+    compare_imc=True,
 ):
     """
     Plots a unified 2x2 comparison showing the fully patched (seamless) profiles.
-    Compares Rad-Hydro Simulation, AblationSolver (exact patched), and fully patched Fits.
+    Compares Rad-Hydro Simulation, AblationSolver (exact patched), and fully patched Fits or IMC simulation data.
     """
     print(f"Generating physical fully patched comparison for {case_title}...")
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
@@ -307,12 +308,13 @@ def plot_fully_patched_comparison(
         exact_u = sol_exact["velocity"] / u_scale
         exact_T = sol_exact["temperature"] / T_scale
 
-        # Solve fully patched Fits profiles
-        fits = calculate_patched_dimensional_fits(mass_solver, t_actual, ablation_solver, sub_params, shock_params)
-        fit_rho = fits["density"]
-        fit_p = fits["pressure"] / p_scale
-        fit_u = fits["velocity"] / u_scale
-        fit_T = fits["temperature"] / T_scale
+        if not compare_imc:
+            # Solve fully patched Fits profiles
+            fits = calculate_patched_dimensional_fits(mass_solver, t_actual, ablation_solver, sub_params, shock_params)
+            fit_rho = fits["density"]
+            fit_p = fits["pressure"] / p_scale
+            fit_u = fits["velocity"] / u_scale
+            fit_T = fits["temperature"] / T_scale
 
         show_label = i == 0
 
@@ -328,21 +330,48 @@ def plot_fully_patched_comparison(
         ax_u.plot(mass_solver * 1e3, exact_u, '-', color='black', lw=2.0)
         ax_T.plot(mass_solver * 1e3, exact_T, '-', color='black', lw=2.0)
 
-        # Plot Patched fits (dotted forestgreen)
-        ax_rho.plot(mass_solver * 1e3, fit_rho, ':', color='forestgreen', lw=1.8, label="Patched Fit" if show_label else None)
-        ax_p.plot(mass_solver * 1e3, fit_p, ':', color='forestgreen', lw=1.8)
-        ax_u.plot(mass_solver * 1e3, fit_u, ':', color='forestgreen', lw=1.8)
-        ax_T.plot(mass_solver * 1e3, fit_T, ':', color='forestgreen', lw=1.8)
+        if compare_imc:
+            # IMC replaces the fits. We only plot it for the final target time step (t_actual ~ 2.0 ns)
+            if i == len(target_times) - 1:
+                from project3_code.shteinberg_comparison.shteinberg_comparison import extract_steinberg_IMC_for_num_cells
+                num_cells = len(m_sim)
+                st_imc = extract_steinberg_IMC_for_num_cells(num_cells)
+                if st_imc is None:
+                    st_imc = extract_steinberg_IMC_for_num_cells(1024)
+                
+                if st_imc is not None:
+                    imc_m = st_imc["mass_coord"] * 1e3 # convert to mg/cm^2
+                    imc_rho = st_imc["density"]
+                    imc_p = st_imc["pressure"] / p_scale
+                    imc_u = st_imc["velocity_x"] / u_scale
+                    imc_T = st_imc["temperature"] / T_scale
+
+                    ax_rho.plot(imc_m, imc_rho, '--', color='forestgreen', lw=1.8)
+                    ax_p.plot(imc_m, imc_p, '--', color='forestgreen', lw=1.8)
+                    ax_u.plot(imc_m, imc_u, '--', color='forestgreen', lw=1.8)
+                    ax_T.plot(imc_m, imc_T, '--', color='forestgreen', lw=1.8)
+        else:
+            # Plot Patched fits (dotted forestgreen)
+            ax_rho.plot(mass_solver * 1e3, fit_rho, '--', color='forestgreen', lw=1.8, label="Patched Fit" if show_label else None)
+            ax_p.plot(mass_solver * 1e3, fit_p, '--', color='forestgreen', lw=1.8)
+            ax_u.plot(mass_solver * 1e3, fit_u, '--', color='forestgreen', lw=1.8)
+            ax_T.plot(mass_solver * 1e3, fit_T, '--', color='forestgreen', lw=1.8)
 
     # Build time legend entries
     time_handles = [
         Line2D([0], [0], color=sim_colors[k], lw=2, label=f"{target_times[k]*1e9:.3f} ns")
         for k in range(len(target_times))
     ]
-    style_handles = [
-        Line2D([0], [0], color='black', lw=2, linestyle='-', label='Exact Patched Solver'),
-        Line2D([0], [0], color='forestgreen', lw=1.8, linestyle=':', label='Patched Fit'),
-    ]
+    if compare_imc:
+        style_handles = [
+            Line2D([0], [0], color='black', lw=2, linestyle='-', label='Analytic'),
+            Line2D([0], [0], color='forestgreen', lw=1.8, linestyle='--', label='IMC (Steinberg)'),
+        ]
+    else:
+        style_handles = [
+            Line2D([0], [0], color='black', lw=2, linestyle='-', label='Analytic'),
+            Line2D([0], [0], color='forestgreen', lw=1.8, linestyle='--', label='Patched Fit'),
+        ]
     ax_rho.legend(handles=time_handles + style_handles, loc="best", fontsize=9.5)
 
     # Set y limits based on simulation bounds to prevent singularities from blowing up the y-axis
@@ -375,7 +404,10 @@ def plot_fully_patched_comparison(
         ax.set_ylabel(labels[j], fontsize=12)
         ax.set_xlabel("Lagrangian Mass Coordinate $m$ [mg/cm²]", fontsize=12)
 
-    plt.suptitle(f"Unified Patched Ablation & Shock Verification (Fully Patched)\n{case_title}", fontsize=14, fontweight='bold')
+    if compare_imc:
+        plt.suptitle(f"Unified Patched Ablation & Shock Verification vs IMC\n{case_title}", fontsize=14, fontweight='bold')
+    else:
+        plt.suptitle(f"Unified Patched Ablation & Shock Verification (Fully Patched)\n{case_title}", fontsize=14, fontweight='bold')
     plt.tight_layout()
     fig.savefig(plot_path, dpi=200)
     print(f"Saved fully patched comparison plot to {plot_path}")

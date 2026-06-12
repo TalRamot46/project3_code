@@ -84,8 +84,10 @@ try:
 except ImportError:
     pass
 
-
-
+# Ensure project3_code is on path (when run as script): add parent of repo root so "project3_code" package resolves
+_REPO_PARENT = Path(__file__).resolve().parent.parent.parent.parent
+if str(_REPO_PARENT) not in sys.path:
+    sys.path.insert(0, str(_REPO_PARENT))
 from project3_code.rad_hydro_sim.verification.radiation_data import RadiationSimData
 from project3_code.rad_hydro_sim.verification.hydro_data import RadHydroSimData
 from project3_code.hydro_sim.verification.compare_shock_plots import HydroSimData
@@ -232,6 +234,7 @@ def run_menahem_subsonic_reference(
     x_list: list[np.ndarray] = []
     T_list: list[np.ndarray] = []
     E_list: list[np.ndarray] = []
+    p_list = []
     for t in times:
         sol = solver.solve(mass=mass, time=float(t))
         rho = np.asarray(sol["density"], dtype=float)
@@ -248,16 +251,19 @@ def run_menahem_subsonic_reference(
         x_list.append(x)
         T_list.append(T_K)
         E_list.append(E_rad)
+        p_list.append(sol["pressure"])
 
-    return RadiationSimData(
-        times=times,
-        x=x_list,
-        T=T_list,
-        E_rad=E_list,
-        label=label,
-        color=color,
-        linestyle=linestyle,
-    )
+    return times, p_list, np.array(x_list)/19.32
+
+    # return RadiationSimData(
+    #     times=times,
+    #     x=x_list,
+    #     T=T_list,
+    #     E_rad=E_list,
+    #     label=label,
+    #     color=color,
+    #     linestyle=linestyle,
+    # )
 
 
 def run_menahem_shock_reference(
@@ -343,7 +349,10 @@ def run_menahem_piecewise_reference(
     )
     solver = AblationSolver(**kwargs)
 
+    
     mass = _build_mass_grid(case, num_cells=num_cells)
+
+
 
     m_list: list[np.ndarray] = []
     x_list: list[np.ndarray] = []
@@ -402,18 +411,54 @@ if __name__ == "__main__":
     from project3_code.rad_hydro_sim.problems.presets_config import (
         PRESET_FIG_8_CONSTANT_TEMPERATURE,
         PRESET_CONSTANT_PRESSURE,
+        PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE
     )
 
     case_heat, _ = get_preset(PRESET_FIG_8_CONSTANT_TEMPERATURE)
-    case_shock, _ = get_preset(PRESET_CONSTANT_PRESSURE)
-    t_heat = np.array([0.25, 0.5, 0.75, 1.0]) * float(case_heat.t_sec_end)
-    t_shock = np.array([0.25, 0.5, 0.75, 1.0]) * float(case_shock.t_sec_end)
-    
+    case_shock, _ = get_preset(PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE)
+    t_heat = np.array([0.25, 0.5, 0.75]) * float(case_heat.t_sec_end)
+    t_shock = np.array([0.25, 0.5, 0.75]) * float(case_shock.t_sec_end)
+    colors = ["royalblue", "darkorange", "crimson"]
     # plot the results
     import matplotlib.pyplot as plt
-    fig, ax = plt.subplots()
-    ax.plot(t_heat, run_menahem_subsonic_reference(case_heat, t_heat).T, label="subsonic")
-    ax.plot(t_shock, run_menahem_shock_reference(case_shock, t_shock).T, label="shock")
-    ax.plot(t_heat, run_menahem_piecewise_reference(case_heat, t_heat).T, label="piecewise")
-    ax.legend()
+    from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    # data = run_menahem_piecewise_reference(case_heat, t_heat)
+    
+    # times,p_list, m_list = run_menahem_subsonic_reference(case_heat,t_heat)
+    
+    # for i in range(len(times)):
+    #     ax.plot(m_list[i]*1000,p_list[i]/1e12, color=colors[i], label=f"t={times[i]*1e9:.1f} ns")
+    # ax.set_xlabel("Lagrangian Mass Coordinate $m$ [mg/cm²]", fontsize=12)
+    # ax.set_xlim(0, 20)
+    # ax.set_ylim(0,6)
+    # ax.set_ylabel("Pressure (MBar)")
+    # ax.grid(True)
+    # ax.legend(loc="upper right")
+
+    # # add a zoomed version in x=[0,2] and y=[0,4]
+    # # on the same figure, with zooming illustration
+    # axins = inset_axes(ax, width="40%", height="40%", loc='center')
+    # for i in range(len(times)):
+    #     axins.plot(m_list[i]*1000,p_list[i]/1e12, color=colors[i], label=f"t={times[i]*1e9:.1f} ns")
+    # axins.set_xlim(0, 1.5)
+    # axins.set_ylim(0, 4)
+    # axins.grid(True)
+    
+    # # Draw a link between the main axes and the zoomed inset axes
+    # mark_inset(ax, axins, loc1=2, loc2=4, fc="none", ec="0.5")
+    # plt.show()
+
+
+    data = run_menahem_shock_reference(case_shock, t_heat)
+    
+    for i in range(len(data.times)):
+        ax.plot(data.m[i]*1000,data.p[i]/1e12, color=colors[i], label=f"t={data.times[i]*1e9:.1f} ns")
+    ax.set_xlabel("Lagrangian Mass Coordinate $m$ [mg/cm²]", fontsize=12)
+    ax.set_xlim(0, 20)
+    ax.set_ylim(0,6)
+    ax.set_ylabel("Pressure (MBar)")
+    ax.grid(True)
+    ax.legend(loc="upper right")
     plt.show()

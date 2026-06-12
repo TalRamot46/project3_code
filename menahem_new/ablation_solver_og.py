@@ -341,7 +341,7 @@ def test_profiles():
     # m_max=0.003
     # mab_sh = lambda t: 10.17e-4*(t/Units.nsec)**0.52
     
-    tau = 0.123
+    tau = 0
     m_max=0.0016
     mab_sh = lambda t: 8.32e-4*(t/Units.nsec)**0.75
 
@@ -356,7 +356,7 @@ def test_profiles():
     f=3.4*1e13/(Units.hev_kelvin**beta)
     g=1/(7200.*Units.hev_kelvin**alpha)
     mat=dict(
-        rho0=19.3,
+        rho0=19.32,
         tau=tau,
         alpha=alpha,
         beta_heat=beta,
@@ -519,6 +519,18 @@ def test_profiles():
     piston_position = np.array([r["piston_position"] for r in results])
     heat_position = np.array([r["heat_position"] for r in results])
     boundary_position = np.array([r["boundary_position"] for r in results])
+
+    position_scale = 1e4 # cm -> micron
+    L *= position_scale
+    position_times *= position_scale
+    shock_position *= position_scale
+    piston_position *= position_scale
+    heat_position *= position_scale
+    boundary_position *= position_scale
+
+    time_scale = 1e9 # sec -> ns
+    times *= time_scale
+
     plt.figure("position")
     for pos in position_times:
         plt.plot(times[1:], pos, c="k",    lw=0.5)#, marker="o", markersize=1.)
@@ -528,19 +540,19 @@ def test_profiles():
     plt.plot(times[1:], boundary_position, lw=1.5, ls="--", c="k", label="boundary")
 
     plt.legend()
-    plt.xlabel("time [sec]")
-    plt.ylabel("position [cm]")
+    plt.xlabel("time [ns]")
+    plt.ylabel("position [$\mu$m]")
     plt.autoscale(enable=True, axis='both', tight=True)
     plt.suptitle(solver.heat_solver.title, fontsize=12)
-    plt.savefig("rt.png", bbox_inches='tight')
-    plt.savefig("rt.pdf", bbox_inches='tight')
 
     plt.xlim([0., times[-1]])
     plt.ylim([-0.1*L, L])
     plt.suptitle(solver.heat_solver.title, fontsize=12)
-    plt.savefig("rt_zoom1.pdf", bbox_inches='tight')
-    plt.savefig("rt_zoom.png", bbox_inches='tight')
     plt.show()
+
+    plt.figure("ablation simulation")
+    
+    # plt.plot(times[len(times)/2],
 
     # plt.plot(np.log(times[1:]), np.log(heat_position),    lw=2.5, ls="--", c="r", label="shock/heat")
     # plt.plot(np.log(times[1:]), np.log(shock_position),    lw=2.5, ls="--", c="r", label="shock/heat")

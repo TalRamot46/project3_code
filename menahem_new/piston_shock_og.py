@@ -1,14 +1,20 @@
 import numpy as np
-import sys
 import scipy.integrate
+
+# Patch for NumPy 2.0+ compatibility where np.trapz was removed
+if not hasattr(np, "trapz"):
+    if hasattr(scipy.integrate, "trapezoid"):
+        np.trapz = scipy.integrate.trapezoid
+    elif hasattr(np, "trapezoid"):
+        np.trapz = np.trapezoid
+
+import sys
 import scipy.optimize
 from matplotlib import pyplot as plt
 
 import logging
 logging.basicConfig(level = logging.INFO)
 logger = logging.getLogger('PistonShock')
-
-import scipy.integrate
 
 # Fallback pattern for modern vs legacy SciPy versions
 if not hasattr(scipy.integrate, "simps"):
@@ -121,6 +127,7 @@ class PistonShock():
         logger.info(f"{self.rep}: integral of V(xsi) on [0, xsi_s] = {self.V_integral_total}")
 
         self.set_energy_integrals()
+        self.shocked_mass(time=1)
 
     def initial_specific_volume(self, *, mass):
         """

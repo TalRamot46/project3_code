@@ -1,6 +1,14 @@
 import numpy as np
-import sys
 import scipy.integrate
+
+# Patch for NumPy 2.0+ compatibility where np.trapz was removed
+if not hasattr(np, "trapz"):
+    if hasattr(scipy.integrate, "trapezoid"):
+        np.trapz = scipy.integrate.trapezoid
+    elif hasattr(np, "trapezoid"):
+        np.trapz = np.trapezoid
+
+import sys
 import scipy.optimize
 from matplotlib import pyplot as plt
 

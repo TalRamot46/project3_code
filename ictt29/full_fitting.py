@@ -179,7 +179,7 @@ def plot_patched_dimensional_fit_comparison(
         show_label = i == 0
 
         # Plot Simulation (entire domain)
-        ax_rho.plot(m_sim * 1e3, sim_rho, '-', color=sim_color, alpha=0.8, label=f"Simulation ({t_target*1e9:.1f} ns)" if show_label else None)
+        ax_rho.plot(m_sim * 1e3, sim_rho, '-', color=sim_color, alpha=0.8, label=f"Diffusion ({t_target*1e9:.1f} ns)" if show_label else None)
         ax_p.plot(m_sim * 1e3, sim_p, '-', color=sim_color, alpha=0.8)
         ax_u.plot(m_sim * 1e3, sim_u, '-', color=sim_color, alpha=0.8)
         ax_T.plot(m_sim * 1e3, sim_T, '-', color=sim_color, alpha=0.8)
@@ -322,7 +322,7 @@ def plot_fully_patched_comparison(
         show_label = i == 0
 
         # Plot Simulation (entire domain)
-        ax_rho.plot(m_sim * 1e3, sim_rho, '-', color=sim_color, alpha=0.8, label=f"Simulation ({t_target*1e9:.1f} ns)" if show_label else None)
+        ax_rho.plot(m_sim * 1e3, sim_rho, '-', color=sim_color, alpha=0.8, label=f"Diffusion ({t_target*1e9:.1f} ns)" if show_label else None)
         ax_p.plot(m_sim * 1e3, sim_p, '-', color=sim_color, alpha=0.8)
         ax_u.plot(m_sim * 1e3, sim_u, '-', color=sim_color, alpha=0.8)
         ax_T.plot(m_sim * 1e3, sim_T, '-', color=sim_color, alpha=0.8)
@@ -362,7 +362,7 @@ def plot_fully_patched_comparison(
 
     # Build time legend entries
     time_handles = [
-        Line2D([0], [0], color=sim_colors[k], lw=2, label=f"Simulation ({target_times[k]*1e9:.1f} ns)")
+        Line2D([0], [0], color=sim_colors[k], lw=2, label=f"Diffusion ({target_times[k]*1e9:.1f} ns)")
         for k in range(len(target_times))
     ]
     if compare_imc:
@@ -478,7 +478,7 @@ def plot_fully_patched_zoomed_comparison(
 
         # Plot Simulation
         show_label = i == 0
-        ax_rho.plot(m_sim[mask_sim] * 1e3, sim_rho[mask_sim], '-', color=sim_color, alpha=0.8, label=f"Simulation ({t_target*1e9:.1f} ns)" if show_label else None)
+        ax_rho.plot(m_sim[mask_sim] * 1e3, sim_rho[mask_sim], '-', color=sim_color, alpha=0.8, label=f"Diffusion ({t_target*1e9:.1f} ns)" if show_label else None)
         ax_p.plot(m_sim[mask_sim] * 1e3, sim_p[mask_sim], '-', color=sim_color, alpha=0.8)
         ax_u.plot(m_sim[mask_sim] * 1e3, sim_u[mask_sim], '-', color=sim_color, alpha=0.8)
         ax_T.plot(m_sim[mask_sim] * 1e3, sim_T[mask_sim], '-', color=sim_color, alpha=0.8)
@@ -573,7 +573,7 @@ def plot_fully_patched_zoomed_comparison(
 
     # Build time legend entries
     time_handles = [
-        Line2D([0], [0], color=sim_colors[k], lw=2, label=f"Simulation ({target_times[k]*1e9:.1f} ns)")
+        Line2D([0], [0], color=sim_colors[k], lw=2, label=f"Diffusion ({target_times[k]*1e9:.1f} ns)")
         for k in range(len(target_times))
     ]
     if compare_imc:

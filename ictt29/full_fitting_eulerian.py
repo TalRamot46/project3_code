@@ -546,13 +546,13 @@ def plot_fully_patched_comparison_eulerian(
         # Plot Simulation (entire domain) - Blue
         ax_rho.plot(x_sim_center_um, sim_rho, '-', color='#1a5fb4', lw=2.2)
         ax_p.plot(x_sim_center_um, sim_p, '-', color='#1a5fb4', lw=2.2)
-        ax_u.plot(x_sim_center_um, np.abs(sim_u), '-', color='#1a5fb4', lw=2.2)
+        ax_u.plot(x_sim_center_um, sim_u, '-', color='#1a5fb4', lw=2.2)
         ax_T.plot(x_sim_center_um, sim_T, '-', color='#1a5fb4', lw=2.2)
 
         # Plot Exact patched solver (solid black)
         ax_rho.plot(exact_x_um, exact_rho, '-', color='#333333', lw=2.0)
         ax_p.plot(exact_x_um, exact_p, '-', color='#333333', lw=2.0)
-        ax_u.plot(exact_x_um, np.abs(exact_u), '-', color='#333333', lw=2.0)
+        ax_u.plot(exact_x_um, exact_u, '-', color='#333333', lw=2.0)
         ax_T.plot(exact_x_um, exact_T, '-', color='#333333', lw=2.0)
 
         if compare_imc:
@@ -573,13 +573,13 @@ def plot_fully_patched_comparison_eulerian(
 
                     ax_rho.plot(imc_x_um, imc_rho, '--', color='forestgreen', lw=1.8)
                     ax_p.plot(imc_x_um, imc_p, '--', color='forestgreen', lw=1.8)
-                    ax_u.plot(imc_x_um, np.abs(imc_u), '--', color='forestgreen', lw=1.8)
+                    ax_u.plot(imc_x_um, imc_u, '--', color='forestgreen', lw=1.8)
                     ax_T.plot(imc_x_um, imc_T, '--', color='forestgreen', lw=1.8)
         else:
             # Plot Patched fits (dotted orange)
             ax_rho.plot(fit_x_um, fit_rho, ':', color='#e67e22', lw=2.0)
             ax_p.plot(fit_x_um, fit_p, ':', color='#e67e22', lw=2.0)
-            ax_u.plot(fit_x_um, np.abs(fit_u), ':', color='#e67e22', lw=2.0)
+            ax_u.plot(fit_x_um, fit_u, ':', color='#e67e22', lw=2.0)
             ax_T.plot(fit_x_um, fit_T, ':', color='#e67e22', lw=2.0)
 
         # Solver fronts (ablation front and shock front)
@@ -596,11 +596,11 @@ def plot_fully_patched_comparison_eulerian(
     # Build legend: profiles + front lines
     if compare_imc:
         legend_handles = [
-            Line2D([0], [0], color='#1a5fb4', lw=2.5, linestyle='-',  label='Simulation'),
-            Line2D([0], [0], color='#333333', lw=2.0, linestyle='-',  label='Exact Patched Solver'),
+            Line2D([0], [0], color='#1a5fb4', lw=2.5, linestyle='-',  label='Diffusion'),
+            Line2D([0], [0], color='#333333', lw=2.0, linestyle='-',  label='Analytic'),
             Line2D([0], [0], color='forestgreen', lw=1.8, linestyle='--', label='IMC (2 ns)'),
-            Line2D([0], [0], color='#333333', lw=1.5, linestyle='--', alpha=0.7, label='ablation front (solver)'),
-            Line2D([0], [0], color='#e63946', lw=1.5, linestyle='--', alpha=0.7, label='shock front (solver)'),
+            Line2D([0], [0], color='#333333', lw=1.5, linestyle='--', alpha=0.7, label='Ablation front (Analytic)'),
+            Line2D([0], [0], color='#e63946', lw=1.5, linestyle='--', alpha=0.7, label='Shock front (Analytic)'),
         ]
     else:
         legend_handles = [
@@ -632,14 +632,14 @@ def plot_fully_patched_comparison_eulerian(
     ax_rho.set_yscale('log')
     # Keep other graphs linear as requested
 
-    ax_rho.set_ylim(1e-5, max_sim_rho * 2.0)
+    ax_rho.set_ylim(1e-2, max_sim_rho * 2.0)
     ax_p.set_ylim(-0.05 * max_sim_p, max_sim_p * 1.15)
-    ax_u.set_ylim(-0.05 * max_sim_u_abs, max_sim_u_abs * 1.15)
+    ax_u.set_ylim(-max_sim_u_abs * 0.15, max_sim_u_abs * 0.05)
     ax_T.set_ylim(-0.05 * max_sim_T, max_sim_T * 1.15)
 
     # Styling
     titles = ["Density", "Pressure", "Velocity", "Temperature"]
-    math_labels = [r"$\rho$ [g/cm³]", r"$P$ [MBar]", r"$|u|$ [km/s]", r"$T$ [HeV]"]
+    math_labels = [r"$\rho$ [g/cm³]", r"$P$ [MBar]", r"$u$ [km/s]", r"$T$ [HeV]"]
     for j, ax in enumerate([ax_rho, ax_p, ax_u, ax_T]):
         ax.grid(True, alpha=0.3)
         ax.set_title(titles[j], fontsize=14, fontweight='bold')
@@ -1007,14 +1007,12 @@ def plot_fronts_vs_time_comparison(history, ablation_solver, sub_params, shock_p
 
     # Left Panel: Position x
     # Simulation (solid)
-    ax_x.plot(t_ns, x_ablation_sim_um, '-', color='#1a5fb4', lw=2.5, label='Ablation Sim')
-    ax_x.plot(t_ns, x_shock_sim_um, '-', color='#e63946', lw=2.5, label='Shock Sim')
-    # Solver (dashed)
-    ax_x.plot(t_ns_model, x_ablation_sol, '--', color='#333333', lw=2.0, label='Ablation Solver')
-    ax_x.plot(t_ns_model, x_shock_sol, '--', color='#8b0000', lw=2.0, label='Shock Solver')
-    # Fit (dotted)
-    ax_x.plot(t_ns_model, x_ablation_fit, ':', color='#26a269', lw=2.2, label='Ablation Fit')
-    ax_x.plot(t_ns_model, x_shock_fit, ':', color='#e67e22', lw=2.2, label='Shock Fit')
+    ax_x.plot(t_ns, x_ablation_sim_um, '-', color='#1a5fb4', lw=2.5, label='Ablation (Diffusion)')
+    ax_x.plot(t_ns_model, x_ablation_sol, '--', color='#333333', lw=2.0, label='Ablation (Analytic)')
+    ax_x.plot(t_ns_model, x_ablation_fit, ':', color='#26a269', lw=2.2, label='Ablation (Fit)')
+    ax_x.plot(t_ns, x_shock_sim_um, '-', color='#e63946', lw=2.5, label='Shock (Diffusion)')
+    ax_x.plot(t_ns_model, x_shock_sol, '--', color='#8b0000', lw=2.0, label='Shock (Analytic)')
+    ax_x.plot(t_ns_model, x_shock_fit, ':', color='#e67e22', lw=2.2, label='Shock (Fit)')
 
     ax_x.set_title("Front Position $x$", fontsize=14, fontweight='bold')
     ax_x.set_ylabel(r"$x$ [$\mu$m]", fontsize=13)
@@ -1026,14 +1024,12 @@ def plot_fronts_vs_time_comparison(history, ablation_solver, sub_params, shock_p
 
     # Right Panel: Mass Coordinate m
     # Simulation (solid)
-    ax_m.plot(t_ns, m_ablation_sim_mg, '-', color='#1a5fb4', lw=2.5, label='Ablation Sim')
-    ax_m.plot(t_ns, m_shock_sim_mg, '-', color='#e63946', lw=2.5, label='Shock Sim')
-    # Solver (dashed)
-    ax_m.plot(t_ns_model, m_ablation_sol_mg, '--', color='#333333', lw=2.0, label='Ablation Solver')
-    ax_m.plot(t_ns_model, m_shock_sol_mg, '--', color='#8b0000', lw=2.0, label='Shock Solver')
-    # Fit (dotted)
-    ax_m.plot(t_ns_model, m_ablation_fit_mg, ':', color='#26a269', lw=2.2, label='Ablation Fit')
-    ax_m.plot(t_ns_model, m_shock_fit_mg, ':', color='#e67e22', lw=2.2, label='Shock Fit')
+    ax_m.plot(t_ns, m_ablation_sim_mg, '-', color='#1a5fb4', lw=2.5, label='Ablation (Diffusion)')
+    ax_m.plot(t_ns_model, m_ablation_sol_mg, '--', color='#333333', lw=2.0, label='Ablation (Analytic)')
+    ax_m.plot(t_ns_model, m_ablation_fit_mg, ':', color='#26a269', lw=2.2, label='Ablation (Fit)')
+    ax_m.plot(t_ns, m_shock_sim_mg, '-', color='#e63946', lw=2.5, label='Shock (Diffusion)')
+    ax_m.plot(t_ns_model, m_shock_sol_mg, '--', color='#8b0000', lw=2.0, label='Shock (Analytic)')
+    ax_m.plot(t_ns_model, m_shock_fit_mg, ':', color='#e67e22', lw=2.2, label='Shock (Fit)')
 
     ax_m.set_title("Front Mass Coordinate $m$", fontsize=14, fontweight='bold')
     ax_m.set_ylabel(r"$m$ [mg/cm²]", fontsize=13)

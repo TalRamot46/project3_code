@@ -44,11 +44,11 @@ def main():
     # 1) Plot u(x, t) vs x
     for i, t in enumerate(times):
         u = greens_function(x, t, u0, D)
-        ax1.plot(x, u, label=f't = {t}', color=colors[i], lw=2.0)
+        ax1.plot(x, u, label=f't = $t_{i+1}$', color=colors[i], lw=2.0)
     
-    ax1.set_xlabel('Position $x$', fontweight='bold')
+    ax1.set_xlabel('Lagrangian Position $m$', fontweight='bold')
     ax1.set_ylabel('Dimensional Value', fontweight='bold')
-    ax1.set_title('Dimensional Profile $u(x,t)$', fontweight='bold', pad=15)
+    ax1.set_title('Dimensional Profile $h(m,t)$', fontweight='bold', pad=15)
     ax1.grid(True)
     ax1.legend()
     
@@ -61,18 +61,18 @@ def main():
         u_scaled = u / (u0 / np.sqrt(D * t))
         
         # We plot with different line widths/styles to make it clear they overlap perfectly
-        ax2.plot(xi, u_scaled, label=f't = {t}', color=colors[i],
+        ax2.plot(xi, u_scaled, label=f't = $t_{i+1}$', color=colors[i],
                  linestyle=linestyles[i], linewidth=linewidths[i])
         
-    ax2.set_xlabel(r'Similarity Variable $\xi = \frac{x}{\sqrt{Dt}}$', fontweight='bold')
+    ax2.set_xlabel(r'Similarity Variable $\xi$', fontweight='bold')
     ax2.set_ylabel('Dimensionless Value', fontweight='bold')
-    ax2.set_title(r'Self-similar profile $u(x,t) \cdot \frac{\sqrt{Dt}}{u_0}$', fontweight='bold', pad=15)
+    ax2.set_title(r'Self-similar profile $\tilde{h}(\xi)$', fontweight='bold', pad=15)
     ax2.set_xlim([-6, 6])  # Focus on the region where the Gaussian is non-zero
     ax2.grid(True)
     ax2.legend()
     
     # Add a main title explaining the physics
-    fig.suptitle('Illustration of Self-Similarity in 1D Diffusion', fontweight='bold', y=0.98)
+    # fig.suptitle('Illustration of Self-Similarity in 1D Diffusion', fontweight='bold', y=0.98)
     
     # Adjust layout
     plt.tight_layout(rect=[0, 0, 1, 0.95])
@@ -85,7 +85,7 @@ def main():
     print(f"Plot saved successfully to: {output_path}")
     
     # Show the plot if running interactively
-    plt.show()
+    # plt.show()
 
 if __name__ == '__main__':
     main()

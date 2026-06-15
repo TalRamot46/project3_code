@@ -8,6 +8,12 @@ if not hasattr(np, "trapz"):
     elif hasattr(np, "trapezoid"):
         np.trapz = np.trapezoid
 
+if not hasattr(np, "simps"):
+    if hasattr(scipy.integrate, "simpson"):
+        scipy.simps = scipy.integrate.simpson
+    elif hasattr(np, "simpson"):
+        scipy.simps = np.simpson
+
 import sys
 import scipy.optimize
 from matplotlib import pyplot as plt
@@ -639,7 +645,7 @@ class SubsonicHeatWave():
             self.plot_profiles()
             sys.exit(1)
 
-        self.set_energy_integrals()
+        # self.set_energy_integrals()
         return self
 
     def plot_fPf(self, *, xsi_f):
@@ -1162,7 +1168,7 @@ def test_profiles():
 
     solver.find_xsi_f()
     
-    solver.test_etot_integral()
+    # solver.test_etot_integral()
     solver.plot_profiles()
     # solver.test_V_integral()
 

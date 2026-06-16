@@ -224,28 +224,29 @@ def plot_xt_trajectories(
         except Exception as exc:
             print(f"  [plot_xt] Could not compute fit cell trajectories: {exc}")
 
+    times_model *= 1e9 # scale up to ns
     for j in chosen_cell_indices:
         ax.plot(times_model, x_sim[:, j],
-                color="navy", lw=0.4, alpha=0.8)
+                color="lightgreen", lw=1, alpha=0.8, ls='--')
         # position_times has shape (len(mass_grid), N_sampled); the first two
         # rows correspond to the two sentinel mass entries prepended in
         # _build_mass_grid, so mass index j maps to position_times[j+2].
         if j + 2 < position_times.shape[0]:
             ax.plot(times_model, position_times[j + 2],
-                    color="royalblue", lw=0.4, alpha=0.7)
-        if x_fit_all is not None and j + 2 < x_fit_all.shape[1]:
-            ax.plot(times_model, x_fit_all[:, j + 2],
-                    color="lightskyblue", lw=0.4, alpha=0.6)
+                    color="black", lw=0.5, alpha=0.7)
+        # if x_fit_all is not None and j + 2 < x_fit_all.shape[1]:
+        #     # ax.plot(times_model, x_fit_all[:, j + 2],
+        #     #         color="lightskyblue", lw=0.4, alpha=0.6)
 
 
     # --- Simulation fronts (solid) ---
-    ax.plot(times_model[1:], x_shock_sim_plot, lw=2.5, c="red", ls="-")
-    ax.plot(times_model, x_heat_sim, lw=2.0, c="green", ls="-")
+    ax.plot(times_model[1:], x_shock_sim_plot, lw=2.5, c="blue", ls="-")
+    ax.plot(times_model, x_heat_sim, lw=2.0, c="red", ls="-")
     # ax.plot(times_model, x_boundary_sim, lw=2.0, c="black", ls="-")
 
     # --- Solver fronts (dashed) ---
-    ax.plot(times_model, shock_position, lw=2.0, ls="--", c="orange")
-    ax.plot(times_model, heat_position, lw=2.0, ls="--", c="purple")
+    ax.plot(times_model, shock_position, lw=2.0, ls="--", c="lightblue")
+    ax.plot(times_model, heat_position, lw=2.0, ls="--", c="yellow")
     # ax.plot(times_model, abs_boundary_position, lw=2.0, ls="--", c="black")
 
     # --- Fit fronts (dotted) ---
@@ -254,8 +255,8 @@ def plot_xt_trajectories(
         ax.plot(times_model, fit_fronts["ablation_front"], lw=2.0, ls=":", c="deeppink")
         # ax.plot(times_model, fit_fronts["boundary"], lw=2.0, ls=":", c="black")
 
-    ax.set_xlabel("time [sec]",     fontsize=12)
-    ax.set_ylabel("position [cm]",  fontsize=12)
+    ax.set_xlabel("time [ns]",     fontsize=14)
+    ax.set_ylabel("position [cm]",  fontsize=14)
     ax.set_title(
         f"Space-Time (xt) Trajectories and Fronts\n{case_title}",
         fontsize=13, fontweight="bold",
@@ -268,21 +269,13 @@ def plot_xt_trajectories(
     _inv = dict(color="none", lw=0)
 
     legend_handles = [
-        Line2D([0], [0], color="green", lw=2.0, ls="-", label="heat (Diffusion)"),
-        Line2D([0], [0], color="purple", lw=2.0, ls="--", label="heat (Analytic)"),
-        Line2D([0], [0], color="red", lw=2.0, ls="-", label="shock (Diffusion)"),
-        # Line2D([0], [0], color="black", lw=2.0, ls="-", label="boundary Simulation"),
-        
-        Line2D([0], [0], color="orange", lw=2.0, ls="--", label="shock (Analytic)"),
-        Line2D([0], [0], color="royalblue", lw=0.8, label="grid (Analytic)"),
-        Line2D([0], [0], color="navy", lw=0.8, label="grid (Diffusion)"),
-        # Line2D([0], [0], color="black", lw=2.0, ls="--", label="boundary Solver"),
-        
-        # Line2D([0], [0], color="deeppink", lw=2.0, ls=":", label="heat Fit") if _have_fit else Line2D([0], [0], **_inv, label=""),
-        # Line2D([0], [0], color="gold", lw=2.0, ls=":", label="shock Fit") if _have_fit else Line2D([0], [0], **_inv, label=""),
-        # Line2D([0], [0], color="lightskyblue", lw=0.8, label="grid fit"),
-        # Line2D([0], [0], color="black", lw=2.0, ls=":", label="boundary Fit") if _have_fit else Line2D([0], [0], **_inv, label=""),
-    ]
+        Line2D([0], [0], color="red", lw=2.0, label="shock (Diffusion)", ls='-'), 
+        Line2D([0], [0], color="orange", lw=2.0, label="shock (Analytic)", ls='--'),
+        Line2D([0], [0], color="blue", lw=2.0, label="heat (Diffusion)", ls='-'),
+        Line2D([0], [0], color="lightblue", lw=2.0, label="heat (Analytic)", ls='--'),
+        Line2D([0], [0], color="black", lw=2.0, label="grid (Diffusion)", ls='-'),
+        Line2D([0], [0], color="lightgreen", lw=2.0, label="grid (Analytic)", ls='--'),
+        ]
     ax.legend(
         handles=legend_handles,
         ncol=3,
@@ -327,7 +320,7 @@ def run_preset_workflow(
     print("=" * 80)
 
     from data_loader import get_sim_history, get_ablation_solver
-    case, history = get_sim_history(preset_name, case_label, N=1500)
+    case, history = get_sim_history(preset_name, case_label)
     ablation_solver = get_ablation_solver(case, case_label)
 
     # Run fitting pipelines if params were not supplied by the caller.

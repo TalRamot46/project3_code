@@ -1,0 +1,9 @@
+# Fdb version 4
+["pdflatex"] 0 "c:/Users/TLP-001/Documents/GitHub/project3_code/ictt29/some.tex" "some.pdf" "some" 0 -1
+  "c:/Users/TLP-001/Documents/GitHub/project3_code/ictt29/some.tex" 0 -1 0 ""
+  "some.aux" 0 -1 0 "pdflatex"
+  (generated)
+  "some.aux"
+  "some.log"
+  "some.pdf"
+  (rewritten before read)

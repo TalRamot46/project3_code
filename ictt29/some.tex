@@ -1,0 +1,73 @@
+\documentclass{article}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{siunitx}
+
+\begin{document}
+
+\section*{Tabulated Dimensionless Similarity Profiles}
+
+This document presents the tabulated data for the four dimensionless similarity profiles across both the subsonic radiation-driven heat region and the hydrodynamic piston-driven shock region.
+
+\subsection*{Subsonic Heat Solver Profiles}
+\begin{table}[h!]
+\centering
+\caption{Dimensionless profiles inside the subsonic heat wave region ($y_h$).}
+\label{tab:heat_solver}
+\begin{tabular}{
+  c
+  S[table-format=1.5e+2]
+  S[table-format=1.5e+2]
+  c
+  S[table-format=-1.5e+2]
+}
+\toprule
+{$y_h$} & {$T$} & {$P$} & {$\rho$} & {$U$} \\
+\midrule
+0.0 & 1.00010e+00 & 3.16718e-03 & 1.24088e-03 & -9.11258e+00 \\
+0.1 & 9.81994e-01 & 4.58528e-02 & 2.87164e-02 & -3.58928e+00 \\
+0.2 & 9.57808e-01 & 8.50416e-02 & 6.16901e-02 & -2.50055e+00 \\
+0.3 & 9.29372e-01 & 1.21638e-01 & 9.89256e-02 & -1.88927e+00 \\
+0.4 & 8.96501e-01 & 1.56455e-01 & 1.41749e-01 & -1.46873e+00 \\
+0.5 & 8.58325e-01 & 1.89933e-01 & 1.92576e-01 & -1.15041e+00 \\
+0.6 & 8.13172e-01 & 2.22446e-01 & 2.55894e-01 & -8.94691e-01 \\
+0.7 & 7.57902e-01 & 2.54467e-01 & 3.41076e-01 & -6.79415e-01 \\
+0.8 & 6.85804e-01 & 2.86857e-01 & 4.72196e-01 & -4.88884e-01 \\
+0.9 & 5.77505e-01 & 3.21885e-01 & 7.43321e-01 & -3.05380e-01 \\
+1.0 & 0.00000e+00 & 3.87086e-01 & $\infty$    &  0.00000e+00 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection*{Hydrodynamic Shock Solver Profiles}
+\begin{table}[h!]
+\centering
+\caption{Dimensionless profiles behind the piston-driven shock wave region ($y_s$).}
+\label{tab:shock_solver}
+\begin{tabular}{
+  c
+  S[table-format=3.5e+2]
+  S[table-format=1.5e+2]
+  S[table-format=1.5e+2]
+  S[table-format=1.5e+2]
+}
+\toprule
+{$y_s$} & {$T$} & {$P$} & {$\rho$} & {$U$} \\
+\midrule
+0.0 & 1.25740e+02 & 1.00000e+00 & 1.24166e-04 & 9.65499e-01 \\
+0.1 & 6.51200e-01 & 1.03964e+00 & 2.32386e+00 & 1.01552e+00 \\
+0.2 & 5.52628e-01 & 1.08262e+00 & 3.30585e+00 & 1.03905e+00 \\
+0.3 & 5.03741e-01 & 1.12801e+00 & 4.11966e+00 & 1.05806e+00 \\
+0.4 & 4.72814e-01 & 1.17548e+00 & 4.86267e+00 & 1.07474e+00 \\
+0.5 & 4.50943e-01 & 1.22484e+00 & 5.57073e+00 & 1.08991e+00 \\
+0.6 & 4.34441e-01 & 1.27593e+00 & 6.26141e+00 & 1.10398e+00 \\
+0.7 & 4.21447e-01 & 1.32863e+00 & 6.94459e+00 & 1.11719e+00 \\
+0.8 & 4.10900e-01 & 1.38283e+00 & 7.62634e+00 & 1.12968e+00 \\
+0.9 & 4.02142e-01 & 1.43844e+00 & 8.31060e+00 & 1.14157e+00 \\
+1.0 & 3.94738e-01 & 1.49535e+00 & 9.00000e+00 & 1.15291e+00 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}

@@ -24,6 +24,7 @@ from project3_code.rad_hydro_sim.simulation.radiation_step import (
 )
 from project3_code.rad_hydro_sim.output_paths import get_rad_hydro_results_dir
 from project3_code.hydro_sim.problems.simulation_config import SimulationConfig
+# from project3_code.verification import _build_mass_grid
 
 def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydroState:
     """Initialize the problem state based on the case and simulation type."""
@@ -31,6 +32,18 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
     geom = planar()
     x_nodes = np.linspace(case.x_min, case.x_max, num=config.N + 1)  # Initial grid
     x_cells = 0.5 * (x_nodes[:-1] + x_nodes[1:])  # Cell centers
+    # L = float(case.x_max)
+    # num_cells = config.N
+    # coordinate = np.array(list(sorted(set(
+    #     list(np.linspace(0., L, num_cells+1)) \
+    # ))))
+    # dx = np.diff(coordinate)
+    # density = np.full_like(dx, float(case.rho0))
+    # mass_cells = density * dx
+    # mass = np.cumsum(mass_cells)
+    # mass = np.array([1e-30, 1e-7*mass[0]]+ list(mass))
+
+    # x_nodes, x_cells = mass, 0.5*(mass[1:] + mass[:-1])
 
     rho = np.zeros_like(x_cells)
     p = np.zeros_like(x_cells)

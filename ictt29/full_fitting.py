@@ -270,6 +270,7 @@ def plot_fully_patched_comparison(
     plot_path,
     case_title,
     compare_imc=True,
+    zoom_insets=None,
 ):
     """
     Plots a unified 2x2 comparison showing the fully patched (seamless) profiles.
@@ -414,6 +415,32 @@ def plot_fully_patched_comparison(
         plt.suptitle(f"Unified Patched Ablation & Shock Verification vs IMC\n{case_title}", fontsize=16, fontweight='bold')
     else:
         plt.suptitle(f"Unified Patched Ablation & Shock Verification (Fully Patched)\n{case_title}", fontsize=16, fontweight='bold')
+
+    # --- Zoomed inset axes ---
+    if zoom_insets:
+        _inset_map = {
+            'velocity':    (ax_u, [0.48, 0.08, 0.50, 0.50]),
+            'temperature': (ax_T, [0.4, 0.42, 0.60, 0.50]),
+        }
+        for key, (ax_parent, inset_pos) in _inset_map.items():
+            if key not in zoom_insets:
+                continue
+            cfg = zoom_insets[key]
+            ins = ax_parent.inset_axes(inset_pos)
+            for line in ax_parent.get_lines():
+                ins.plot(
+                    line.get_xdata(), line.get_ydata(),
+                    color=line.get_color(),
+                    linestyle=line.get_linestyle(),
+                    linewidth=line.get_linewidth(),
+                    alpha=line.get_alpha() if line.get_alpha() is not None else 1.0,
+                )
+            ins.set_xlim(cfg['xlim'])
+            ins.set_ylim(cfg['ylim'])
+            ins.grid(True, alpha=0.3)
+            ins.tick_params(labelsize=9)
+            ax_parent.indicate_inset_zoom(ins, edgecolor="gray", alpha=0.6)
+
     plt.tight_layout()
     fig.savefig(plot_path, dpi=200)
     print(f"Saved fully patched comparison plot to {plot_path}")
@@ -679,6 +706,12 @@ def run_preset_workflow(preset_name, case_label, case_title):
 
     # 4) Plot 2: Fully Patched seamless profiles compared to AblationSolver
     plot_path_patched = dv_dir / f"{case_label}_fully_patched_comparison.png"
+    zoom = None
+    if case_label == "const_T":
+        zoom = {
+            'velocity':    {'xlim': (0, 3),  'ylim': (-100, 0)},
+            'temperature': {'xlim': (10, 22), 'ylim': (0, 0.15)},
+        }
     plot_fully_patched_comparison(
         history=history,
         ablation_solver=ablation_solver,
@@ -687,6 +720,7 @@ def run_preset_workflow(preset_name, case_label, case_title):
         case=case,
         plot_path=str(plot_path_patched),
         case_title=case_title,
+        zoom_insets=zoom,
     )
 
     # 5) Plot 3 & 4: Zoomed comparison plots under compare_imc=True (only for const_T case)

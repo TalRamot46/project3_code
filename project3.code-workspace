@@ -13,7 +13,17 @@
 		}
 	],
 	"settings": {
-		"powershell.cwd": "project3_code"
+		"powershell.cwd": "project3_code",
+		"git.autorefresh": false,
+		"files.watcherExclude": {
+			"**/.git/objects/**": true,
+			"**/.git/subtree-cache/**": true,
+			"**/node_modules/**": true,
+			"**/__pycache__/**": true,
+			"**/.venv/**": true,
+			"**/build/**": true
+		},
+		"python.analysis.indexing": false
 	},
 	"name": "project3"
 }

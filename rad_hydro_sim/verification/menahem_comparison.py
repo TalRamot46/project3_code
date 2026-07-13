@@ -321,7 +321,6 @@ def run_menahem_piecewise_reference(
     case,
     config,
     times_sec: np.ndarray,
-    mass: np.ndarray
 ) -> Optional[RadHydroSimData]:
     """Build full-rad-hydro reference from Menahem's ``AblationSolver``.
 
@@ -354,7 +353,7 @@ def run_menahem_piecewise_reference(
     solver = AblationSolver(**kwargs)
 
     
-    # mass = _build_mass_grid(case, num_cells=num_cells)
+    mass = _build_mass_grid(case, num_cells=num_cells)
 
 
 

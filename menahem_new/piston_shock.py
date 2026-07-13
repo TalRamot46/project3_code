@@ -383,7 +383,7 @@ class PistonShock():
 
         # integrate from the first point before xsi_s (in the array xsi_vec) towards the origin
         for xsi in xsi_vec[::-1][1:]:
-            value = self.ode_solver.integrate(xsi)
+            value = self.ode_solver.integrate(xsi) #TODO: Why iterating over all xsi? Does self.ode_solver have memory? I need to investigate the scipy._ode class and its integrate() method.
 
         assert xsi == NumericalParameters.xsi_origin
 

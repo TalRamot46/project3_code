@@ -29,7 +29,9 @@ from project3_code.rad_hydro_sim.problems.presets_config import (
     PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE,
     PRESET_MATLAB,
     PRESET_MENAHEM_ABLATION_COMPARISON,
-    PRESET_COPPER_CONST_TEMPERATURE
+    PRESET_COPPER_CONST_TEMPERATURE,
+    PRESET_ALUMINUM_CONST_TEMPERATURE,
+    PRESET_OPAQUE_ALUMINUM_CONST_TEMPERATURE
 )
 
 
@@ -66,7 +68,7 @@ class ReferenceSolver(str, Enum):
 
 RADIATION_ONLY_PRESET = PRESET_CONSTANT_T_RADIATION_ONLY   # constant_temperature_drive
 HYDRO_ONLY_PRESET = PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE                  # constant_pressure_drive
-FULL_RAD_HYDRO_PRESET = PRESET_COPPER_CONST_TEMPERATURE                  # fig_8_comparison
+FULL_RAD_HYDRO_PRESET = PRESET_OPAQUE_ALUMINUM_CONST_TEMPERATURE                  # fig_8_comparison
 # hwllo
 # Map each verification mode to its preset name (SIMPLE_TEST_CASES key)
 MODE_TO_PRESET: dict[VerificationMode, str] = {

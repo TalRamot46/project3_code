@@ -409,6 +409,7 @@ class SubsonicHeatWave():
             succ_all=succ_all,
             succ_most=succ_most,
         )
+        # plt.plot(xsi_vec, Vp)
 
     def fode(self, xsi, x):
         """

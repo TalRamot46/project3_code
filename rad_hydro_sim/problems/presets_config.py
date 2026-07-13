@@ -20,6 +20,8 @@ PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE = "power_law_pressure
 PRESET_CONSTANT_PRESSURE = "constant_pressure_drive"
 PRESET_CONSTANT_T_RADIATION_ONLY = "constant_temperature_drive"
 PRESET_COPPER_CONST_TEMPERATURE = "copper_const_temperature"
+PRESET_ALUMINUM_CONST_TEMPERATURE = "aluminum_const_temperature"
+PRESET_OPAQUE_ALUMINUM_CONST_TEMPERATURE = "aluminum_opaque_const_temperature"
 PRESET_FIG_8_CONSTANT_TEMPERATURE = "fig_8_comparison"
 PRESET_FIG_9_CONSTANT_FLUX = "fig_9_comparison"
 PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE = "fig_10_comparison"
@@ -198,11 +200,12 @@ PRESET_TEST_CASES = {
         title=r"Fig 8 comparison ($T_0 = 1$ HeV, $\tau = 0$, $Au$, early time)",
         geom=planar(),
         times_for_png=np.array([0.05e-9, 0.1e-9, 0.15e-9], dtype=float),
-        bc_type="Marshak"
+        bc_type="Marshak",
+        omega=0.5
     ),
     PRESET_COPPER_CONST_TEMPERATURE: RadHydroCase(
         # Rosen's opacity parameters
-        g_Kelvin = 1.0 / (2237 * KELVIN_PER_HEV**1.35),
+        g_Kelvin = 1.0 / (2237 * KELVIN_PER_HEV**2.21),
         alpha = 2.21,
         lambda_ = 0.29,
 
@@ -212,7 +215,7 @@ PRESET_TEST_CASES = {
         mu = 0.14, # ensure
 
         # coupling factor
-        chi = 1000,
+        chi = 1,
 
         # Boundary conditions
         T0_Kelvin = 1* KELVIN_PER_HEV,
@@ -220,27 +223,106 @@ PRESET_TEST_CASES = {
         tau = 0.00,
 
         # initial conditions
-        rho0 = 19.32,
+        rho0 = 8.96,
         p0 = None,
         u0 = None,
         T_initial_Kelvin = 300, # 300 K in Hev
 
         # adiabatic index
-        r = 0.4, # r = \gamma_adiabatic - 1
+        r = 14.0/35.0, # r = \gamma_adiabatic - 1
 
         # grid parameters
         x_min = 0,
-        x_max = 3.5e-3 / 19.32,
+        x_max = 1e-1 / 8.96,
         t_sec_end = 2e-9,
 
         initial_condition="temperature, density",
         scenario="full_rad_hydro",
         title=r"Cupper constant temprature ($T_0 = 1$ HeV, $\tau = 0$, $Cu$)",
         geom=planar(),
-        times_for_png=np.array([0.05e-9, 0.1e-9, 0.15e-9], dtype=float),
+        times_for_png=np.array([1e-9, 1.5e-9, 2e-9], dtype=float),
         bc_type="Marshak"
     ),
+    PRESET_ALUMINUM_CONST_TEMPERATURE: RadHydroCase(
+        # Rosen's opacity parameters
+        g_Kelvin = 1.0 / (1487 * KELVIN_PER_HEV**3.1),
+        alpha = 3.1,
+        lambda_ = 0.3685,
 
+        # Rosen's specific energy parameters
+        f_Kelvin = 9.04e13 / (KELVIN_PER_HEV**1.2),
+        beta_Rosen = 1.2,
+        mu = 0, # ensure
+
+        # coupling factor
+        chi = 1,
+
+        # Boundary conditions
+        T0_Kelvin = 1* KELVIN_PER_HEV,
+        P0_Barye = None,
+        tau = 0.00,
+
+        # initial conditions
+        rho0 = 2.78,
+        p0 = None,
+        u0 = None,
+        T_initial_Kelvin = 300, # 300 K in Hev
+
+        # adiabatic index
+        r = 0.3, # r = \gamma_adiabatic - 1
+
+        # grid parameters
+        x_min = 0,
+        x_max = 0.015 / 2.78,
+        t_sec_end = 2e-9,
+
+        initial_condition="temperature, density",
+        scenario="full_rad_hydro",
+        title=r"Aluminum constant temprature ($T_0 = 1$ HeV, $\tau = 0$, $Al$)",
+        geom=planar(),
+        times_for_png=np.array([1e-9, 1.5e-9, 2e-9], dtype=float),
+        bc_type="Marshak"
+    ),
+    PRESET_OPAQUE_ALUMINUM_CONST_TEMPERATURE: RadHydroCase(
+        # Rosen's opacity parameters
+        g_Kelvin = 1.0 / (1487 * KELVIN_PER_HEV**3.1),
+        alpha = 3.1,
+        lambda_ = 0.3685,
+
+        # Rosen's specific energy parameters
+        f_Kelvin = 9.04e13 / (KELVIN_PER_HEV**1.2),
+        beta_Rosen = 1.2,
+        mu = 0, # ensure
+
+        # coupling factor
+        chi = 1,
+
+        # Boundary conditions
+        T0_Kelvin = 1* KELVIN_PER_HEV,
+        P0_Barye = None,
+        tau = 0.00,
+
+        # initial conditions
+        rho0 = 278,
+        p0 = None,
+        u0 = None,
+        T_initial_Kelvin = 300, # 300 K in Hev
+
+        # adiabatic index
+        r = 0.3, # r = \gamma_adiabatic - 1
+
+        # grid parameters
+        x_min = 0,
+        x_max = 0.005 / 278,
+        t_sec_end = 2e-9,
+
+        initial_condition="temperature, density",
+        scenario="full_rad_hydro",
+        title=r"Opaque Aluminum constant temprature ($T_0 = 1$ HeV, $\tau = 0$, $Al$)",
+        geom=planar(),
+        times_for_png=np.array([1e-9, 1.5e-9, 2e-9], dtype=float),
+        bc_type="Marshak"
+    ),
     PRESET_FIG_9_CONSTANT_FLUX: RadHydroCase(
         # Rosen's opacity parameters
         g_Kelvin = 1.0 / (7200 * KELVIN_PER_HEV**1.5),

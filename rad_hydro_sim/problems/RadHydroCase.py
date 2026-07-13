@@ -81,6 +81,7 @@ class RadHydroCase(ABC):
     # - "Marshak_Menahem": Equivalent Dirichlet implementation of Marshak
     # - "Dirichlet": classical Dirichlet style (fixed left face temperature)
     bc_type: Literal["Marshak", "Dirichlet", "Marshak_Menahem"] = "Dirichlet"
+    omega: float = 0.0
 
 
     def _get_params(

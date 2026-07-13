@@ -708,7 +708,7 @@ def run_full_rad_hydro_comparison(
         menahem_times = times_sec if skip_rad_hydro else np.linspace(
             max(case.t_sec_end / 100, 1e-15), case.t_sec_end, 100
         )
-        menahem_ref = run_menahem_piecewise_reference(case, menahem_times)
+        menahem_ref = run_menahem_piecewise_reference(case, config, menahem_times)
 
     # Pick a "primary" reference (the one passed as ``ref_data`` in the plot
     # functions) and route any remaining ones through ``extra_data``.
@@ -964,8 +964,8 @@ def main() -> None:
     # MODE = VerificationMode.HYDRO_ONLY
 
     # REFERENCE_SOLVER = ReferenceSolver.BOTH
-    REFERENCE_SOLVER = ReferenceSolver.SHUSSMAN
-    # REFERENCE_SOLVER = ReferenceSolver.MENAHEM
+    # REFERENCE_SOLVER = ReferenceSolver.SHUSSMAN
+    REFERENCE_SOLVER = ReferenceSolver.MENAHEM
 
     run_comparison(
         MODE,

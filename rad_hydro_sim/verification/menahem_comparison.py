@@ -160,7 +160,7 @@ def _ablation_kwargs_from_case(case) -> dict:
         mu_heat=heat["mu"],
         gamma_heat=heat["gamma"],
         rho0=float(case.rho0),
-        omega=0.0,
+        omega=float(case.omega),
         f_shock=heat["f"],
         beta_shock=heat["beta"],
         mu_shock=heat["mu"],
@@ -192,7 +192,7 @@ def _build_mass_grid(
     density = np.full_like(dx, float(case.rho0))
     mass_cells = density * dx
     mass = np.cumsum(mass_cells)
-    mass = np.array([1e-30, 1e-7*mass[0]]+ list(mass))
+    mass = np.array([1e-30, 1e-7*mass[0]] + list(mass))
     return mass
 
 
@@ -319,17 +319,21 @@ def run_menahem_shock_reference(
 
 def run_menahem_piecewise_reference(
     case,
+    config,
     times_sec: np.ndarray,
-    num_cells: int = 400,
-    label: str = "Menahem (ablation solver)",
-    color: str = MENAHEM_COLOR,
-    linestyle=MENAHEM_LINESTYLE,
+    mass: np.ndarray
 ) -> Optional[RadHydroSimData]:
     """Build full-rad-hydro reference from Menahem's ``AblationSolver``.
 
     The solver patches the subsonic heat wave and the piston shock internally;
     no manual splicing is needed.
     """
+
+    num_cells = config.N
+    label = "Menahem (ablation solver)"
+    color = MENAHEM_COLOR
+    linestyle = MENAHEM_LINESTYLE
+
     try:
         from ablation_solver_og import AblationSolver  # type: ignore
     except ImportError as exc:
@@ -350,7 +354,7 @@ def run_menahem_piecewise_reference(
     solver = AblationSolver(**kwargs)
 
     
-    mass = _build_mass_grid(case, num_cells=num_cells)
+    # mass = _build_mass_grid(case, num_cells=num_cells)
 
 
 

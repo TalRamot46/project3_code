@@ -30,22 +30,21 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
     """Initialize the problem state based on the case and simulation type."""
     # Unpack parameters from case & config
     geom = planar()
-    x_nodes = np.linspace(case.x_min, case.x_max, num=config.N + 1)  # Initial grid
-    x_cells = 0.5 * (x_nodes[:-1] + x_nodes[1:])  # Cell centers
-    # L = float(case.x_max)
-    # num_cells = config.N
-    # coordinate = np.array(list(sorted(set(
-    #     list(np.linspace(0., L, num_cells+1)) \
-    # ))))
-    # dx = np.diff(coordinate)
-    # density = np.full_like(dx, float(case.rho0))
-    # mass_cells = density * dx
-    # mass = np.cumsum(mass_cells)
-    # mass = np.array([1e-30, 1e-7*mass[0]]+ list(mass))
+    omega = case.omega
+    # Calculate density using the integrated mass formula to handle algebraic profiles (e.g. rho ~ x^-omega)
+    assert omega < 1.0, "Error: omega must be less than 1.0 to avoid singularity at x=0"
+    # 1. Calculate total mass in the domain analytically
+    total_mass = (case.rho0 / (1.0 - omega)) * (case.x_max**(1.0 - omega) - case.x_min**(1.0 - omega))
 
-    # x_nodes, x_cells = mass, 0.5*(mass[1:] + mass[:-1])
+    # 2. Create a uniformly spaced mass grid for the cells
+    m_nodes = np.linspace(0.0, total_mass, num=config.N + 1)
+    m_cells = np.diff(m_nodes)
+    # 3. Invert the mass integral to find the properly warped initial node positions
+    x_nodes = (case.x_min**(1.0 - omega) + (1.0 - omega) / case.rho0 * m_nodes) ** (1.0 / (1.0 - omega))
+    x_cells = 0.5 * (x_nodes[:-1] + x_nodes[1:]) 
 
-    rho = np.zeros_like(x_cells)
+    # 4. Now, the cell density can be computed cleanly because Delta m / Delta x matches perfectly
+    rho = (case.rho0 / (1.0 - omega)) * (x_nodes[1:]**(1.0 - omega) - x_nodes[:-1]**(1.0 - omega)) / (x_nodes[1:] - x_nodes[:-1])
     p = np.zeros_like(x_cells)
     u = np.zeros_like(x_nodes)
     e = np.zeros_like(x_cells)
@@ -57,13 +56,11 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
         assert case.T_initial_Kelvin is not None
         assert case.rho0 is not None
         T_material = np.full_like(x_cells, case.T_initial_Kelvin)
-        e = case.f_Kelvin * T_material**case.beta_Rosen * case.rho0**(-case.mu)
-        rho = np.full_like(x_cells, case.rho0)
+        e = case.f_Kelvin * T_material**case.beta_Rosen * rho**(-case.mu)
         p = (case.r + 1) * rho * e  # Ideal gas EOS
         T_rad = T_material.copy()
         E_rad = a_Kelvin * T_rad**4
     elif case.initial_condition == "pressure, velocity, density":
-        rho = np.full_like(x_cells, case.rho0)
         p = np.full_like(x_cells, case.p0)
         u = np.full_like(x_nodes, case.u0)
         e = internal_energy_from_prho(p, rho, case.r+1)

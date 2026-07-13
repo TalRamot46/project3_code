@@ -60,17 +60,18 @@ def calculate_black_abcd(
     else:
         D_face = arithmetic_mean(D[:-1], D[1:])
 
-    rho_j = rho[1:-1]
-    dm_j = m_cells[1:-1]
-    dm_left = m_cells[:-2]
-    dm_right = m_cells[2:]
+    dx_cells = m_cells / rho
+    dx_face = arithmetic_mean(dx_cells[:-1], dx_cells[1:])
+    dx_j = dx_cells[1:-1]
+    dx_left = dx_face[:-1]
+    dx_right = dx_face[1:]
     D_left = D_face[:-1]
     D_right = D_face[1:]
 
-    coeff = dt * rho_j / dm_j
-    a = -coeff * (D_left / dm_left)
-    b = 1.0 + coeff * ((D_left + D_right) / dm_j)
-    c_coeff = -coeff * (D_right / dm_right)
+    coeff = dt / dx_j
+    a = -coeff * (D_left / dx_left)
+    b = 1.0 + coeff * (D_left / dx_left + D_right / dx_right)
+    c_coeff = -coeff * (D_right / dx_right)
     d = e_old[1:-1].copy()
 
     if np.any(np.isnan(a)) or np.any(np.isnan(b)) or np.any(np.isnan(c_coeff)) or np.any(np.isnan(d)):
@@ -92,20 +93,30 @@ def calculate_flux(
         D_face = harmonic_mean(D[:-1], D[1:])
     else:
         D_face = arithmetic_mean(D[:-1], D[1:])
-    rho_face = arithmetic_mean(rho[:-1], rho[1:])
-    m_face = arithmetic_mean(m_cells[:-1], m_cells[1:])
-    flux_coeff = (D_face * rho_face) / m_face # flux at i=1,...,N-1
+    
+    # Exact physical spatial cell widths and center-to-center face distances:
+    dx_cells = m_cells / rho
+    dx_face = arithmetic_mean(dx_cells[:-1], dx_cells[1:])
+    flux_coeff = D_face / dx_face # flux at i=1,...,N-1
+
+    # Old implementation (assumed uniform density/mass profile; overestimates flux when omega != 0):
+    # rho_face = arithmetic_mean(rho[:-1], rho[1:])
+    # m_face = arithmetic_mean(m_cells[:-1], m_cells[1:])
+    # flux_coeff = (D_face * rho_face) / m_face # flux at i=1,...,N-1
+
     flux = -flux_coeff * (E_rad[1:] - E_rad[:-1]) if E_rad is not None else np.zeros_like(rho) # flux at i=1,...,N-1
 
     # calculation of flux at i=0 (between ghost cell to the first cell)
     T_bath = E_bath ** (1/4.)
-    rho_bath = rho[0]
-    m_bath = m_cells[0]
     sigma_bath = calculate_sigma_from_temperature_and_density(T_bath, rho[0])
     D_bath = calculate_D_from_sigma(sigma_bath)
     
-    boundary_flux_coeff = (D_bath * rho_bath) / m_bath
-    boundary_flux = -boundary_flux_coeff* (E_rad[0] - E_bath)
+    dx_bath = 0.5 * dx_cells[0]
+    boundary_flux_coeff = D_bath / dx_bath
+    # Old boundary flux implementation:
+    # boundary_flux_coeff = (D_bath * rho[0]) / m_cells[0]
+
+    boundary_flux = -boundary_flux_coeff * (E_rad[0] - E_bath)
     extended_flux = np.concatenate(([boundary_flux], flux))
     return extended_flux
 
@@ -132,13 +143,22 @@ def calculate_abcd(
         D_face = harmonic_mean(D[:-1], D[1:])
     else:
         D_face = arithmetic_mean(D[:-1], D[1:])
-    rho_face = arithmetic_mean(rho[:-1], rho[1:])
-    m_face = arithmetic_mean(m_cells[:-1], m_cells[1:])
 
-    flux_coeff = (D_face * rho_face) / m_face # defined at i=1,...,N-1
+    # Exact physical spatial cell widths and center-to-center face distances:
+    dx_cells = m_cells / rho
+    dx_face = arithmetic_mean(dx_cells[:-1], dx_cells[1:])
+
+    flux_coeff = D_face / dx_face # defined at i=1,...,N-1
     flux_coeff = np.concatenate(([flux_coeff[0]], flux_coeff, [flux_coeff[-1]]))
                                               # defined at i=0,1...N-1,N
-    lagrangian_coeff = rho / m_cells # defined at j=1,...,N
+    lagrangian_coeff = 1.0 / dx_cells # defined at j=1,...,N
+
+    # Old implementation (assumed uniform density/mass profile; overestimates flux when omega != 0):
+    # rho_face = arithmetic_mean(rho[:-1], rho[1:])
+    # m_face = arithmetic_mean(m_cells[:-1], m_cells[1:])
+    # flux_coeff = (D_face * rho_face) / m_face # defined at i=1,...,N-1
+    # flux_coeff = np.concatenate(([flux_coeff[0]], flux_coeff, [flux_coeff[-1]]))
+    # lagrangian_coeff = rho / m_cells # defined at j=1,...,N
 
     B = chi * c * sigma / (1 + A)
     a = -lagrangian_coeff * flux_coeff[:-1]

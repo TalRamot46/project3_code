@@ -139,7 +139,7 @@ def _shock_kwargs_from_case(case) -> dict:
     p0 = _ns_amplitude_rescale(float(case.P0_Barye), tau)
     return dict(
         rho0=float(case.rho0),
-        omega=0.0,
+        omega=float(getattr(case, "omega", 0.0)),
         p0=p0,
         tau=tau,
         gamma=float(case.r) + 1.0,
@@ -253,7 +253,7 @@ def run_menahem_subsonic_reference(
         E_list.append(E_rad)
         p_list.append(sol["pressure"])
 
-    return times, p_list, np.array(x_list)/19.32
+    return times, p_list, np.array(x_list) / float(case.rho0)
 
     # return RadiationSimData(
     #     times=times,

@@ -166,38 +166,41 @@ def test_profiles_omega():
     Tb = Units.hev_kelvin * (1./time_rise)**tau
     rho0 = 19.32
     # omega = 0.
-    omega = 0.2
+    omega = 0.5
 
     # MORDI Au
-    # alpha=1.5
-    # beta=1.6
-    # f=3.4*1e13/(Units.hev_kelvin**beta)
-    # g=1/(7200*Units.hev_kelvin**alpha)
-    # mat=dict(
-    #     tau=tau,
-    #     alpha=alpha,
-    #     beta=beta,
-    #     lambdap=0.2,
-    #     mu=0.14,
-    #     gamma=1.25,
-    #     Tb=Tb,
-    #     g=g,
-    #     f=f,
-    # )
-
+    alpha=1.5
+    beta=1.6
+    f=3.4*1e13/(Units.hev_kelvin**beta)
+    g=1/(7200*Units.hev_kelvin**alpha)
     mat=dict(
-        tau=tau,
-        g=5.682464574187187e-6,
-        alpha=0.23183890413119132,
-        lambdap=0.13829986198312327,
-        f_heat=3168.6938116243796,
-        beta_heat=1.6525149133503083,
-        mu_heat=0.1206770123528319,
-        gamma_heat=1.262299832903183,
+        tau=0,
+        alpha=alpha,
+        lambdap=0.2,
         Tb=Tb,
-        rho0=19.3,
+        g=g,
+        f_heat=f,
+        beta_heat=beta,
+        mu_heat=0.14,
+        gamma_heat=1.25,
+        rho0=19.32,
         omega=omega,
     )
+
+    # mat=dict(
+    #     tau=tau,
+    #     g=5.682464574187187e-6,
+    #     alpha=0.23183890413119132,
+    #     lambdap=0.13829986198312327,
+    #     f_heat=3168.6938116243796,
+    #     beta_heat=1.6525149133503083,
+    #     mu_heat=0.1206770123528319,
+    #     gamma_heat=1.262299832903183,
+    #     Tb=Tb,
+    #     rho0=19.3,
+    #     omega=omega,
+    # )
+
     
     for key in ["f_heat", "beta_heat", "mu_heat", "gamma_heat"]:
         mat[key.replace("_heat", "_shock")] = mat[key]
@@ -222,7 +225,8 @@ def test_profiles_omega():
     L = 1e-3
     ############
     
-    times = np.linspace(0., 2.061e-9*3., 500)
+    # times = np.linspace(0., 2.061e-9*3., 500)
+    times = np.linspace(0, 2e-9, 1000)
     m_ab = [solver.heat_solver.ablated_mass(time=t) for t in times]
     # x_boundary = np.array([solver.boundary_position(time=t) for t in times])
 
@@ -236,7 +240,7 @@ def test_profiles_omega():
     plt.ylabel("ablated mass [g]", fontsize=12)
     plt.xlabel("time [sec]", fontsize=12)
     plt.suptitle(solver.heat_solver.title, fontsize=12)
-    plt.show()
+    # plt.show()
 
     # plt.plot(times, -x_boundary)
     # plt.grid()
@@ -276,7 +280,7 @@ def test_profiles_omega():
     for it, time in enumerate(np.array([0.25,0.5,0.75])*times[-1]):
         solution = solver.solve(mass=mass, time=time)
         
-        for use_r in [True, False]:
+        for use_r in [False]:
             for fg in ["density", "velocity", "pressure", "temperature"]:
                 plt.figure(fg+str(use_r))
                 if use_r: 
@@ -291,7 +295,7 @@ def test_profiles_omega():
                     plt.axvline(x=solution["ablated_mass"], lw=2, c="k", ls="--")
                     if fg == "density" and it==0:
                         plt.plot(mass_from_cells, density, ls="--", c="r", lw=2, label=f"inital density")
-    for use_r in [True, False]:
+    for use_r in [False]:
         for fg in ["density", "velocity", "pressure", "temperature"]:
             plt.figure(fg+str(use_r))
             plt.legend()
@@ -578,5 +582,5 @@ def test_profiles():
 
 if __name__ == "__main__":
 
-    test_profiles()
-    # test_profiles_omega()
+    # test_profiles()
+    test_profiles_omega()

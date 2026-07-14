@@ -184,15 +184,23 @@ def _build_mass_grid(
     (uniform initial density), and prepend a tiny cell so the solver has a
     well-defined minimum mass strictly greater than zero.
     """
-    L = float(case.x_max)
+    L = case.x_max
     coordinate = np.array(list(sorted(set(
-        list(np.linspace(0., L, num_cells+1)) \
+        list(np.linspace(0., L/1000, num_cells*6)) +\
+        list(np.linspace(L/1000, L/20, num_cells*6)) +\
+        list(np.linspace(L/20, L/3., num_cells)) +\
+        list(np.linspace(L/3., L, num_cells+1))
     ))))
-    dx = np.diff(coordinate)
-    density = np.full_like(dx, float(case.rho0))
+
+    dx = coordinate[1:] - coordinate[:-1]
+    rcell = 0.5*(coordinate[1:] + coordinate[:-1])
+
+    density = case.rho0 / (1.-case.omega) * (coordinate[1:]**(1.-case.omega) - coordinate[:-1]**(1.-case.omega))/(coordinate[1:] - coordinate[:-1])
+
+    # exact integral of mass in each cell gives this density
     mass_cells = density * dx
-    mass = np.cumsum(mass_cells)
-    mass = np.array([1e-30, 1e-7*mass[0]] + list(mass))
+    mass_from_cells = np.cumsum(mass_cells)
+    mass = np.array([1e-30, 1e-7*mass_from_cells[0]]+ list(mass_from_cells))
     return mass
 
 
@@ -351,11 +359,7 @@ def run_menahem_piecewise_reference(
         f"tau={kwargs['tau']:g}, rho0={kwargs['rho0']:g}"
     )
     solver = AblationSolver(**kwargs)
-
-    
-    mass = _build_mass_grid(case, num_cells=num_cells)
-
-
+    mass = _build_mass_grid(case, num_cells=num_cells*10)
 
     m_list: list[np.ndarray] = []
     x_list: list[np.ndarray] = []

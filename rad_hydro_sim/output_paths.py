@@ -51,6 +51,30 @@ def get_menahem_reproduction_figures_dir() -> Path:
     base.mkdir(parents=True, exist_ok=True)
     return base
 
+def sanitize_filename(name: str) -> str:
+    """Sanitize arbitrary strings (including titles with LaTeX math) into safe filenames."""
+    if not name:
+        return "run"
+    safe = (
+        name.replace(" ", "_")
+        .replace("\\", "_")
+        .replace("/", "_")
+        .replace("$", "")
+        .replace("=", "")
+        .replace("(", "")
+        .replace(")", "")
+        .replace("{", "")
+        .replace("}", "")
+        .replace(",", "")
+        .replace(":", "")
+        .replace("~", "_")
+        .replace("^", "")
+    )
+    while "__" in safe:
+        safe = safe.replace("__", "_")
+    return safe.strip("_")
+
+
 def make_rad_hydro_output_paths(case_name: str) -> Tuple[Path, Path]:
     """
     (png_path, gif_path) for a given case name.
@@ -61,19 +85,12 @@ def make_rad_hydro_output_paths(case_name: str) -> Tuple[Path, Path]:
     gif_dir = base / "gif"
     png_dir.mkdir(parents=True, exist_ok=True)
     gif_dir.mkdir(parents=True, exist_ok=True)
-    safe = (
-        (case_name or "rad_hydro_run")
-        .replace(" ", "_")
-        .replace("=", "")
-        .replace("(", "")
-        .replace(")", "")
-        .replace(",", "")
-        .replace(":", "")
-    )
+    safe = sanitize_filename(case_name)
     return png_dir / f"{safe}.png", gif_dir / f"{safe}.gif"
 
 
 def get_rad_hydro_npz_path(base_name: str, prefix: str = "sim_data") -> Path:
     """Full path for an NPZ file in rad_hydro_sim/data. E.g. prefix='sim_data', base_name='fig_10' -> data/sim_data_fig_10.npz."""
-    safe = (base_name or "run").replace(" ", "_").replace("=", "").replace("(", "").replace(")", "").replace(",", "").replace(":", "")
+    safe = sanitize_filename(base_name)
     return get_rad_hydro_data_dir() / f"{prefix}_{safe}.npz"
+

@@ -50,6 +50,7 @@ class DrivenShockCase(HydroCase):
     u0: float = 0.0
     P0: float = 1.0
     tau: float = 0.0  # tau=0 means constant pressure drive
+    omega: float = 0.0
 
     def p_left(self, t: float) -> float:
         """Compute boundary pressure at time t."""
@@ -112,9 +113,20 @@ def init_driven_shock(x_nodes: np.ndarray, case: DrivenShockCase) -> HydroState:
     geom = case.geom if case.geom is not None else planar()
     gamma = case.gamma
     rho0, p0, u0 = case.rho0, case.p0, case.u0
+    omega = getattr(case, "omega", 0.0)
+    assert omega < 1.0, "Error: omega must be less than 1.0 to avoid singularity at x=0"
 
-    # Cell-centered fields (uniform)
-    rho = np.full(N, float(rho0))
+    dx = x_nodes[1:] - x_nodes[:-1]
+    if omega != 0.0:
+        if omega != 1.0:
+            m_cells_analytic = (rho0 / (1.0 - omega)) * (x_nodes[1:] ** (1.0 - omega) - x_nodes[:-1] ** (1.0 - omega))
+        else:
+            x_nodes_non_zero = np.where(x_nodes == 0.0, 1e-30, x_nodes)
+            m_cells_analytic = rho0 * np.log(x_nodes_non_zero[1:] / x_nodes_non_zero[:-1])
+        rho = m_cells_analytic / dx
+    else:
+        rho = np.full(N, float(rho0))
+
     p = np.full(N, float(p0))
     e = internal_energy_from_prho(p, rho, gamma)
     q = np.zeros_like(rho)

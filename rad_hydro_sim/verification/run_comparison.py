@@ -95,7 +95,7 @@ def _verification_suptitle(case: RadHydroCase, subtitle: str) -> str:
         return sub
     if not sub:
         return preset
-    return f"{preset}\n{sub} ({bc} BC)'"
+    return f"{preset}\n{sub} ({bc} BC)"
 
 
 # =============================================================================
@@ -467,6 +467,7 @@ def run_hydro_only_comparison(
         u0=float(case_rh.u0),
         P0=float(case_rh.P0_Barye),
         tau=float(case_rh.tau),
+        omega=float(case_rh.omega),
         geom=planar(),
         title=f"Power-law pressure drive (τ={case_rh.tau})",
     )
@@ -958,9 +959,9 @@ def run_comparison(
 
 def main() -> None:
     """Entry point: select mode and which reference solver(s) to overlay."""
-    MODE = VerificationMode.FULL_RAD_HYDRO
+    # MODE = VerificationMode.FULL_RAD_HYDRO
     # MODE = VerificationMode.RADIATION_ONLY
-    # MODE = VerificationMode.HYDRO_ONLY
+    MODE = VerificationMode.HYDRO_ONLY
 
     # REFERENCE_SOLVER = ReferenceSolver.BOTH
     # REFERENCE_SOLVER = ReferenceSolver.SHUSSMAN

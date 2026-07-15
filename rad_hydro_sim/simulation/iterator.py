@@ -10,7 +10,7 @@ from tqdm import tqdm
 from project3_code.menahem_new.subsonic_heat_wave_og import SubsonicHeatWave
 from project3_code.hydro_sim.core.eos import internal_energy_from_prho
 from project3_code.hydro_sim.core.geometry import planar
-from project3_code.hydro_sim.core.grid import cell_volumes, masses_from_initial_rho
+from project3_code.hydro_sim.core.grid import cell_volumes, masses_from_initial_rho, make_nodes
 from project3_code.hydro_sim.core.integrator import compute_acceleration_nodes
 from project3_code.hydro_sim.core.state import RadHydroState
 from project3_code.hydro_sim.core.timestep import compute_dt_cfl, update_dt_relchange
@@ -22,7 +22,7 @@ from project3_code.rad_hydro_sim.simulation.radiation_step import (
     a_Kelvin,
     c as radiation_c,
 )
-from project3_code.rad_hydro_sim.output_paths import get_rad_hydro_results_dir
+from project3_code.rad_hydro_sim.output_paths import get_rad_hydro_results_dir, sanitize_filename
 from project3_code.hydro_sim.problems.simulation_config import SimulationConfig
 # from project3_code.verification import _build_mass_grid
 
@@ -33,8 +33,8 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
     omega = case.omega
     assert omega < 1.0, "Error: omega must be less than 1.0 to avoid singularity at x=0"
 
-    # Option B: Uniform spatial grid (dx = const) with exact cell mass integration
-    x_nodes = np.linspace(case.x_min, case.x_max, num=config.N + 1)
+    # Spatial grid: refined near x=0 for omega != 0, uniform for omega == 0
+    x_nodes = make_nodes(case.x_min, case.x_max, config.N, omega=omega)
     x_cells = 0.5 * (x_nodes[:-1] + x_nodes[1:])
     dx = x_nodes[1:] - x_nodes[:-1]
 
@@ -174,17 +174,7 @@ class MarshakMonitor:
         if self.enabled:
             monitor_dir = get_rad_hydro_results_dir() / "monitor"
             monitor_dir.mkdir(parents=True, exist_ok=True)
-            safe_case_name = (
-                case_name.replace(" ", "_")
-                .replace("=", "")
-                .replace("(", "")
-                .replace(")", "")
-                .replace(",", "")
-                .replace(":", "")
-                .replace("$", "")
-                .replace("\\", "")
-                .replace("/", "_")
-            )
+            safe_case_name = sanitize_filename(case_name)
             monitor_path = monitor_dir / f"{safe_case_name}_marshak_monitor.csv"
             self._file = open(monitor_path, "w", newline="", encoding="utf-8")
             self._writer = csv.writer(self._file)
@@ -303,13 +293,13 @@ def compute_boundary_temperatures(
     """
     T_bath = 0.0
 
-    if rad_hydro_case.bc_type == "Marshak":
+    if rad_hydro_case.scenario != "hydro_only" and rad_hydro_case.bc_type in ["Marshak", "Marshak_Menahem"]:
         assert solver is not None, "SubsonicHeatWave solver required for Marshak BC"
         T_bath = solver.Tbath(time=state.t + 1e-20)
         T_surface = (state.E_rad[0] / a_Kelvin) ** 0.25
         T_left = T_bath
         updated_case = replace(rad_hydro_case, T_left=T_left)
-    else: # Dirichlet
+    else:  # Dirichlet or hydro_only
         if rad_hydro_case.T0_Kelvin is None or rad_hydro_case.T0_Kelvin == 0.0:
             T_surface = 0.0
         else:
@@ -357,7 +347,7 @@ def simulate_rad_hydro(
 
     solver = None
     dimensionless_boundary_flux = 0.0
-    if rad_hydro_case.bc_type in ["Marshak", "Marshak_Menahem"]:
+    if rad_hydro_case.scenario != "hydro_only" and rad_hydro_case.bc_type in ["Marshak", "Marshak_Menahem"]:
         solver, dimensionless_boundary_flux = get_dimensionless_boundary_flux(rad_hydro_case)
 
     case_name = rad_hydro_case.title or rad_hydro_case.scenario or "rad_hydro_run"

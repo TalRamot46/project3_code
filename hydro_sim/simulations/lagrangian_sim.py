@@ -12,6 +12,7 @@ from tqdm import tqdm
 from ..core.geometry import planar, spherical, cylindrical, Geometry
 from ..core.integrator import step_lagrangian, compute_acceleration_nodes
 from ..core.timestep import compute_dt_cfl
+from ..core.grid import make_nodes
 from ..problems.driven_shock_problem import init_driven_shock, DrivenShockCase
 from ..problems.riemann_problem import init_riemann, RiemannCase
 from ..problems.sedov_problem import init_sedov, SedovExplosionCase
@@ -129,7 +130,8 @@ def _initialize_problem(
         state = init_riemann(x_nodes, case)
         
     elif sim_type == SimulationType.DRIVEN_SHOCK:
-        x_nodes = np.linspace(case.x_min, case.x_max, Ncells + 1)
+        omega = getattr(case, "omega", 0.0)
+        x_nodes = make_nodes(case.x_min, case.x_max, Ncells, omega=omega)
         state = init_driven_shock(x_nodes, case)
         
     elif sim_type == SimulationType.SEDOV:

@@ -172,35 +172,34 @@ def _ablation_kwargs_from_case(case) -> dict:
 # Lagrangian mass grid used by all three builders
 # ---------------------------------------------------------------------------
 
+from project3_code.hydro_sim.core.grid import make_nodes
+
 def _build_mass_grid(
     case,
     num_cells: int = 400,
 ) -> np.ndarray:
     """Return a monotonically increasing Lagrangian mass coordinate array.
 
-    Based on the discretisation used by Menahem's own tests
-    (see ``menahem_new/ablation_solver.py::test_profiles``): build a dense spatial
-    grid on ``[0, x_max]``, turn it into cumulative mass at ``case.rho0``
-    (uniform initial density), and prepend a tiny cell so the solver has a
-    well-defined minimum mass strictly greater than zero.
+    Uses make_nodes to build the spatial grid (handling both uniform and
+    gradually refined non-uniform omega != 0 grids), converts it into cumulative
+    mass, and prepends a tiny cell for solver mass boundary indexing.
     """
-    L = case.x_max
-    coordinate = np.array(list(sorted(set(
-        list(np.linspace(0., L/1000, num_cells*6)) +\
-        list(np.linspace(L/1000, L/20, num_cells*6)) +\
-        list(np.linspace(L/20, L/3., num_cells)) +\
-        list(np.linspace(L/3., L, num_cells+1))
-    ))))
+    x_min = float(getattr(case, "x_min", 0.0))
+    x_max = float(case.x_max)
+    omega = float(getattr(case, "omega", 0.0))
 
+    coordinate = make_nodes(x_min, x_max, num_cells, omega=omega)
     dx = coordinate[1:] - coordinate[:-1]
-    # rcell = 0.5*(coordinate[1:] + coordinate[:-1])
 
-    density = case.rho0 / (1.-case.omega) * (coordinate[1:]**(1.-case.omega) - coordinate[:-1]**(1.-case.omega))/(coordinate[1:] - coordinate[:-1])
+    if omega != 1.0:
+        density = (case.rho0 / (1.0 - omega)) * (coordinate[1:]**(1.0 - omega) - coordinate[:-1]**(1.0 - omega)) / dx
+    else:
+        coord_non_zero = np.where(coordinate == 0.0, 1e-30, coordinate)
+        density = case.rho0 * np.log(coord_non_zero[1:] / coord_non_zero[:-1]) / dx
 
-    # exact integral of mass in each cell gives this density
     mass_cells = density * dx
     mass_from_cells = np.cumsum(mass_cells)
-    mass = np.array([1e-30, 1e-7*mass_from_cells[0]]+ list(mass_from_cells))
+    mass = np.array([1e-30, 1e-7 * mass_from_cells[0]] + list(mass_from_cells))
     return mass
 
 

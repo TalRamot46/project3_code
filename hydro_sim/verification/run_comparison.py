@@ -34,7 +34,6 @@ from project3_code.hydro_sim.verification.compare_shock_plots import (
     load_hydro_history,
     plot_comparison_in_selected_times,
     plot_comparison_slider,
-    plot_comparison_overlay,
     save_comparison_gif,
 )
 

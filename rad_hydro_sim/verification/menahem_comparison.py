@@ -193,7 +193,7 @@ def _build_mass_grid(
     ))))
 
     dx = coordinate[1:] - coordinate[:-1]
-    rcell = 0.5*(coordinate[1:] + coordinate[:-1])
+    # rcell = 0.5*(coordinate[1:] + coordinate[:-1])
 
     density = case.rho0 / (1.-case.omega) * (coordinate[1:]**(1.-case.omega) - coordinate[:-1]**(1.-case.omega))/(coordinate[1:] - coordinate[:-1])
 
@@ -337,7 +337,7 @@ def run_menahem_piecewise_reference(
     """
 
     num_cells = config.N
-    label = "Menahem (ablation solver)"
+    label = "Analytic"
     color = MENAHEM_COLOR
     linestyle = MENAHEM_LINESTYLE
 
@@ -416,12 +416,12 @@ if __name__ == "__main__":
     # Quick smoke test: heat/ablation presets need T0_Kelvin; piston shock needs P0_Barye.
     from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
     from project3_code.rad_hydro_sim.problems.presets_config import (
-        PRESET_FIG_8_CONSTANT_TEMPERATURE,
+        PRESET_FIG_8_CONSTANT_TEMPERATURE_MARSHAK,
         PRESET_CONSTANT_PRESSURE,
         PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE
     )
 
-    case_heat, _ = get_preset(PRESET_FIG_8_CONSTANT_TEMPERATURE)
+    case_heat, _ = get_preset(PRESET_FIG_8_CONSTANT_TEMPERATURE_MARSHAK)
     case_shock, _ = get_preset(PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE)
     t_heat = np.array([0.25, 0.5, 0.75]) * float(case_heat.t_sec_end)
     t_shock = np.array([0.25, 0.5, 0.75]) * float(case_shock.t_sec_end)

@@ -95,7 +95,7 @@ def _verification_suptitle(case: RadHydroCase, subtitle: str) -> str:
         return sub
     if not sub:
         return preset
-    return f"{preset}\n{sub}\t{f'({bc} BC)' if bc else ''}"
+    return f"{preset}\n{sub} ({bc} BC)'"
 
 
 # =============================================================================
@@ -532,7 +532,7 @@ def run_hydro_only_comparison(
 
     shock_labels = [s.label for s in (primary_shock, *extra_shocks) if s is not None]
     extras_tag = (" + " + " + ".join(shock_labels)) if shock_labels else ""
-    title_base = "Hydro-only: Rad-Hydro vs run_hydro" + extras_tag
+    title_base = "Hydro-only: Rad-Hydro vs Hydro" + extras_tag
     title_fig = _verification_suptitle(case_rh, title_base)
     print("\nPlotting hydro comparison (rho, P, u, e vs x)...")
     if show_plot:
@@ -656,7 +656,7 @@ def run_full_rad_hydro_comparison(
             rad_hydro_case=case,
             simulation_config=config,
         )
-        sim_data = load_rad_hydro_history(history_rh, label="Rad-Hydro Simulation")
+        sim_data = load_rad_hydro_history(history_rh, label="Simulation")
         print(f"Stored {len(sim_data.times)} time steps.")
 
         # save the sim_data to rad_hydro_sim/data/
@@ -744,7 +744,6 @@ def run_full_rad_hydro_comparison(
     sub_full = (
         "Full rad-hydro simulation vs "
         + " + ".join(ref_labels)
-        + " (patching method)"
     )
     title_fig = _verification_suptitle(case, sub_full)
     print("\nPlotting full rad_hydro comparison (rho, P, u, e vs x)...")

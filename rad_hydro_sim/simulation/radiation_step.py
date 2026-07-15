@@ -197,23 +197,6 @@ def calculate_abcd(
             b[0] = b[0] + a[0] + cooling_left
             a[0] = 0.0
             d[0] += cooling_left * E_bath
-    elif bc_type == "Marshak_Menahem":
-        if T_left is None:
-            raise ValueError("T_left must be provided when bc_type='Marshak_Menahem'.")
-        # diffusion constant is c/2 * \Delta x = c * \Delta m / (2 * rho)
-        D_face[0] = c * m_cells[0] / (2.0 * rho[0])
-        
-        flux_coeff_old = flux_coeff[0]
-        flux_coeff[0] = (D_face[0] * rho_face[0]) / m_face[0]
-        
-        # update a[0] and b[0]
-        a[0] = -lagrangian_coeff[0] * flux_coeff[0]
-        b[0] = b[0] - lagrangian_coeff[0] * flux_coeff_old + \
-             lagrangian_coeff[0] * flux_coeff[0]
-        
-        # apply Dirichlet condition
-        E_left = a_Kelvin * (T_left ** 4)
-        d[0] -= a[0] * E_left
     elif bc_type == "Dirichlet":
         E_left = a_Kelvin * (T_left ** 4)
         d[0] -= a[0] * E_left

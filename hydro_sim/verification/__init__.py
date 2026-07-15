@@ -30,7 +30,6 @@ from .compare_shock_plots import (
     load_hydro_history,
     plot_comparison_in_selected_times,
     plot_comparison_slider,
-    plot_comparison_overlay,
     save_comparison_gif,
 )
 
@@ -56,7 +55,6 @@ __all__ = [
     "load_hydro_history",
     "plot_comparison_in_selected_times",
     "plot_comparison_slider",
-    "plot_comparison_overlay",
     "save_comparison_gif",
     # Runner
     "run_comparison",

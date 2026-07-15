@@ -80,7 +80,7 @@ class RadHydroCase(ABC):
     # - "Marshak": Marshak (P1) boundary condition using a bath temperature drive
     # - "Marshak_Menahem": Equivalent Dirichlet implementation of Marshak
     # - "Dirichlet": classical Dirichlet style (fixed left face temperature)
-    bc_type: Literal["Marshak", "Dirichlet", "Marshak_Menahem"] = "Dirichlet"
+    bc_type: Literal["Marshak", "Dirichlet"] = "Dirichlet"
     omega: float = 0.0
 
 

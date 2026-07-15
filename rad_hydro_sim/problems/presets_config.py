@@ -23,6 +23,8 @@ PRESET_COPPER_CONST_TEMPERATURE = "copper_const_temperature"
 PRESET_ALUMINUM_CONST_TEMPERATURE = "aluminum_const_temperature"
 PRESET_OPAQUE_ALUMINUM_CONST_TEMPERATURE = "aluminum_opaque_const_temperature"
 PRESET_FIG_8_CONSTANT_TEMPERATURE = "fig_8_comparison"
+PRESET_FIG_8_CONSTANT_TEMPERATURE_MARSHAK = "fig_8_comparison_marshak"
+PRESET_FIG_8_CONSTANT_TEMPERATURE_OMEGA_0_5 = "fig_8_comparison_omega_0_5"
 PRESET_FIG_9_CONSTANT_FLUX = "fig_9_comparison"
 PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE = "fig_10_comparison"
 PRESET_MATLAB = "matlab_comparison"
@@ -174,7 +176,46 @@ PRESET_TEST_CASES = {
         mu = 0.14, # ensure
 
         # coupling factor
-        chi = 1000,
+        chi = 1,
+
+        # Boundary conditions
+        T0_Kelvin = 1* KELVIN_PER_HEV,
+        P0_Barye = None,
+        tau = 0.00,
+
+        # initial conditions
+        rho0 = 19.32,
+        p0 = None,
+        u0 = None,
+        T_initial_Kelvin = 300, # 300 K in Hev
+
+        # adiabatic index
+        r = 0.25, # r = \gamma_adiabatic - 1
+
+        # grid parameters
+        x_min = 0,
+        x_max = 2.5e-2 / 19.32,
+        t_sec_end = 2e-9,
+
+        initial_condition="temperature, density",
+        scenario="full_rad_hydro",
+        title=r"Fig 8 comparison ($T_0 = 1$ HeV, $\tau = 0$, $Au$, early time)",
+        geom=planar(),
+        times_for_png=np.array([0.05e-9, 0.1e-9, 0.15e-9], dtype=float),
+    ),
+    PRESET_FIG_8_CONSTANT_TEMPERATURE_MARSHAK: RadHydroCase(
+        # Rosen's opacity parameters
+        g_Kelvin = 1.0 / (7200 * KELVIN_PER_HEV**1.5),
+        alpha = 1.5,
+        lambda_ = 0.2,
+
+        # Rosen's specific energy parameters
+        f_Kelvin = 3.4e13 / (KELVIN_PER_HEV**1.6),
+        beta_Rosen = 1.6,
+        mu = 0.14, # ensure
+
+        # coupling factor
+        chi = 1,
 
         # Boundary conditions
         T0_Kelvin = 1* KELVIN_PER_HEV,
@@ -201,7 +242,45 @@ PRESET_TEST_CASES = {
         geom=planar(),
         times_for_png=np.array([0.05e-9, 0.1e-9, 0.15e-9], dtype=float),
         bc_type="Marshak",
-        omega=0.5
+    ),
+    PRESET_FIG_8_CONSTANT_TEMPERATURE_OMEGA_0_5: RadHydroCase(
+        # Rosen's opacity parameters
+        g_Kelvin = 1.0 / (7200 * KELVIN_PER_HEV**1.5),
+        alpha = 1.5,
+        lambda_ = 0.2,
+
+        # Rosen's specific energy parameters
+        f_Kelvin = 3.4e13 / (KELVIN_PER_HEV**1.6),
+        beta_Rosen = 1.6,
+        mu = 0.14, # ensure
+
+        # coupling factor
+        chi = 1,
+
+        # Boundary conditions
+        T0_Kelvin = 1* KELVIN_PER_HEV,
+        P0_Barye = None,
+        tau = 0.00,
+
+        # initial conditions
+        rho0 = 19.32,
+        p0 = None,
+        u0 = None,
+        T_initial_Kelvin = 300, # 300 K in Hev
+
+        # adiabatic index
+        r = 0.25, # r = \gamma_adiabatic - 1
+
+        # grid parameters
+        x_min = 0,
+        x_max = 2.5e-2 / 19.32,
+        t_sec_end = 2e-9,
+
+        initial_condition="temperature, density",
+        scenario="full_rad_hydro",
+        title=r"Fig 8 comparison ($T_0 = 1$ HeV, $\tau = 0$, $\omega=0.5$, $Au$, early time)",
+        geom=planar(),
+        times_for_png=np.array([0.05e-9, 0.1e-9, 0.15e-9], dtype=float),
     ),
     PRESET_COPPER_CONST_TEMPERATURE: RadHydroCase(
         # Rosen's opacity parameters

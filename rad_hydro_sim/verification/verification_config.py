@@ -25,6 +25,8 @@ from project3_code.rad_hydro_sim.problems.presets_config import (
     PRESET_CONSTANT_PRESSURE,
     PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE,
     PRESET_FIG_8_CONSTANT_TEMPERATURE,
+    PRESET_FIG_8_CONSTANT_TEMPERATURE_MARSHAK,
+    PRESET_FIG_8_CONSTANT_TEMPERATURE_OMEGA_0_5,
     PRESET_FIG_9_CONSTANT_FLUX,
     PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE,
     PRESET_MATLAB,
@@ -66,10 +68,9 @@ class ReferenceSolver(str, Enum):
 # Preset names (physical case keys) and mode → preset mapping
 # ============================================================================
 
-RADIATION_ONLY_PRESET = PRESET_CONSTANT_T_RADIATION_ONLY   # constant_temperature_drive
-HYDRO_ONLY_PRESET = PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE                  # constant_pressure_drive
-FULL_RAD_HYDRO_PRESET = PRESET_FIG_8_CONSTANT_TEMPERATURE                  # fig_8_comparison
-# hwllo
+RADIATION_ONLY_PRESET = PRESET_CONSTANT_T_RADIATION_ONLY  
+HYDRO_ONLY_PRESET = PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE            
+FULL_RAD_HYDRO_PRESET = PRESET_FIG_8_CONSTANT_TEMPERATURE_MARSHAK     
 # Map each verification mode to its preset name (SIMPLE_TEST_CASES key)
 MODE_TO_PRESET: dict[VerificationMode, str] = {
     VerificationMode.RADIATION_ONLY: RADIATION_ONLY_PRESET,

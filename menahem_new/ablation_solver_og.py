@@ -277,7 +277,7 @@ def test_profiles_omega():
     mass = np.array([1e-30, 1e-7*mass_from_cells[0]]+ list(mass_from_cells))
 
     ##### plot hydro profiles
-    for it, time in enumerate(np.array([0.25,0.5,0.75])*times[-1]):
+    for it, time in enumerate(np.array([0.5,0.75,1])*times[-1]):
         solution = solver.solve(mass=mass, time=time)
         
         for use_r in [False]:

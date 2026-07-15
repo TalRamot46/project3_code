@@ -31,20 +31,20 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
     # Unpack parameters from case & config
     geom = planar()
     omega = case.omega
-    # Calculate density using the integrated mass formula to handle algebraic profiles (e.g. rho ~ x^-omega)
     assert omega < 1.0, "Error: omega must be less than 1.0 to avoid singularity at x=0"
-    # 1. Calculate total mass in the domain analytically
-    total_mass = (case.rho0 / (1.0 - omega)) * (case.x_max**(1.0 - omega) - case.x_min**(1.0 - omega))
 
-    # 2. Create a uniformly spaced mass grid for the cells
-    m_nodes = np.linspace(0.0, total_mass, num=config.N + 1)
-    m_cells = np.diff(m_nodes)
-    # 3. Invert the mass integral to find the properly warped initial node positions
-    x_nodes = (case.x_min**(1.0 - omega) + (1.0 - omega) / case.rho0 * m_nodes) ** (1.0 / (1.0 - omega))
-    x_cells = 0.5 * (x_nodes[:-1] + x_nodes[1:]) 
+    # Option B: Uniform spatial grid (dx = const) with exact cell mass integration
+    x_nodes = np.linspace(case.x_min, case.x_max, num=config.N + 1)
+    x_cells = 0.5 * (x_nodes[:-1] + x_nodes[1:])
+    dx = x_nodes[1:] - x_nodes[:-1]
 
-    # 4. Now, the cell density can be computed cleanly because Delta m / Delta x matches perfectly
-    rho = (case.rho0 / (1.0 - omega)) * (x_nodes[1:]**(1.0 - omega) - x_nodes[:-1]**(1.0 - omega)) / (x_nodes[1:] - x_nodes[:-1])
+    if omega != 1.0:
+        m_cells_analytic = (case.rho0 / (1.0 - omega)) * (x_nodes[1:]**(1.0 - omega) - x_nodes[:-1]**(1.0 - omega))
+    else:
+        x_nodes_non_zero = np.where(x_nodes == 0.0, 1e-30, x_nodes)
+        m_cells_analytic = case.rho0 * np.log(x_nodes_non_zero[1:] / x_nodes_non_zero[:-1])
+
+    rho = m_cells_analytic / dx
     p = np.zeros_like(x_cells)
     u = np.zeros_like(x_nodes)
     e = np.zeros_like(x_cells)

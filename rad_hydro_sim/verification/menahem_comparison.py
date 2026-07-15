@@ -359,7 +359,7 @@ def run_menahem_piecewise_reference(
         f"tau={kwargs['tau']:g}, rho0={kwargs['rho0']:g}"
     )
     solver = AblationSolver(**kwargs)
-    mass = _build_mass_grid(case, num_cells=num_cells*10)
+    mass = _build_mass_grid(case, num_cells=num_cells)
 
     m_list: list[np.ndarray] = []
     x_list: list[np.ndarray] = []

@@ -280,6 +280,7 @@ def run_menahem_shock_reference(
     label: str = "Menahem (piston shock)",
     color: str = MENAHEM_COLOR,
     linestyle=MENAHEM_LINESTYLE,
+    use_master_grid: bool = True,
 ) -> Optional[HydroSimData]:
     """Build hydro-only reference from Menahem's ``PistonShock``."""
     try:
@@ -295,14 +296,17 @@ def run_menahem_shock_reference(
         return None
 
     kwargs = _shock_kwargs_from_case(case)
-    print(f"  Menahem PistonShock: p0={kwargs['p0']:g} Ba, tau={kwargs['tau']:g}")
+    kwargs["use_master_grid"] = use_master_grid
+    print(f"  Menahem PistonShock: p0={kwargs['p0']:g} Ba, tau={kwargs['tau']:g}, use_master_grid={use_master_grid}")
     solver = PistonShock(**kwargs)
 
     mass = _build_mass_grid(case, num_cells=num_cells)
 
     m_list, x_list = [], []
     rho_list, p_list, u_list, e_list = [], [], [], []
-    for t in times:
+
+    from tqdm import tqdm
+    for t in tqdm(times, desc="Menahem PistonShock"):
         sol = solver.solve(mass=mass, time=float(t))
         m_list.append(mass.copy())
         x_list.append(np.asarray(sol["position"], dtype=float))
@@ -409,6 +413,70 @@ def run_menahem_piecewise_reference(
         color=color,
         linestyle=linestyle,
     )
+
+
+def run_menahem_supersonic_instantaneous_reference(
+    case,
+    times_sec: np.ndarray,
+    num_cells: int = 400,
+    label: str = "Menahem (supersonic instantaneous)",
+    color: str = MENAHEM_COLOR,
+    linestyle=MENAHEM_LINESTYLE,
+) -> Optional[RadiationSimData]:
+    """Build radiation-only reference from ``SupersonicInstantaneousAnalytic``.
+
+    Returns ``RadiationSimData`` with ``T`` in Kelvin and ``E_rad`` in erg/cm^3.
+    """
+    try:
+        from supersonic_instantaneous_analytic import SupersonicInstantaneousAnalytic
+    except ImportError as exc:
+        print(f"  Could not import SupersonicInstantaneousAnalytic: {exc}; skipping.")
+        return None
+
+    times = np.asarray(times_sec, dtype=float).ravel()
+    times = times[times > 0.0]
+    if times.size == 0:
+        print("  Menahem supersonic instantaneous: no positive times provided; skipping.")
+        return None
+
+    kwargs = dict(
+        g=float(case.g_Kelvin),
+        alpha=float(case.alpha),
+        lambdap=float(case.lambda_),
+        f=float(case.f_Kelvin),
+        beta=float(case.beta_Rosen),
+        mu=float(case.mu),
+        rho0=float(case.rho0),
+        omega=float(getattr(case, "omega", 0.0)),
+        T0_Kelvin=float(case.T0_Kelvin),
+    )
+
+    solver = SupersonicInstantaneousAnalytic(**kwargs)
+
+    x_grid = np.linspace(float(case.x_min or 1e-12), float(case.x_max), num_cells)
+
+    x_list: list[np.ndarray] = []
+    T_list: list[np.ndarray] = []
+    E_list: list[np.ndarray] = []
+
+    for t in times:
+        T_K = solver.temperature_profile(x_grid, float(t))
+        E_rad = a_Kelvin * (T_K ** 4)
+
+        x_list.append(x_grid.copy())
+        T_list.append(T_K)
+        E_list.append(E_rad)
+
+    return RadiationSimData(
+        times=times,
+        x=x_list,
+        T=T_list,
+        E_rad=E_list,
+        label=label,
+        color=color,
+        linestyle=linestyle,
+    )
+
 
 
 if __name__ == "__main__":

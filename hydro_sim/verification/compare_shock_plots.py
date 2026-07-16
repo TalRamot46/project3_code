@@ -571,6 +571,8 @@ def plot_comparison_slider(
     ax_rho.set_ylabel(r"$\rho$ [g/cm³]")
     ax_rho.legend(loc="best")
     ax_rho.grid(True, alpha=0.3)
+    ax_rho.set_yscale('log')
+    
     
     ax_p.set_ylabel(r"$P$ [MBar]")
     ax_p.grid(True, alpha=0.3)

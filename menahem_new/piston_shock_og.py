@@ -40,7 +40,9 @@ class PistonShock():
                  p0,        # boundary pressure coeff
                  tau,       # boundary pressure temporal power
                  gamma,     # adiabatic index
-                 ode_scheme="dopri5"):
+                 ode_scheme: str = "dopri5",
+                 use_master_grid: bool = True,
+    ):
 
         logger.info(f"creating a PistonShock calculator...")
 
@@ -50,6 +52,7 @@ class PistonShock():
         self.tau = tau
         self.gamma = gamma
         self.ode_scheme = ode_scheme
+        self.use_master_grid = use_master_grid
 
         logger.info(f"rho0={self.rho0:g}")
         logger.info(f"omega={self.omega:g}")
@@ -128,6 +131,14 @@ class PistonShock():
 
         self.set_energy_integrals()
         self.shocked_mass(time=1)
+
+        if self.use_master_grid:
+            # Pre-compute master dimensionless self-similar profiles ONCE on [xsi_origin, xsi_s]
+            xsi_origin = NumericalParameters.xsi_origin
+            xsi_lin = np.linspace(xsi_origin, self.xsi_s * (1.0 - 1e-12), 4000)
+            xsi_log = np.logspace(np.log10(xsi_origin), np.log10(self.xsi_s * (1.0 - 1e-12)), 4000)
+            self.xsi_master = np.unique(np.sort(np.concatenate(([xsi_origin], xsi_lin, xsi_log, [self.xsi_s]))))
+            self.V_master, self.U_master, self.P_master = self.get_self_similar_profiles(xsi_vec=self.xsi_master)
 
     def initial_specific_volume(self, *, mass):
         """
@@ -252,8 +263,14 @@ class PistonShock():
 
         assert xsi_vec[-1] > 100 * NumericalParameters.xsi_origin
 
-        # self similar profiles
-        V, U, P = self.get_self_similar_profiles(xsi_vec=xsi_vec)
+        if self.use_master_grid:
+            # self similar profiles (interpolated from time-independent master profiles)
+            V = np.interp(xsi_vec, self.xsi_master, self.V_master, left=0.0, right=0.0)
+            U = np.interp(xsi_vec, self.xsi_master, self.U_master, left=0.0, right=0.0)
+            P = np.interp(xsi_vec, self.xsi_master, self.P_master, left=0.0, right=0.0)
+        else:
+            # Re-evaluate ODE for exact xsi_vec on every timestep
+            V, U, P = self.get_self_similar_profiles(xsi_vec=xsi_vec)
 
         position = np.array([
              # shocked region
@@ -296,8 +313,7 @@ class PistonShock():
             velocity=u, 
             pressure=p,
             sie=p*v/self.r, #specific internal energy
-        )
-        
+        )        
     def get_shock_values(self,*, xsi_s):
         """
         get the values of the self similar profiles at the shock front

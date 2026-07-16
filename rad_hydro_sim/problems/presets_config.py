@@ -32,6 +32,7 @@ PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE = "fig_10_comparison"
 PRESET_MATLAB = "matlab_comparison"
 PRESET_MALKA_HEIZLER = "malka_heizler_comparison"
 PRESET_MENAHEM_ABLATION_COMPARISON = "menahem_ablation_comparison"
+PRESET_SUPERSONIC_INSTANTANEOUS_ANALYTIC = "supersonic_instantaneous_analytic"
 from project3_code.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 from project3_code.hydro_sim.problems.simulation_config import (
     SIMULATION_CONFIGS,
@@ -278,7 +279,7 @@ PRESET_TEST_CASES = {
 
         # grid parameters
         x_min = 0.0,
-        x_max = 5e-2 / 19.32,
+        x_max = 3e-2 / 19.32,
         t_sec_end = 2.0e-9, # should be 1ns to compare to fig7
 
         initial_condition="pressure, velocity, density",
@@ -364,11 +365,12 @@ PRESET_TEST_CASES = {
         t_sec_end = 2e-9,
 
         initial_condition="temperature, density",
-        scenario="radiation_only",
-        title=r"Constant temperature radiation only ($\\omega=0.5$, $Au$, $2~ns$)",
+        scenario="full_rad_hydro",
+        title=r"Constant temperature radiation only ($\omega=0.5$, $Au$, $2~ns$)",
         geom=planar(),
         times_for_png=np.array([0.05e-9, 0.1e-9, 0.15e-9], dtype=float),
         bc_type="Marshak",
+        omega=0.5
     ),
     PRESET_COPPER_CONST_TEMPERATURE: RadHydroCase(
         # Rosen's opacity parameters
@@ -686,6 +688,46 @@ PRESET_TEST_CASES = {
         title="Prset Menahem Ablation Comparison (T0=Tb HeV, t=1 ns, Malka & Heizler verification)",
         geom=planar(),
         force_black = None
+    ),
+    PRESET_SUPERSONIC_INSTANTANEOUS_ANALYTIC: RadHydroCase(
+        # Rosen's opacity parameters
+        g_Kelvin = 1.0 / (7200 * KELVIN_PER_HEV**1.5),
+        alpha = 1.5,
+        lambda_ = 0.2,
+
+        # Rosen's specific energy parameters
+        f_Kelvin = 3.4e13 / (KELVIN_PER_HEV**1.6),
+        beta_Rosen = 1.6,
+        mu = 0.14,
+
+        # coupling factor
+        chi = 1e3,
+
+        # Boundary conditions
+        T0_Kelvin = 1 * KELVIN_PER_HEV,
+        P0_Barye = None,
+        tau = -0.14534769833496573,
+
+        # initial conditions
+        rho0 = 19.32,
+        omega = 0.3,
+        p0 = None,
+        u0 = None,
+        T_initial_Kelvin = 300, # 300 K
+
+        # adiabatic index
+        r = 0.25,
+
+        # grid parameters
+        x_min = 1e-12,
+        x_max = 5e-3 / 19.32,
+        t_sec_end = 1e-9,
+
+        initial_condition="temperature, density",
+        scenario="radiation_only",
+        title=r"Supersonic Instantaneous Radiation Wave ($\omega=0.3$, $Au$, radiation_only)",
+        geom=planar(),
+        bc_type="Dirichlet",
     )
 }
 

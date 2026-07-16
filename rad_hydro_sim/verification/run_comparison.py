@@ -65,8 +65,11 @@ from project3_code.rad_hydro_sim.verification.menahem_comparison import (
     run_menahem_subsonic_reference,
     run_menahem_shock_reference,
     run_menahem_piecewise_reference,
+    run_menahem_supersonic_instantaneous_reference,
 )
-
+from project3_code.rad_hydro_sim.problems.presets_config import (
+    PRESET_SUPERSONIC_INSTANTANEOUS_ANALYTIC,
+)
 from project3_code.rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 
 KELVIN_PER_HEV = 1_160_500
@@ -278,7 +281,7 @@ def run_radiation_only_comparison(
             linestyle="--",
         )
 
-    # Semi-analytic extras: Supersonic (Shussman) and/or SubsonicHeatWave (Menahem)
+    # Semi-analytic extras: Supersonic (Shussman) and/or Menahem references
     extra_refs: list[RadiationSimData] = []
     if not skip_supersonic and reference_solver.use_shussman:
         print("Running Supersonic solver (radiation self-similar) reference...")
@@ -286,6 +289,28 @@ def run_radiation_only_comparison(
         if super_data is not None:
             print(f"Stored {len(super_data.times)} time steps (Shussman supersonic).")
             extra_refs.append(super_data)
+
+    if reference_solver.use_menahem:
+        times_sec = (
+            _snapshot_times_for_png(case, config)
+            if (skip_rad_hydro or history is None)
+            else history.t
+        )
+        if preset_name == PRESET_SUPERSONIC_INSTANTANEOUS_ANALYTIC:
+            print("Running Menahem Supersonic Instantaneous reference...")
+            menahem_data = run_menahem_supersonic_instantaneous_reference(
+                case, times_sec=times_sec
+            )
+            if menahem_data is not None:
+                print(f"Stored {len(menahem_data.times)} time steps (Menahem supersonic instantaneous).")
+                extra_refs.append(menahem_data)
+        else:
+            print("Running Menahem subsonic heat wave reference...")
+            menahem_data = run_menahem_subsonic_reference(case, times_sec=times_sec)
+            if menahem_data is not None:
+                print(f"Stored {len(menahem_data.times)} time steps (Menahem subsonic).")
+                extra_refs.append(menahem_data)
+
 
     # Need at least one radiation curve to plot; pair sim_data and ref_data up
     # sensibly if one is missing so the primary plot signature stays happy.
@@ -505,7 +530,8 @@ def run_hydro_only_comparison(
     shock_data = None
     menahem_shock = None
     if not skip_shock_solver and (sim_data is not None or ref_data is not None):
-        times_source = sim_data.times if sim_data is not None else ref_data.times
+        # choose one out of 10 in sim_data.times
+        times_source = sim_data.times[::10] if sim_data is not None else ref_data.times[::10]
         if reference_solver.use_shussman:
             print("Running Shussman shock solver (P0*t^τ)...")
             shock_data = run_shock_solver_hydro_reference(case_rh, times_source)
@@ -959,9 +985,9 @@ def run_comparison(
 
 def main() -> None:
     """Entry point: select mode and which reference solver(s) to overlay."""
-    # MODE = VerificationMode.FULL_RAD_HYDRO
+    MODE = VerificationMode.FULL_RAD_HYDRO
     # MODE = VerificationMode.RADIATION_ONLY
-    MODE = VerificationMode.HYDRO_ONLY
+    # MODE = VerificationMode.HYDRO_ONLY
 
     # REFERENCE_SOLVER = ReferenceSolver.BOTH
     # REFERENCE_SOLVER = ReferenceSolver.SHUSSMAN

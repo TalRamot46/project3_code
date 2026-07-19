@@ -102,7 +102,7 @@ class SupersonicInstantaneousAnalytic:
 
         # Dimension 1D planar
         self.d = 1
-        self.Ad = 1.0  # planar areal coefficient
+        self.Ad = self.areal_coeff(self.d)  # planar areal coefficient
 
         # Calculate similarity exponents
         self.n = (4.0 + self.alpha - self.beta) / self.beta
@@ -141,7 +141,7 @@ class SupersonicInstantaneousAnalytic:
         denominator = self.n * (self.Ad ** self.n) * (beta_val ** self.n)
 
         self.xi_0 = (numerator / denominator) ** (1.0 / self.p)
-
+    
         # f(xi -> 0) at origin (Eq. 42 evaluation at xi=0)
         self.f_0 = ( (self.n * (self.xi_0 ** diff_2km)) / (self.p * diff_2km) ) ** (1.0 / self.n)
 
@@ -172,6 +172,13 @@ class SupersonicInstantaneousAnalytic:
             w0_val = (self.Tb_cgs ** self.beta) * self.f * (self.rho0 ** (1.0 - self.mu))
             ratio_Q_A = (w0_val / self.f_0) ** self.p
             self.Q = (ratio_Q_A * (self.A ** (1.0 - self.m))) ** (1.0 / diff_2km)
+
+    def areal_coeff(self, d: int) -> float:
+        """Return areal coefficient for dimension d."""
+        if d == 1: return 1
+        elif d==2: return 2*np.pi
+        elif d==3: return 4*np.pi
+        else: raise ValueError(f"Unsupported dimension d={d}")
 
     def heat_front_radius(self, t_sec: float | np.ndarray) -> float | np.ndarray:
         """Calculate heat front position r_h(t) in cm at time t in seconds."""

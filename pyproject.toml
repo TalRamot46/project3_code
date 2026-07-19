@@ -1,5 +1,5 @@
 [project]
-name = "project3"
+name = "project3_code"
 version = "0.1.0"
 description = "Project 3 Code"
 requires-python = "==3.11.*"
@@ -31,11 +31,23 @@ dependencies = [
 ]
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+# Uses setuptools to support custom path-to-package mapping definitions.
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [tool.pyright]
-extraPaths = [".."]
+extraPaths = ["src"]
 
 [tool.uv]
-package = false
+package = true
+
+[tool.pytest.ini_options]
+pythonpath = [
+  "src"
+]
+
+[tool.setuptools]
+packages = { find = { where = ["src"] } }
+
+[tool.setuptools.package-dir]
+"" = "src"

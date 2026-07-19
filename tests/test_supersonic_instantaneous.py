@@ -6,7 +6,9 @@ import numpy as np
 import scipy.integrate
 import pytest
 
-from project3_code.menahem_new.supersonic_instantaneous_analytic import (
+from rad_hydro_sim.simulation.radiation_step import KELVIN_PER_HEV
+
+from menahem_new.supersonic_instantaneous_analytic import (
     SupersonicInstantaneousAnalytic,
     Units,
 )
@@ -16,13 +18,13 @@ def test_gold_supersonic_instantaneous_solver():
     """Test solver initialization and consistency for Gold parameters."""
     # Au parameters typical for rad-hydro problems
     solver = SupersonicInstantaneousAnalytic(
-        g=1.0, # TODO: Fix these completely false values!
-        alpha=2.0,
-        lambdap=1.0,
-        f=1.0,
+        g=1.0 / (7200 * KELVIN_PER_HEV**1.5), # TODO: Fix these completely false values!
+        alpha=1.5,
+        lambdap=0.2,
+        f=3.4e13 / (KELVIN_PER_HEV**1.6),
         beta=1.6,
-        mu=0.0,
-        rho0=1.0,
+        mu=0.14,
+        rho0=19.32,
         omega=0.3,
         T0_HeV=1.0,
     )

@@ -229,9 +229,9 @@ wheels = [
 ]
 
 [[package]]
-name = "project3"
+name = "project3-code"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "colorama" },
     { name = "contourpy" },

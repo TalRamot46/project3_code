@@ -993,7 +993,7 @@ def main() -> None:
     run_comparison(
         MODE,
         skip_rad_hydro=False,
-        skip_diffusion=False,
+        skip_diffusion=True,
         skip_supersonic=False,
         skip_hydro_sim=False,
         skip_shock_solver=False,

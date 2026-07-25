@@ -691,43 +691,45 @@ PRESET_TEST_CASES = {
     ),
     PRESET_SUPERSONIC_INSTANTANEOUS_ANALYTIC: RadHydroCase(
         # Rosen's opacity parameters
-        g_Kelvin = 1.0 / (7200 * KELVIN_PER_HEV**1.5),
-        alpha = 1.5,
-        lambda_ = 0.2,
+        # Rosen's opacity parameters
+        g_Kelvin = 1.0 / (KELVIN_PER_HEV**2),
+        alpha = 2,
+        lambda_ = 1,
 
         # Rosen's specific energy parameters
-        f_Kelvin = 3.4e13 / (KELVIN_PER_HEV**1.6),
+        f_Kelvin = 1.0 / (KELVIN_PER_HEV**1.6),
         beta_Rosen = 1.6,
-        mu = 0.14,
+        mu = 0, # ensure
 
         # coupling factor
-        chi = 1e3,
+        chi = 1,
 
         # Boundary conditions
-        T0_Kelvin = 1 * KELVIN_PER_HEV,
+        T0_Kelvin = 26560.843307827196,
         P0_Barye = None,
-        tau = -0.14534769833496573,
+        tau =  -0.13888889,
 
         # initial conditions
-        rho0 = 19.32,
-        omega = 0.3,
+        rho0 = 1,
         p0 = None,
         u0 = None,
-        T_initial_Kelvin = 300, # 300 K
+        T_initial_Kelvin = 300, # 300 K in Hev
 
         # adiabatic index
-        r = 0.25,
+        r = 0.25, # r = \gamma_adiabatic - 1
 
         # grid parameters
         x_min = 1e-12,
-        x_max = 5e-3 / 19.32,
-        t_sec_end = 1e-9,
+        x_max = 0.1333,
+        t_sec_end = 6.453e-31,
 
         initial_condition="temperature, density",
         scenario="radiation_only",
-        title=r"Supersonic Instantaneous Radiation Wave ($\omega=0.3$, $Au$, radiation_only)",
+        title=r"Constant temperature radiation only ($\omega=0.2$,$0.5~ns$)",
         geom=planar(),
+        times_for_png=np.array([0.1e-9, 0.25e-9, 0.5e-9], dtype=float),
         bc_type="Dirichlet",
+        omega=0.2
     )
 }
 

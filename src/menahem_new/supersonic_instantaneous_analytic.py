@@ -28,17 +28,17 @@ All calculations internal to the class use CGS units (cm, g, s, K, erg).
 Convenience arguments accept T0 in HeV/Kelvin and t in ns/s.
 """
 
-from __future__ import annotations
+# from __future__ import annotations
 
 import math
 import numpy as np
 import scipy.special
-
+import matplotlib.pyplot as plt
 
 class Units:
     sigma_sb = 5.670374419e-5   # erg / (cm^2 s K^4)
     clight = 2.99792458e10      # cm / s
-    arad = 4.0 * sigma_sb / clight  # erg / (cm^3 K^4)
+    a_rad = 4.0 * sigma_sb / clight  # erg / (cm^3 K^4)
     ev_kelvin = 1.160451812e4   # K / eV
     hev_kelvin = 100.0 * ev_kelvin # K / hundred-eV (HeV)
     nsec = 1e-9                 # s / ns
@@ -90,6 +90,7 @@ class SupersonicInstantaneousAnalytic:
         T0_HeV: float = 1.0,
         T0_Kelvin: float | None = None,
         Q: float | None = None,
+        d: float = 1,
     ):
         self.g = float(g)
         self.alpha = float(alpha)
@@ -101,7 +102,7 @@ class SupersonicInstantaneousAnalytic:
         self.omega = float(omega)
 
         # Dimension 1D planar
-        self.d = 1
+        self.d = float(d)
         self.Ad = self.areal_coeff(self.d)  # planar areal coefficient
 
         # Calculate similarity exponents
@@ -113,7 +114,7 @@ class SupersonicInstantaneousAnalytic:
         self.m = self.omega * (1.0 - self.mu)
 
         # Exponent p (Eq. 24 for d=1)
-        self.p = 2.0 - self.k - self.m + (1.0 - self.m) * self.n
+        self.p = 2.0 - self.k - self.m + (self.d - self.m) * self.n
 
         if self.p <= 0:
             raise ValueError(f"Propagation condition p > 0 violated: p = {self.p}")
@@ -124,17 +125,17 @@ class SupersonicInstantaneousAnalytic:
         # A = (16 * sigma_sb * g) / (3 * beta * f^((4+alpha)/beta) * rho0^(1 + lambda + (1-mu)*(4+alpha)/beta))
         exp_f = (4.0 + self.alpha) / self.beta
         exp_rho = 1.0 + self.lambdap + (1.0 - self.mu) * exp_f
-        self.A = (16.0 * Units.sigma_sb * self.g) / (3.0 * self.beta * (self.f ** exp_f) * (self.rho0 ** exp_rho))
-
+        self.A_Kelvin = (16.0 * Units.sigma_sb * self.g) / (3.0 * self.beta * (self.f ** exp_f) * (self.rho0 ** exp_rho))
+        self.A_HeV = (16.0 * Units.sigma_sb * Units.hev_kelvin**4 * (self.g*Units.hev_kelvin**alpha)) / (3.0 * self.beta * ((self.f*Units.hev_kelvin**beta) ** exp_f) * (self.rho0 ** exp_rho))
         # Self-similar front coordinate xi_0 calculation (Eq. 44 & 45)
         diff_2km = 2.0 - self.k - self.m
         if math.isclose(diff_2km, 0.0):
             raise ValueError("2 - k - m = 0 is the marginal case (omega = omega_c), handled separately.")
 
         if diff_2km > 0:
-            self.l_param = (1.0 - self.m) / diff_2km
+            self.l_param = (self.d - self.m) / diff_2km
         else:
-            self.l_param = (1.0 / self.n) - (1.0 - self.m) / diff_2km
+            self.l_param = -(1.0 / self.n) - (self.d - self.m) / diff_2km
 
         beta_val = scipy.special.beta(self.l_param, (1.0 / self.n) + 1.0)
         numerator = self.p * (abs(diff_2km) ** (self.n + 1.0))
@@ -147,16 +148,21 @@ class SupersonicInstantaneousAnalytic:
 
         # Drive time exponent tau: T(0, t) = T0 * t^tau (where t is in seconds)
         self.tau = -(1.0 - self.m) / (self.beta * self.p)
+        print("tau", self.tau)
+
 
         # Process T0 / Q inputs:
         # Determine drive amplitude Tb in CGS (Kelvin / s^tau)
-        if Q is not None:
+        if Q is not None:# or True:
+            # Q = 1.0
             self.Q = float(Q)
             # Compute T0 in Kelvin/s^tau from Q via Eq. (41)
             # w(0,t) = (Q^(2-k-m) / (A*t)^(1-m))^(1/p) * f_0
             # T(0,t) = (w(0,t) / (f * rho0^(1-mu)))^(1/beta)
-            factor_w0 = (self.Q ** diff_2km / (self.A ** (1.0 - self.m))) ** (1.0 / self.p) * self.f_0
+            factor_w0 = (self.Q ** diff_2km / (self.A_Kelvin ** (self.d - self.m))) ** (1.0 / self.p) * self.f_0
             self.Tb_cgs = (factor_w0 / (self.f * (self.rho0 ** (1.0 - self.mu)))) ** (1.0 / self.beta)
+            self.T0 = self.Tb_cgs * 1.0e9 ** (-self.tau)
+            pass
         else:
             if T0_Kelvin is not None:
                 T0_k = float(T0_Kelvin)
@@ -171,7 +177,20 @@ class SupersonicInstantaneousAnalytic:
             # Tb_cgs^beta = (f_0 / (f * rho0^(1-mu))) * (Q^(2-k-m) / A^(1-m))^(1/p)
             w0_val = (self.Tb_cgs ** self.beta) * self.f * (self.rho0 ** (1.0 - self.mu))
             ratio_Q_A = (w0_val / self.f_0) ** self.p
-            self.Q = (ratio_Q_A * (self.A ** (1.0 - self.m))) ** (1.0 / diff_2km)
+            self.Q = (ratio_Q_A * (self.A_Kelvin ** (1.0 - self.m))) ** (1.0 / diff_2km)
+            pass
+
+        # t_sec = np.linspace(1e-9, 1e-8, 1000)
+        # r_t = self.front_position(t_sec)
+        # plt.plot(t_sec, r_t, label='front position')
+        # plt.show()
+
+
+    def front_position(self, t_sec: float | np.ndarray):
+        """Calculate heat front position r_h(t) in cm at time t in seconds."""
+        t = np.asarray(t_sec)
+        scale = ((self.Q ** self.n) * self.A_Kelvin * t) ** (1.0 / self.p)
+        return self.xi_0 * scale
 
     def areal_coeff(self, d: int) -> float:
         """Return areal coefficient for dimension d."""
@@ -183,14 +202,15 @@ class SupersonicInstantaneousAnalytic:
     def heat_front_radius(self, t_sec: float | np.ndarray) -> float | np.ndarray:
         """Calculate heat front position r_h(t) in cm at time t in seconds."""
         t = np.asarray(t_sec, dtype=float)
-        r_h = self.xi_0 * ((self.Q ** self.n) * self.A * t) ** (1.0 / self.p)
+        r_h = self.xi_0 * ((self.Q ** self.n) * self.A_Kelvin * t) ** (1.0 / self.p)
         return r_h if r_h.ndim > 0 else float(r_h)
 
     def similarity_variable(self, r_cm: float | np.ndarray, t_sec: float | np.ndarray) -> float | np.ndarray:
         """Calculate dimensionless similarity variable xi = r / (Q^n * A * t)^(1/p)."""
         r = np.asarray(r_cm, dtype=float)
         t = np.asarray(t_sec, dtype=float)
-        scale = ((self.Q ** self.n) * self.A * t) ** (1.0 / self.p)
+        scale = ((self.Q ** self.n) * self.A_Kelvin * t) ** (1.0 / self.p)
+
         return r / scale
 
     def self_similar_profile(self, xi: float | np.ndarray) -> float | np.ndarray:
@@ -216,7 +236,7 @@ class SupersonicInstantaneousAnalytic:
         f_xi = self.self_similar_profile(xi)
 
         diff_2km = 2.0 - self.k - self.m
-        amplitude = ( (self.Q ** diff_2km) / ((self.A * t) ** (1.0 - self.m)) ) ** (1.0 / self.p)
+        amplitude = ( (self.Q ** diff_2km) / ((self.A_Kelvin * t) ** (1.0 - self.m)) ) ** (1.0 / self.p)
         w_val = amplitude * f_xi
         return w_val if w_val.ndim > 0 else float(w_val)
 
@@ -262,7 +282,7 @@ class SupersonicInstantaneousAnalytic:
         mask = (xi < self.xi_0) & (f_xi > 0)
         if np.any(mask):
             r_m = np.maximum(r[mask], 1e-30)
-            numerator = self.A * (r_m ** (self.k - 1.0)) * (w_val[mask] ** (self.n + 1.0)) * (xi[mask] ** diff_2km)
+            numerator = self.A_Kelvin * (r_m ** (self.k - 1.0)) * (w_val[mask] ** (self.n + 1.0)) * (xi[mask] ** diff_2km)
             denominator = self.p * f_xi[mask] ** self.n
             F_val[mask] = numerator / denominator
 

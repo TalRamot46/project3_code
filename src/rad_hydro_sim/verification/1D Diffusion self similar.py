@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 _REPO_PARENT = Path(__file__).resolve().parent.parent.parent
 if str(_REPO_PARENT) not in sys.path:
     sys.path.insert(0, str(_REPO_PARENT))
-from project3_code.rad_hydro_sim.plotting import mpl_style  # noqa: F401 - apply project style
+from rad_hydro_sim.plotting import mpl_style  # noqa: F401 - apply project style
 import tqdm
 
 # eV = 1.60218e-12 erg

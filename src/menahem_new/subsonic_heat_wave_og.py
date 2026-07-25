@@ -543,6 +543,17 @@ class SubsonicHeatWave():
             args=(xsi_f), 
             xtol=NumericalParameters.P0_xtol,
         )
+        # root = scipy.optimize.root(
+        #     fun=self.fPf,
+        #     x0=np.array([NumericalParameters.Pf_initial_guess]),
+        #     args=(xsi_f,),
+        #     method="lm",
+        #     options={
+        #         "xtol": 1e-10,  # tolerance on x
+        #         "ftol": 1e-10,  # tolerance on f(x)
+        #         "maxiter": 200
+        #     }
+        # )
 
         Pf_root = root[0]
         V0, Vp0, P0, Pp0, U0, xsi_min = self.integrate_inward(Pf=Pf_root, xsi_f=xsi_f)
@@ -644,7 +655,7 @@ class SubsonicHeatWave():
             logger.fatal(f"{self.rep}: solver failed T0={self.T0} is too far from 1")
         if fatal:
             self.plot_profiles()
-            sys.exit(1)
+            # sys.exit(1)
 
         # self.set_energy_integrals()
         return self

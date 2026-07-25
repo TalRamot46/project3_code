@@ -17,17 +17,17 @@ from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import numpy as np
 
-from project3_code.rad_hydro_sim.verification.hydro_data import RadHydroSimData
-from project3_code.rad_hydro_sim.simulation.radiation_step import KELVIN_PER_HEV
+from rad_hydro_sim.verification.hydro_data import RadHydroSimData
+from rad_hydro_sim.simulation.radiation_step import KELVIN_PER_HEV
 
 if TYPE_CHECKING:
-    from project3_code.shussman_solvers.shock_solver.materials_shock import Material
-    from project3_code.shussman_solvers.subsonic_solver.materials_sub import MaterialSub
+    from shussman_solvers.shock_solver.materials_shock import Material
+    from shussman_solvers.subsonic_solver.materials_sub import MaterialSub
 
 
 def _rad_hydro_case_to_material_sub(case) -> MaterialSub:
     """Build Shussman subsonic MaterialSub from RadHydroCase (Gold-like)."""
-    from project3_code.shussman_solvers.subsonic_solver.materials_sub import (
+    from shussman_solvers.subsonic_solver.materials_sub import (
         MaterialSub,
         STEFAN_BOLTZMANN_KELVIN,
         HEV_IN_KELVIN,
@@ -55,7 +55,7 @@ def _rad_hydro_case_to_material_sub(case) -> MaterialSub:
 
 def _rad_hydro_case_to_material_shock(case) -> Material:
     """Build Shussman shock Material from RadHydroCase (same physics as subsonic)."""
-    from project3_code.shussman_solvers.shock_solver.materials_shock import (
+    from shussman_solvers.shock_solver.materials_shock import (
             Material,
             HEV_IN_KELVIN,
             STEFAN_BOLTZMANN_KELVIN
@@ -118,7 +118,7 @@ def build_piecewise_reference(
         relevant_heat = find(rho_heat(i,:) <= rho_shock(i,relevant(1)));
         final    = [heat(relevant_heat), shock(relevant)];
     """
-    from project3_code.rad_hydro_sim.simulation.radiation_step import KELVIN_PER_HEV, a_Hev
+    from rad_hydro_sim.simulation.radiation_step import KELVIN_PER_HEV, a_Hev
 
     times = np.asarray(times_sec, dtype=float).ravel()
     n_sub = len(subsonic_data["m_heat"])
@@ -217,8 +217,8 @@ def run_shussman_piecewise_reference(
     the unperturbed region from the end of the shock to m_max = x_max * rho0.
     """
     # importing the subsonic & shock solvers
-    from project3_code.shussman_solvers.subsonic_solver.profiles_for_report_sub import compute_profiles_for_report
-    from project3_code.shussman_solvers.shock_solver.profiles_for_report_shock import (
+    from shussman_solvers.subsonic_solver.profiles_for_report_sub import compute_profiles_for_report
+    from shussman_solvers.shock_solver.profiles_for_report_shock import (
         compute_shock_profiles,
     )
 
@@ -262,7 +262,7 @@ def run_shussman_piecewise_reference(
     return ref
 
 if __name__ == "__main__":
-    from project3_code.rad_hydro_sim.problems.presets_config import PRESET_FIG_8_CONSTANT_TEMPERATURE, PRESET_TEST_CASES
+    from rad_hydro_sim.problems.presets_config import PRESET_FIG_8_CONSTANT_TEMPERATURE, PRESET_TEST_CASES
     case_name = PRESET_FIG_8_CONSTANT_TEMPERATURE
     case = PRESET_TEST_CASES[case_name]
     times_ns = np.array([0.1], dtype=float)

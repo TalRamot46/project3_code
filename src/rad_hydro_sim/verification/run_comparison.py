@@ -160,7 +160,7 @@ def run_supersonic_solver_reference(
     physical time via t_end. Returns RadiationData in the same format as diffusion reference.
     """
     try:
-        from project3_code.shussman_solvers.supersonic_solver import (
+        from shussman_solvers.supersonic_solver import (
             MaterialSuper,
             STEFAN_BOLTZMANN_KELVIN,
             compute_profiles_for_report,
@@ -362,7 +362,7 @@ def run_radiation_only_comparison(
 
 def _rad_hydro_case_to_shock_material(case: RadHydroCase) -> "Material":
     """Build Shussman shock Material from RadHydroCase. Uses f_Kelvin, g_Kelvin."""
-    from project3_code.shussman_solvers.shock_solver.materials_shock import (
+    from shussman_solvers.shock_solver.materials_shock import (
         Material,
         HEV_IN_KELVIN,
     )
@@ -399,10 +399,10 @@ def run_shock_solver_hydro_reference(
     Drive: p_drive(t_ns) = P0_Barye * (t_ns)^tau with t_ns = t_sec * 1e9.
     """
     try:
-        from project3_code.shussman_solvers.shock_solver.profiles_for_report_shock import (
+        from shussman_solvers.shock_solver.profiles_for_report_shock import (
             compute_shock_profiles,
         )
-        from project3_code.hydro_sim.verification.compare_shock_plots import HydroSimData
+        from hydro_sim.verification.compare_shock_plots import HydroSimData
     except ImportError as e:
         print(f"Could not import shock solver: {e}, skipping.")
         return None
@@ -457,15 +457,15 @@ def run_hydro_only_comparison(
     - ``MENAHEM``:  Menahem piston shock only.
     - ``BOTH``:     both, so the two semi-analytic shocks can be cross-checked.
     """
-    from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
-    from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
-    from project3_code.hydro_sim.problems.driven_shock_problem import DrivenShockCase
-    from project3_code.hydro_sim.core.geometry import planar
-    from project3_code.hydro_sim.simulations.lagrangian_sim import (
+    from rad_hydro_sim.problems.presets_utils import get_preset
+    from rad_hydro_sim.simulation.iterator import simulate_rad_hydro
+    from hydro_sim.problems.driven_shock_problem import DrivenShockCase
+    from hydro_sim.core.geometry import planar
+    from hydro_sim.simulations.lagrangian_sim import (
         simulate_lagrangian,
         SimulationType,
     )
-    from project3_code.hydro_sim.verification.compare_shock_plots import (
+    from hydro_sim.verification.compare_shock_plots import (
         plot_comparison_in_selected_times,
         plot_comparison_slider,
         load_rad_hydro_history,
@@ -601,7 +601,7 @@ def run_hydro_only_comparison(
 
 def _pad_rad_hydro_data_to_min_frames(data, min_frames: int = 2, t_end_ns: float | None = None):
     """Duplicate frames so data has at least min_frames entries (for slider)."""
-    from project3_code.rad_hydro_sim.verification.hydro_data import RadHydroSimData
+    from rad_hydro_sim.verification.hydro_data import RadHydroSimData
 
     n = len(data.times)
     if n >= min_frames or n == 0:
@@ -653,15 +653,15 @@ def run_full_rad_hydro_comparison(
     - ``MENAHEM``:  Menahem only.
     - ``BOTH``:     overlay both (the first one becomes the primary ``ref_data``).
     """
-    from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
-    from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
-    from project3_code.rad_hydro_sim.verification.hydro_data import (
+    from rad_hydro_sim.problems.presets_utils import get_preset
+    from rad_hydro_sim.simulation.iterator import simulate_rad_hydro
+    from rad_hydro_sim.verification.hydro_data import (
         RadHydroSimData,
     )
-    from project3_code.rad_hydro_sim.verification.shussman_comparison import (
+    from rad_hydro_sim.verification.shussman_comparison import (
         run_shussman_piecewise_reference,
     )
-    from project3_code.hydro_sim.verification.compare_shock_plots import (
+    from hydro_sim.verification.compare_shock_plots import (
         plot_comparison_in_selected_times,
         plot_comparison_slider,
         load_rad_hydro_history,
@@ -817,9 +817,9 @@ def run_full_rad_hydro_force_black_comparison(
     - force_black="gray"
     - force_black="black"
     """
-    from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
-    from project3_code.rad_hydro_sim.simulation.iterator import simulate_rad_hydro
-    from project3_code.hydro_sim.verification.compare_shock_plots import (
+    from rad_hydro_sim.problems.presets_utils import get_preset
+    from rad_hydro_sim.simulation.iterator import simulate_rad_hydro
+    from hydro_sim.verification.compare_shock_plots import (
         plot_comparison_in_selected_times,
         plot_comparison_slider,
         load_rad_hydro_history,
@@ -983,8 +983,8 @@ def run_comparison(
 def main() -> None:
     """Entry point: select mode and which reference solver(s) to overlay."""
     # MODE = VerificationMode.FULL_RAD_HYDRO
-    MODE = VerificationMode.RADIATION_ONLY
-    # MODE = VerificationMode.HYDRO_ONLY
+    # MODE = VerificationMode.RADIATION_ONLY
+    MODE = VerificationMode.HYDRO_ONLY
 
     # REFERENCE_SOLVER = ReferenceSolver.BOTH
     # REFERENCE_SOLVER = ReferenceSolver.SHUSSMAN

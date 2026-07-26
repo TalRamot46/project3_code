@@ -148,7 +148,6 @@ class SupersonicInstantaneousAnalytic:
 
         # Drive time exponent tau: T(0, t) = T0 * t^tau (where t is in seconds)
         self.tau = -(1.0 - self.m) / (self.beta * self.p)
-        print("tau", self.tau)
 
 
         # Process T0 / Q inputs:

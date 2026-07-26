@@ -21,8 +21,11 @@ def get_front_exponents_and_params(alpha, beta, lambdap, mu, omega):
     else:
         l_d1 = -(1.0 / n) - (1.0 - m) / diff_2km
         l_d3 = -(1.0 / n) - (3.0 - m) / diff_2km
+
+    A_d1 = 1.0
+    A_d3 = 4.0 * np.pi
         
-    return n, k, m, p_d1, p_d3, l_d1, l_d3
+    return n, k, m, p_d1, p_d3, l_d1, l_d3, A_d1, A_d3
 
 
 def calculate_xi0_d1_from_d3(xi_0_d3, alpha, beta, lambdap, mu, omega):
@@ -31,15 +34,14 @@ def calculate_xi0_d1_from_d3(xi_0_d3, alpha, beta, lambdap, mu, omega):
     directly from a given 3D spherical coordinate (xi_0_d3) and 
     the problem's physical material parameters.
     """
-    n, k, m, p_d1, p_d3, l_d1, l_d3 = get_front_exponents_and_params(
+    n, k, m, p_d1, p_d3, l_d1, l_d3, A_d1, A_d3 = get_front_exponents_and_params(
         alpha, beta, lambdap, mu, omega
     )
     
-    second_arg = (1.0 / n) + 1.0
-    beta_d3 = scipy.special.beta(l_d3, second_arg)
-    beta_d1 = scipy.special.beta(l_d1, second_arg)
+    beta_d3 = scipy.special.beta(l_d3, (1.0 / n) + 1.0)
+    beta_d1 = scipy.special.beta(l_d1, (1.0 / n) + 1.0)
     
-    inner_bracket = (p_d1 / (4.0 * np.pi * p_d3)) * (beta_d3 / beta_d1) * (xi_0_d3 ** p_d3)
+    inner_bracket = (p_d1 / p_d3) * (A_d3**n / A_d1**n) * (beta_d3**n / beta_d1**n) * (xi_0_d3 ** p_d3)
     xi_0_d1 = inner_bracket ** (1.0 / p_d1)
     
     return xi_0_d1
@@ -51,7 +53,7 @@ def calculate_xi0_d3_from_d1(xi_0_d1, alpha, beta, lambdap, mu, omega):
     directly from a given 1D planar coordinate (xi_0_d1) and
     the problem's physical material parameters.
     """
-    n, k, m, p_d1, p_d3, l_d1, l_d3 = get_front_exponents_and_params(
+    n, k, m, p_d1, p_d3, l_d1, l_d3, A_d1, A_d3 = get_front_exponents_and_params(
         alpha, beta, lambdap, mu, omega
     )
     
@@ -59,7 +61,7 @@ def calculate_xi0_d3_from_d1(xi_0_d1, alpha, beta, lambdap, mu, omega):
     beta_d3 = scipy.special.beta(l_d3, second_arg)
     beta_d1 = scipy.special.beta(l_d1, second_arg)
     
-    inner_bracket = (xi_0_d1 ** p_d1) * (4.0 * np.pi * p_d3 / p_d1) * (beta_d1 / beta_d3)
+    inner_bracket = (xi_0_d1 ** p_d1) * (A_d1**n / A_d3**n) * (p_d3 / p_d1) * (beta_d1**n / beta_d3**n)
     xi_0_d3 = inner_bracket ** (1.0 / p_d3)
     
     return xi_0_d3
@@ -71,7 +73,7 @@ def calculate_r0_d1_from_d3(r_0_d3, xi_0_d3, alpha, beta, lambdap, mu, omega, Q,
     at time t from a given spherical physical front radius r_0(3, t).
     """
     xi_0_d1 = calculate_xi0_d1_from_d3(xi_0_d3, alpha, beta, lambdap, mu, omega)
-    n, k, m, p_d1, p_d3, l_d1, l_d3 = get_front_exponents_and_params(
+    n, k, m, p_d1, p_d3, l_d1, l_d3, A_d1, A_d3 = get_front_exponents_and_params(
         alpha, beta, lambdap, mu, omega
     )
     
@@ -115,6 +117,7 @@ def run_mode_1(
         T0_HeV=T0_HeV,
         T0_Kelvin=T0_Kelvin,
         Q=Q,
+        d=1
     )
     xi_0_d1 = solver.xi_0
     xi_0_d3 = calculate_xi0_d3_from_d1(
@@ -159,11 +162,11 @@ def run_mode_2(
         T0_HeV=T0_HeV,
         T0_Kelvin=T0_Kelvin,
         Q=Q,
-        d=1,
+        d=3,
     )
     xi_0_d1 = solver.xi_0
     
-    n, k, m, p_d1, p_d3, l_d1, l_d3 = get_front_exponents_and_params(
+    n, k, m, p_d1, p_d3, l_d1, l_d3, A_d1, A_d3 = get_front_exponents_and_params(
         alpha, beta, lambdap, mu, omega
     )
     
@@ -186,10 +189,10 @@ if __name__ == "__main__":
 
     # Example using standard solver parameters
     params = {
-        'g': 1.0 / (hev_kelvin**2.0),
+        'g': 1.0,
         'alpha': 2.0,
         'lambdap': 1.0,
-        'f': 1.0 / (hev_kelvin**1.6),
+        'f': 1.0,
         'beta': 1.6,
         'mu': 0.0,
         'rho0': 1.0,
@@ -210,3 +213,33 @@ if __name__ == "__main__":
     print(f"Given Spherical radius r(d=3) = {assumed_r_d3} cm")
     print(f"Calculated Time of Front      = {t_sec:.6e} seconds")
     print(f"Calculated Planar radius r(d=1)= {r_d1:.6f} cm")
+
+    print("\n=== Sanity Check ===")
+    solver = SupersonicInstantaneousAnalytic(
+        g=params['g'],
+        alpha=params['alpha'],
+        lambdap=params['lambdap'],
+        f=params['f'],
+        beta=params['beta'],
+        mu=params['mu'],
+        rho0=1.0,
+        omega=params['omega'],
+        Q=1.0,
+        d=1
+    )
+    xi_0_d1 = solver.xi_0
+    solver = SupersonicInstantaneousAnalytic(
+        g=params['g'],
+        alpha=params['alpha'],
+        lambdap=params['lambdap'],
+        f=params['f'],
+        beta=params['beta'],
+        mu=params['mu'],
+        rho0=1.0,
+        omega=params['omega'],
+        Q=1.0,
+        d=3
+    )
+    xi_0_d3 = solver.xi_0
+    print(f"Planar Conduction Front xi_0(d=1)  = {xi_0_d1:.6f}")
+    print(f"Spherical Conduction Front xi_0(d=3) = {xi_0_d3:.6f}")

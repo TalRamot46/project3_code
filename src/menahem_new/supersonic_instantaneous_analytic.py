@@ -118,8 +118,8 @@ class SupersonicInstantaneousAnalytic:
 
         if self.p <= 0:
             raise ValueError(f"Propagation condition p > 0 violated: p = {self.p}")
-        if self.omega >= 1.0:
-            raise ValueError(f"Mass divergence condition omega < d (1.0) violated: omega = {self.omega}")
+        if self.omega >= self.d:
+            raise ValueError(f"Mass divergence condition omega < d ({self.d}) violated: omega = {self.omega}")
 
         # Coefficient A (Eq. 15 for d=1)
         # A = (16 * sigma_sb * g) / (3 * beta * f^((4+alpha)/beta) * rho0^(1 + lambda + (1-mu)*(4+alpha)/beta))
@@ -173,10 +173,10 @@ class SupersonicInstantaneousAnalytic:
             self.Tb_cgs = T0_k * (1.0e9 ** self.tau)
 
             # Invert Eq. (41) to determine Q (erg/cm^2) from Tb_cgs:
-            # Tb_cgs^beta = (f_0 / (f * rho0^(1-mu))) * (Q^(2-k-m) / A^(1-m))^(1/p)
+            # Tb_cgs^beta = (f_0 / (f * rho0^(1-mu))) * (Q^(2-k-m) / A^(d-m))^(1/p)
             w0_val = (self.Tb_cgs ** self.beta) * self.f * (self.rho0 ** (1.0 - self.mu))
             ratio_Q_A = (w0_val / self.f_0) ** self.p
-            self.Q = (ratio_Q_A * (self.A_Kelvin ** (1.0 - self.m))) ** (1.0 / diff_2km)
+            self.Q = (ratio_Q_A * (self.A_Kelvin ** (self.d - self.m))) ** (1.0 / diff_2km)
             pass
 
         # t_sec = np.linspace(1e-9, 1e-8, 1000)
@@ -203,6 +203,16 @@ class SupersonicInstantaneousAnalytic:
         t = np.asarray(t_sec, dtype=float)
         r_h = self.xi_0 * ((self.Q ** self.n) * self.A_Kelvin * t) ** (1.0 / self.p)
         return r_h if r_h.ndim > 0 else float(r_h)
+
+    def heat_front_time(self, r_cm: float | np.ndarray) -> float | np.ndarray:
+        """Calculate time in seconds at which the heat front reaches position r_cm.
+
+        Inverts r_h(t) = xi_0 * (Q^n * A * t)^(1/p) for t.
+        """
+        r = np.asarray(r_cm, dtype=float)
+        scale = r / self.xi_0
+        t = (scale ** self.p) / ((self.Q ** self.n) * self.A_Kelvin)
+        return t if t.ndim > 0 else float(t)
 
     def similarity_variable(self, r_cm: float | np.ndarray, t_sec: float | np.ndarray) -> float | np.ndarray:
         """Calculate dimensionless similarity variable xi = r / (Q^n * A * t)^(1/p)."""
@@ -235,7 +245,7 @@ class SupersonicInstantaneousAnalytic:
         f_xi = self.self_similar_profile(xi)
 
         diff_2km = 2.0 - self.k - self.m
-        amplitude = ( (self.Q ** diff_2km) / ((self.A_Kelvin * t) ** (1.0 - self.m)) ) ** (1.0 / self.p)
+        amplitude = ( (self.Q ** diff_2km) / ((self.A_Kelvin * t) ** (self.d - self.m)) ) ** (1.0 / self.p)
         w_val = amplitude * f_xi
         return w_val if w_val.ndim > 0 else float(w_val)
 

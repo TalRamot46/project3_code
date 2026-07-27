@@ -43,6 +43,7 @@ def calculate_D_from_sigma(sigma: np.ndarray) -> np.ndarray:
 def calculate_A(beta: np.ndarray, sigma: np.ndarray, dt: float) -> np.ndarray:
     return chi * beta * sigma * dt * c
 
+
 def calculate_black_abcd(
     D: np.ndarray,
     m_cells: np.ndarray,
@@ -51,9 +52,14 @@ def calculate_black_abcd(
     dt: float,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Build tridiagonal coefficients for the black-physics diffusion update:
-        a_j e_{j-1}^{n+1} + b_j e_j^{n+1} + c_j e_{j+1}^{n+1} = e_j^n
-    using Eq. 340-352 from the docs.
+    Build full-length (N = len(rho)) tridiagonal coefficients for the
+    black-physics diffusion update (single temperature, e = E_rad = e_material):
+        a_j e_{j-1}^{n+1} + b_j e_j^{n+1} + c_j e_{j+1}^{n+1} = d_j
+
+    Mirrors ``calculate_abcd``'s face-weighted construction (same natural
+    outflow behaviour at the right boundary from the edge-padded flux
+    coefficients) but without the matter-radiation coupling term, since e is
+    a single shared field here.
     """
     if HARMONIC_MEAN:
         D_face = harmonic_mean(D[:-1], D[1:])
@@ -62,17 +68,16 @@ def calculate_black_abcd(
 
     dx_cells = m_cells / rho
     dx_face = arithmetic_mean(dx_cells[:-1], dx_cells[1:])
-    dx_j = dx_cells[1:-1]
-    dx_left = dx_face[:-1]
-    dx_right = dx_face[1:]
-    D_left = D_face[:-1]
-    D_right = D_face[1:]
 
-    coeff = dt / dx_j
-    a = -coeff * (D_left / dx_left)
-    b = 1.0 + coeff * (D_left / dx_left + D_right / dx_right)
-    c_coeff = -coeff * (D_right / dx_right)
-    d = e_old[1:-1].copy()
+    flux_coeff = D_face / dx_face  # defined at i=1,...,N-1
+    flux_coeff = np.concatenate(([flux_coeff[0]], flux_coeff, [flux_coeff[-1]]))
+                                  # defined at i=0,1,...,N-1,N
+    lagrangian_coeff = 1.0 / dx_cells  # defined at j=1,...,N
+
+    a = -lagrangian_coeff * flux_coeff[:-1]
+    b = lagrangian_coeff * (flux_coeff[:-1] + flux_coeff[1:]) + 1.0 / dt
+    c_coeff = -lagrangian_coeff * flux_coeff[1:]
+    d = e_old / dt
 
     if np.any(np.isnan(a)) or np.any(np.isnan(b)) or np.any(np.isnan(c_coeff)) or np.any(np.isnan(d)):
         raise ValueError("NaN encountered in black-radiation tridiagonal coefficients.")
@@ -80,6 +85,92 @@ def calculate_black_abcd(
         raise ValueError("Non-positive diagonal encountered in black-radiation tridiagonal system.")
 
     return a, b, c_coeff, d
+
+
+def calculate_conduction_abcd(
+    D: np.ndarray,
+    m_cells: np.ndarray,
+    rho: np.ndarray,
+    E_old: np.ndarray,
+    T: np.ndarray,
+    dt: float,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Tridiagonal coefficients for the paper's nonlinear conduction equation.
+
+    Krief (2021) Eq. (1) stores energy in the *matter* and uses radiation only
+    as the flux potential:
+
+        d(u)/dt = div( D grad(a T^4) ),   u = f T^beta rho^(1-mu)
+
+    Solving implicitly in the flux potential E = a T^4 and linearising u about
+    the old state (du/dE evaluated at T^n) gives
+
+        (E^{n+1} - E^n)/dt = (1/chi_v) div( D grad E^{n+1} ),
+        chi_v = du/dE = f beta T^(beta-1) rho^(1-mu) / (4 a T^3).
+
+    This differs from ``calculate_black_abcd``, which stores the energy in the
+    radiation field itself (d(aT^4)/dt = div(D grad aT^4)) -- a different PDE
+    whenever a T^4 is not the dominant energy reservoir.
+    """
+    if HARMONIC_MEAN:
+        D_face = harmonic_mean(D[:-1], D[1:])
+    else:
+        D_face = arithmetic_mean(D[:-1], D[1:])
+
+    dx_cells = m_cells / rho
+    dx_face = arithmetic_mean(dx_cells[:-1], dx_cells[1:])
+
+    flux_coeff = D_face / dx_face
+    flux_coeff = np.concatenate(([flux_coeff[0]], flux_coeff, [flux_coeff[-1]]))
+
+    chi_v = (f_Kelvin * beta_Rosen * T**(beta_Rosen - 1.0) * rho**(1.0 - mu)) / (4.0 * a_Kelvin * T**3)
+    lagrangian_coeff = 1.0 / (dx_cells * chi_v)
+
+    a = -lagrangian_coeff * flux_coeff[:-1]
+    b = lagrangian_coeff * (flux_coeff[:-1] + flux_coeff[1:]) + 1.0 / dt
+    c_coeff = -lagrangian_coeff * flux_coeff[1:]
+    d = E_old / dt
+
+    if np.any(~np.isfinite(a)) or np.any(~np.isfinite(b)) or np.any(~np.isfinite(c_coeff)) or np.any(~np.isfinite(d)):
+        raise ValueError("Non-finite value in conduction tridiagonal coefficients.")
+    if np.any(b <= 0):
+        raise ValueError("Non-positive diagonal encountered in conduction tridiagonal system.")
+
+    return a, b, c_coeff, d
+
+
+def conduction_radiation_step(
+    state_star: RadHydroState,
+    dt: float,
+    rad_hydro_case: RadHydroCase,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Nonlinear conduction update matching Krief (2021) Eq. (1).
+
+    Returns (new_E, new_T) with E = a T^4 the flux potential.
+    """
+    global alpha, beta_Rosen, mu, f_Kelvin, chi, lambda_, g_Kelvin
+    alpha, beta_Rosen, mu, f_Kelvin, chi, lambda_, g_Kelvin = rad_hydro_case._get_params()
+
+    rho = state_star.rho
+    m_cells = state_star.m_cells
+    E_old = state_star.E_rad if state_star.E_rad is not None else a_Kelvin * state_star.T_material**4
+
+    T = (E_old / a_Kelvin) ** 0.25
+    sigma = calculate_sigma_from_temperature_and_density(T, rho)
+    D = calculate_D_from_sigma(sigma)
+
+    a, b, c_coeff, d = calculate_conduction_abcd(D, m_cells, rho, E_old, T, dt)
+
+    t_drive = max(state_star.t, dt)
+    T0_left = rad_hydro_case.T0_Kelvin if rad_hydro_case.T0_Kelvin is not None else 0.0
+    T_left = T0_left * (t_drive / (10**-9)) ** rad_hydro_case.tau
+    E_left = a_Kelvin * T_left**4
+
+    d[0] -= a[0] * E_left
+    new_E = solve_tridiagonal(a, b, c_coeff, d)
+    new_T = (new_E / a_Kelvin) ** 0.25
+    return new_E, new_T
+
 
 def calculate_flux(
     D: np.ndarray,
@@ -228,7 +319,10 @@ def black_radiation_step(
     m_cells = state_star.m_cells
     e_old = state_star.E_rad if state_star.E_rad is not None else state_star.e_material
 
-    T_material_star = calculate_temperature_from_specific_energy(e_old, rho, f_Kelvin, beta_Rosen, mu)
+    # e_old is the radiation-convention energy density (E = a*T^4), matching
+    # how it was created in initialize_problem and converted back at the end
+    # of this function -- NOT the matter EOS (e = f*T^beta*rho^-mu).
+    T_material_star = (e_old / a_Kelvin) ** 0.25
     sigma = calculate_sigma_from_temperature_and_density(T_material_star, rho)
     D = calculate_D_from_sigma(sigma)
 
@@ -238,10 +332,23 @@ def black_radiation_step(
     T0_left = rad_hydro_case.T0_Kelvin if rad_hydro_case.T0_Kelvin is not None else 0.0
     T_left = T0_left * (t_drive / (10**-9)) ** rad_hydro_case.tau
     e_left = a_Kelvin * T_left**4
-    # classical Dirichlet-like handling for left cell
-    d[0] -= a[0] * e_left
+
+    bc_type = getattr(rad_hydro_case, "bc_type", "Dirichlet")
+    if bc_type == "Marshak":
+        # Free-streaming/effusive boundary flux, independent of the local
+        # (possibly near-zero, cold-material) diffusivity -- matches
+        # calculate_abcd's Marshak treatment for the non-black path.
+        rho_left = float(rho[0])
+        dm_left = float(m_cells[0])
+        cooling_left = c * rho_left / (2.0 * dm_left) if (np.isfinite(dm_left) and dm_left > 0.0) else 0.0
+        b[0] = b[0] + a[0] + cooling_left
+        a[0] = 0.0
+        d[0] += cooling_left * e_left
+    else:
+        # Dirichlet ghost-cell subtraction (matches calculate_abcd's approach;
+        # the solved e[0] is influenced by, not force-set to, e_left).
+        d[0] -= a[0] * e_left
     new_e = solve_tridiagonal(a, b, c_coeff, d)
-    new_e[0] = e_left
 
     new_T = (new_e / a_Kelvin) ** (1 / 4)
     return new_e, new_T
@@ -383,14 +490,19 @@ def radiation_step(
     )
 
     mode = getattr(rad_hydro_case, "force_black", None)
-    # New naming: None | "gray" | "black"
-    valid_modes = (None, "gray", "black")
+    # New naming: None | "gray" | "black" | "conduction"
+    valid_modes = (None, "gray", "black", "conduction")
     if mode not in valid_modes:
         raise ValueError(f"Invalid force_black mode '{mode}'. Expected one of {valid_modes}.")
 
     if mode == "black":
         new_e, new_T = black_radiation_step(state_star, dt, rad_hydro_case)
-        return new_T, new_e, new_T, new_e, np.zeros_like(new_e) # 5 outputs for consistency
+        return new_T, new_e, new_T, new_e, np.zeros_like(new_e), 0.0
+
+    if mode == "conduction":
+        new_E, new_T = conduction_radiation_step(state_star, dt, rad_hydro_case)
+        new_e_material = f_Kelvin * new_T**beta_Rosen * rho**(-mu)
+        return new_T, new_e_material, new_T, new_E, np.zeros_like(new_E), 0.0
 
     # Material temperature from e_star (match working: use T_material for beta and sigma)
     T_material_star = calculate_temperature_from_specific_energy(e_star, rho, f_Kelvin, beta_Rosen, mu)

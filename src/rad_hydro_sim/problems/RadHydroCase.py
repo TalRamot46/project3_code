@@ -67,7 +67,7 @@ class RadHydroCase(ABC):
 
     # Geometry
     geom: Geometry = planar()  # Default to planar geometry
-    force_black: Literal["gray", "black"] | None = None
+    force_black: Literal["gray", "black", "conduction"] | None = None
     times_for_png: np.ndarray = field(
         default_factory=lambda: np.array([], dtype=float)
     )

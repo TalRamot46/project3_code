@@ -440,9 +440,8 @@ def run_menahem_supersonic_instantaneous_reference(
         mu=float(case.mu),
         rho0=float(case.rho0),
         omega=float(getattr(case, "omega", 0.0)),
-        d=3.0,
-        # T0_Kelvin=float(case.T0_Kelvin),
-        Q=float(1),
+        d=1.0,
+        T0_Kelvin=float(case.T0_Kelvin),
     )
 
     solver = SupersonicInstantaneousAnalytic(**kwargs)

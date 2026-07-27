@@ -52,7 +52,10 @@ def update_dt_relchange(dt, new_E, E, new_UR, UR, *, dtfac=0.05, dtmin=2e-15, gr
     Adaptive dt based on max relative change in E and UR.
 
     dtfac: target relative change per step (~0.05 means ~5%)
-    dtmax: absolute cap on dt
+    dtmin: absolute floor on dt. Callers running on timescales far from the
+        nanosecond scale this default was chosen for must pass a value scaled
+        to their own t_end, otherwise the floor swamps the computed dt and
+        this controller silently stops binding.
     growth_cap: allow dt to increase by at most 10% per step (1.1)
     """
     # Protect from division by tiny numbers

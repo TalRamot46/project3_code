@@ -147,7 +147,7 @@ class SupersonicInstantaneousAnalytic:
         self.f_0 = ( (self.n * (self.xi_0 ** diff_2km)) / (self.p * diff_2km) ) ** (1.0 / self.n)
 
         # Drive time exponent tau: T(0, t) = T0 * t^tau (where t is in seconds)
-        self.tau = -(1.0 - self.m) / (self.beta * self.p)
+        self.tau = -(self.d - self.m) / (self.beta * self.p)
 
 
         # Process T0 / Q inputs:
@@ -167,6 +167,7 @@ class SupersonicInstantaneousAnalytic:
                 T0_k = float(T0_Kelvin)
             else:
                 T0_k = float(T0_HeV) * Units.hev_kelvin
+            self.T0 = T0_k
 
             # Convert drive amplitude defined at t_ns = 1 ns to t_sec = 1 s:
             # T(t_ns) = T0_k * t_ns^tau = T0_k * (t_sec / 1e-9)^tau = (T0_k * 1e9^tau) * t_sec^tau

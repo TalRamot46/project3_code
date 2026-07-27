@@ -258,26 +258,40 @@ def compute_adaptive_dt(
     E_rad_last: np.ndarray,
     T_rad_last: np.ndarray,
 ) -> float:
-    """Compute adaptive timestep for hydro, radiation, or coupled rad-hydro simulation steps."""
+    """Compute adaptive timestep for hydro, radiation, or coupled rad-hydro simulation steps.
+
+    All bounds are expressed as fractions of ``t_end`` rather than absolute
+    times. The previous absolute constants (1e-12 s here, 2e-15 s inside
+    ``update_dt_relchange``) were chosen for nanosecond-scale problems and
+    silently dominate on any case running far from that scale, pinning dt to
+    a pure ``dt_prev * 1.1`` ramp regardless of how the solution is evolving.
+    """
+    dt_abs_cap = 1e-3 * t_end       # was 1e-12 s (== 1e-3 * t_end at t_end = 1 ns)
+    dt_floor = 1e-6 * t_end         # was 2e-15 s (~2e-6 * t_end at t_end = 1 ns)
+
     if step <= 2:
-        return min(1e-13, 1e-6 * t_end, t_end - t)
+        return min(1e-6 * t_end, t_end - t)
 
     if scenario == "hydro_only":
         dt_cfl = compute_dt_cfl(state, gamma, CFL)
         if np.isnan(dt_cfl):
-            dt_cfl = min(0.05 * t_end, dt_prev * 1.1, t_end - t, 1e-12)
+            dt_cfl = min(0.05 * t_end, dt_prev * 1.1, t_end - t, dt_abs_cap)
         dt = min(dt_cfl, 0.05 * t_end, dt_prev * 1.1, t_end - t)
     elif scenario == "radiation_only":
-        dt_rel = update_dt_relchange(dt_prev, state.E_rad, E_rad_last, state.T_rad, T_rad_last)
-        dt = min(dt_rel, 0.05 * t_end, dt_prev * 1.1, t_end - t, 1e-12)
+        dt_rel = update_dt_relchange(
+            dt_prev, state.E_rad, E_rad_last, state.T_rad, T_rad_last, dtmin=dt_floor
+        )
+        dt = min(dt_rel, 0.05 * t_end, dt_prev * 1.1, t_end - t, dt_abs_cap)
     elif scenario == "full_rad_hydro":
         dt_cfl = compute_dt_cfl(state, gamma, CFL)
-        dt_rel = update_dt_relchange(dt_prev, state.E_rad, E_rad_last, state.T_rad, T_rad_last)
+        dt_rel = update_dt_relchange(
+            dt_prev, state.E_rad, E_rad_last, state.T_rad, T_rad_last, dtmin=dt_floor
+        )
         dt = min(dt_cfl, dt_rel, 0.05 * t_end, dt_prev * 1.1, t_end - t)
         if np.isnan(dt):
-            dt = min(0.05 * t_end, dt_prev * 1.1, t_end - t, 1e-12)
+            dt = min(0.05 * t_end, dt_prev * 1.1, t_end - t, dt_abs_cap)
     else:
-        dt = min(0.05 * t_end, dt_prev * 1.1, t_end - t, 1e-12)
+        dt = min(0.05 * t_end, dt_prev * 1.1, t_end - t, dt_abs_cap)
 
     return dt
 
@@ -376,6 +390,7 @@ def simulate_rad_hydro(
     store_frame()
     dt_prev = np.inf
     step = 0
+    prev_E_rad, prev_T_rad = state.E_rad, state.T_rad
 
     use_mp_progress = mp_progress is not None and mp_progress_index is not None
     prog_slot = int(mp_progress_index) if use_mp_progress and mp_progress_index is not None else -1
@@ -401,8 +416,8 @@ def simulate_rad_hydro(
                 scenario=rad_hydro_case.scenario,
                 CFL=simulation_config.CFL,
                 gamma=rad_hydro_case.r + 1.0,
-                E_rad_last=E_rad_history[-1],
-                T_rad_last=T_rad_history[-1],
+                E_rad_last=prev_E_rad,
+                T_rad_last=prev_T_rad,
             )
             dt_prev = dt
 
@@ -423,6 +438,7 @@ def simulate_rad_hydro(
             )
 
             pbar.update(new_state.t - state.t)
+            prev_E_rad, prev_T_rad = state.E_rad, state.T_rad
             state = new_state
             if use_mp_progress:
                 mp_progress[prog_slot] = min(1.0, float(state.t) / float(t_end))

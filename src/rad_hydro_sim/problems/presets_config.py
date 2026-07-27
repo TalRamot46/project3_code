@@ -721,13 +721,13 @@ PRESET_TEST_CASES = {
         # grid parameters
         x_min = 1e-12,
         x_max = 0.1333,
-        t_sec_end = 6.453e-31,
+        t_sec_end = 9e-25,
 
         initial_condition="temperature, density",
         scenario="radiation_only",
-        title=r"Constant temperature radiation only ($\omega=0.2$,$0.5~ns$)",
+        title=r"Constant temperature radiation only ($\omega=0.2$)",
         geom=planar(),
-        times_for_png=np.array([0.1e-9, 0.25e-9, 0.5e-9], dtype=float),
+        times_for_png=np.array([0.1, 0.25, 0.5], dtype=float) * 9e-25,
         bc_type="Dirichlet",
         omega=0.2
     )

@@ -129,22 +129,44 @@ class SupersonicInstantaneousAnalytic:
         self.A_HeV = (16.0 * Units.sigma_sb * Units.hev_kelvin**4 * (self.g*Units.hev_kelvin**alpha)) / (3.0 * self.beta * ((self.f*Units.hev_kelvin**beta) ** exp_f) * (self.rho0 ** exp_rho))
         # Self-similar front coordinate xi_0 calculation (Eq. 44 & 45)
         diff_2km = 2.0 - self.k - self.m
-        if math.isclose(diff_2km, 0.0):
-            raise ValueError("2 - k - m = 0 is the marginal case (omega = omega_c), handled separately.")
 
-        if diff_2km > 0:
-            self.l_param = (self.d - self.m) / diff_2km
+        # omega = omega_c (2 - k - m = 0) is the marginal case: Eqs. (42), (44)
+        # and (45) all degenerate there, and the profile takes the logarithmic
+        # form of Eqs. (49)-(50) instead (paper Appendix C).
+        self.marginal = math.isclose(diff_2km, 0.0, abs_tol=1e-12)
+
+        if self.marginal:
+            # Eq. (32) with 1 - k - m = -1 integrates to f^n = (n/p) ln(xi_0/xi),
+            # and p = (d - m) n here, giving Eq. (49). Substituting into the
+            # energy constraint Eq. (29) fixes xi_0 as in Eq. (50).
+            dm = self.d - self.m
+            self.l_param = float("nan")
+            self.xi_0 = (
+                (dm ** (1.0 + 2.0 / self.n))
+                / (self.Ad * scipy.special.gamma(1.0 + 1.0 / self.n))
+            ) ** (1.0 / dm)
+            # f diverges logarithmically at the origin for omega = omega_c
+            # (paper Table I), so the origin temperature is unbounded.
+            self.f_0 = float("inf")
         else:
-            self.l_param = -(1.0 / self.n) - (self.d - self.m) / diff_2km
+            if diff_2km > 0:
+                self.l_param = (self.d - self.m) / diff_2km
+            else:
+                self.l_param = -(1.0 / self.n) - (self.d - self.m) / diff_2km
 
-        beta_val = scipy.special.beta(self.l_param, (1.0 / self.n) + 1.0)
-        numerator = self.p * (abs(diff_2km) ** (self.n + 1.0))
-        denominator = self.n * (self.Ad ** self.n) * (beta_val ** self.n)
+            beta_val = scipy.special.beta(self.l_param, (1.0 / self.n) + 1.0)
+            numerator = self.p * (abs(diff_2km) ** (self.n + 1.0))
+            denominator = self.n * (self.Ad ** self.n) * (beta_val ** self.n)
 
-        self.xi_0 = (numerator / denominator) ** (1.0 / self.p)
-    
-        # f(xi -> 0) at origin (Eq. 42 evaluation at xi=0)
-        self.f_0 = ( (self.n * (self.xi_0 ** diff_2km)) / (self.p * diff_2km) ) ** (1.0 / self.n)
+            self.xi_0 = (numerator / denominator) ** (1.0 / self.p)
+
+            # f(xi -> 0) at origin (Eq. 42 evaluation at xi=0).
+            # For omega > omega_c (2 - k - m < 0) the xi^(2-k-m) term blows up as
+            # xi -> 0, so the profile diverges at the origin (paper Table I).
+            if diff_2km < 0:
+                self.f_0 = float("inf")
+            else:
+                self.f_0 = ( (self.n * (self.xi_0 ** diff_2km)) / (self.p * diff_2km) ) ** (1.0 / self.n)
 
         # Drive time exponent tau: T(0, t) = T0 * t^tau (where t is in seconds)
         self.tau = -(self.d - self.m) / (self.beta * self.p)
@@ -224,14 +246,19 @@ class SupersonicInstantaneousAnalytic:
         return r / scale
 
     def self_similar_profile(self, xi: float | np.ndarray) -> float | np.ndarray:
-        """Evaluate self-similar function f(xi) (Eq. 42)."""
+        """Evaluate self-similar function f(xi) (Eq. 42, or Eq. 49 when marginal)."""
         xi_arr = np.asarray(xi, dtype=float)
         diff_2km = 2.0 - self.k - self.m
         f_val = np.zeros_like(xi_arr)
 
         mask = xi_arr < self.xi_0
         if np.any(mask):
-            inside = (self.n * (self.xi_0 ** diff_2km - xi_arr[mask] ** diff_2km)) / (self.p * diff_2km)
+            if self.marginal:
+                # Eq. (49): f = [ ln(xi_0 / xi) / (d - m) ]^(1/n), diverging at xi -> 0.
+                with np.errstate(divide="ignore"):
+                    inside = np.log(self.xi_0 / xi_arr[mask]) / (self.d - self.m)
+            else:
+                inside = (self.n * (self.xi_0 ** diff_2km - xi_arr[mask] ** diff_2km)) / (self.p * diff_2km)
             # Clip numerical noise near front
             inside = np.maximum(inside, 0.0)
             f_val[mask] = inside ** (1.0 / self.n)

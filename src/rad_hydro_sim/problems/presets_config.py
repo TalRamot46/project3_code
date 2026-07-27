@@ -729,7 +729,13 @@ PRESET_TEST_CASES = {
         geom=planar(),
         times_for_png=np.array([0.1, 0.25, 0.5], dtype=float) * 9e-25,
         bc_type="Dirichlet",
-        omega=0.2
+        omega=0.2,
+        # Krief (2021) Eq. (1) is pure nonlinear conduction: energy is stored in
+        # the matter (u = f T^beta rho^(1-mu)) and radiation enters only as the
+        # flux potential a T^4. The default two-temperature model and the
+        # "black" mode both store energy in a T^4 instead, which for these
+        # benchmark coefficients is ~1e11 times larger -- a different PDE.
+        force_black="conduction",
     )
 }
 

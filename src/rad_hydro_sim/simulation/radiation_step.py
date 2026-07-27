@@ -10,6 +10,10 @@ KELVIN_PER_HEV = Hev_to_erg / k_B  # Conversion factor from keV to Kelvin
 a_Hev = a_Kelvin * KELVIN_PER_HEV**4  # Radiation constant in keV cm^-3 keV^-4
 HARMONIC_MEAN = False
 
+# Picard iteration controls for the nonlinear conduction solve (force_black="conduction").
+PICARD_MAX_ITERS = 50
+PICARD_TOL = 1e-8
+
 import numpy as np
 from dataclasses import dataclass
 from typing import Tuple
@@ -87,13 +91,20 @@ def calculate_black_abcd(
     return a, b, c_coeff, d
 
 
+def _matter_energy_density(T: np.ndarray, rho: np.ndarray) -> np.ndarray:
+    """Paper's u = f T^beta rho^(1-mu) [erg/cm^3] (Krief 2021, Eq. 5 per volume)."""
+    return f_Kelvin * T**beta_Rosen * rho**(1.0 - mu)
+
+
 def calculate_conduction_abcd(
     D: np.ndarray,
     m_cells: np.ndarray,
     rho: np.ndarray,
-    E_old: np.ndarray,
-    T: np.ndarray,
+    u_old: np.ndarray,
+    E_k: np.ndarray,
+    T_k: np.ndarray,
     dt: float,
+    T_left: float | None = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Tridiagonal coefficients for the paper's nonlinear conduction equation.
 
@@ -102,11 +113,22 @@ def calculate_conduction_abcd(
 
         d(u)/dt = div( D grad(a T^4) ),   u = f T^beta rho^(1-mu)
 
-    Solving implicitly in the flux potential E = a T^4 and linearising u about
-    the old state (du/dE evaluated at T^n) gives
+    Solved implicitly in the flux potential E = a T^4. Because u(E) is strongly
+    nonlinear (u ~ E^(beta/4), and across the heat front T spans several orders
+    of magnitude), a single linearisation frozen at the old state is not
+    energy-conservative and systematically retards a degenerate front. Instead
+    this builds one Picard iterate about the current guess E_k:
 
-        (E^{n+1} - E^n)/dt = (1/chi_v) div( D grad E^{n+1} ),
-        chi_v = du/dE = f beta T^(beta-1) rho^(1-mu) / (4 a T^3).
+        u(E^{k+1}) ~ u(E^k) + chi_v^k (E^{k+1} - E^k),
+        chi_v = du/dE = f beta T^(beta-1) rho^(1-mu) / (4 a T^3),
+
+    giving, after dividing through by chi_v^k,
+
+        E^{k+1}/dt - (1/chi_v^k) div(D grad E^{k+1})
+            = E^k/dt + (u_old - u(E^k)) / (chi_v^k dt).
+
+    Iterating to convergence recovers the fully implicit, conservative update
+    (the bracket vanishes as E^k -> E^{n+1}).
 
     This differs from ``calculate_black_abcd``, which stores the energy in the
     radiation field itself (d(aT^4)/dt = div(D grad aT^4)) -- a different PDE
@@ -123,13 +145,25 @@ def calculate_conduction_abcd(
     flux_coeff = D_face / dx_face
     flux_coeff = np.concatenate(([flux_coeff[0]], flux_coeff, [flux_coeff[-1]]))
 
-    chi_v = (f_Kelvin * beta_Rosen * T**(beta_Rosen - 1.0) * rho**(1.0 - mu)) / (4.0 * a_Kelvin * T**3)
+    if T_left is not None:
+        # The Dirichlet value lives on the *left face* of cell 0, a distance
+        # dx[0]/2 from its centre -- not the cell-centre spacing that the
+        # edge-padding above copies in from face 1. Padding understates the
+        # boundary gradient (by ~2x on a uniform grid) and therefore starves
+        # the wave of the energy that sets its front position.
+        D_bc = arithmetic_mean(
+            calculate_D_from_sigma(calculate_sigma_from_temperature_and_density(T_left, rho[0])),
+            D[0],
+        )
+        flux_coeff[0] = D_bc / (0.5 * dx_cells[0])
+
+    chi_v = (f_Kelvin * beta_Rosen * T_k**(beta_Rosen - 1.0) * rho**(1.0 - mu)) / (4.0 * a_Kelvin * T_k**3)
     lagrangian_coeff = 1.0 / (dx_cells * chi_v)
 
     a = -lagrangian_coeff * flux_coeff[:-1]
     b = lagrangian_coeff * (flux_coeff[:-1] + flux_coeff[1:]) + 1.0 / dt
     c_coeff = -lagrangian_coeff * flux_coeff[1:]
-    d = E_old / dt
+    d = E_k / dt + (u_old - _matter_energy_density(T_k, rho)) / (chi_v * dt)
 
     if np.any(~np.isfinite(a)) or np.any(~np.isfinite(b)) or np.any(~np.isfinite(c_coeff)) or np.any(~np.isfinite(d)):
         raise ValueError("Non-finite value in conduction tridiagonal coefficients.")
@@ -155,21 +189,37 @@ def conduction_radiation_step(
     m_cells = state_star.m_cells
     E_old = state_star.E_rad if state_star.E_rad is not None else a_Kelvin * state_star.T_material**4
 
-    T = (E_old / a_Kelvin) ** 0.25
-    sigma = calculate_sigma_from_temperature_and_density(T, rho)
-    D = calculate_D_from_sigma(sigma)
-
-    a, b, c_coeff, d = calculate_conduction_abcd(D, m_cells, rho, E_old, T, dt)
+    T_old = (E_old / a_Kelvin) ** 0.25
+    u_old = _matter_energy_density(T_old, rho)
 
     t_drive = max(state_star.t, dt)
     T0_left = rad_hydro_case.T0_Kelvin if rad_hydro_case.T0_Kelvin is not None else 0.0
     T_left = T0_left * (t_drive / (10**-9)) ** rad_hydro_case.tau
     E_left = a_Kelvin * T_left**4
 
-    d[0] -= a[0] * E_left
-    new_E = solve_tridiagonal(a, b, c_coeff, d)
-    new_T = (new_E / a_Kelvin) ** 0.25
-    return new_E, new_T
+    # Picard iteration on the nonlinear u(E) relation. Coefficients D and
+    # chi_v are re-evaluated at each iterate, so on convergence this is the
+    # fully implicit, energy-conservative update rather than a single
+    # linearisation frozen at the old state.
+    E_k = E_old
+    T_k = T_old
+    for _ in range(PICARD_MAX_ITERS):
+        sigma = calculate_sigma_from_temperature_and_density(T_k, rho)
+        D = calculate_D_from_sigma(sigma)
+
+        a, b, c_coeff, d = calculate_conduction_abcd(D, m_cells, rho, u_old, E_k, T_k, dt, T_left=T_left)
+        d[0] -= a[0] * E_left
+
+        E_new = solve_tridiagonal(a, b, c_coeff, d)
+        E_new = np.maximum(E_new, 1e-300)  # keep T real for the next iterate
+        T_new = (E_new / a_Kelvin) ** 0.25
+
+        rel = np.max(np.abs(E_new - E_k) / (np.abs(E_k) + np.max(np.abs(E_k)) * 1e-12 + 1e-300))
+        E_k, T_k = E_new, T_new
+        if rel < PICARD_TOL:
+            break
+
+    return E_k, T_k
 
 
 def calculate_flux(

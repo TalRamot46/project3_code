@@ -56,7 +56,7 @@ class RadHydroCase(ABC):
     # grid parameters
     x_min: float
     x_max: float
-    t_sec_end: float 
+    t_sec_end: float
 
     # for flags
     initial_condition: str # e.g. "pressure, velocity, density", 
@@ -82,6 +82,15 @@ class RadHydroCase(ABC):
     # - "Dirichlet": classical Dirichlet style (fixed left face temperature)
     bc_type: Literal["Marshak", "Dirichlet"] = "Dirichlet"
     omega: float = 0.0
+
+    # Start time [s] for the integration. Non-zero only for self-similar
+    # verification cases whose exact solution is singular at t = 0: the
+    # instantaneous point source carries its full energy Q at every t > 0
+    # (zero flux at the origin), so a cold start at t0 > 0 contradicts the
+    # solution while a cold start at t = 0 hides Q in an unresolvable initial
+    # layer. Seeding the exact profile at t_sec_start avoids both and still
+    # tests that the power-law drive keeps the simulation on that solution.
+    t_sec_start: float = 0.0
 
 
     def _get_params(

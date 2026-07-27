@@ -60,6 +60,31 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
         p = (case.r + 1) * rho * e  # Ideal gas EOS
         T_rad = T_material.copy()
         E_rad = a_Kelvin * T_rad**4
+    elif case.initial_condition == "analytic_supersonic_instantaneous":
+        # Seed the exact self-similar profile at t = case.t_sec_start. The
+        # instantaneous-point-source solution already carries its full energy
+        # Q at every t > 0, so a cold start would contradict it.
+        from menahem_new.supersonic_instantaneous_analytic import (
+            SupersonicInstantaneousAnalytic,
+        )
+        assert case.t_sec_start > 0.0, (
+            "initial_condition='analytic_supersonic_instantaneous' requires "
+            "t_sec_start > 0 (the exact profile is a delta function at t = 0)."
+        )
+        seed_solver = SupersonicInstantaneousAnalytic(
+            g=case.g_Kelvin, alpha=case.alpha, lambdap=case.lambda_,
+            f=case.f_Kelvin, beta=case.beta_Rosen, mu=case.mu,
+            rho0=case.rho0, omega=case.omega,
+            T0_Kelvin=case.T0_Kelvin, d=1,
+        )
+        T_material = np.asarray(
+            seed_solver.temperature_profile(x_cells, case.t_sec_start), dtype=float
+        )
+        T_material = np.maximum(T_material, case.T_initial_Kelvin)
+        e = case.f_Kelvin * T_material**case.beta_Rosen * rho**(-case.mu)
+        p = (case.r + 1) * rho * e
+        T_rad = T_material.copy()
+        E_rad = a_Kelvin * T_rad**4
     elif case.initial_condition == "pressure, velocity, density":
         p = np.full_like(x_cells, case.p0)
         u = np.full_like(x_nodes, case.u0)
@@ -67,17 +92,17 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
         T_material = calculate_temperature_from_specific_energy(e, rho, case.f_Kelvin, case.beta_Rosen, case.mu)
         T_rad = T_material.copy()
         E_rad = a_Kelvin * T_rad**4
-        
+
     q = np.zeros_like(x_cells)
 
     # Initialize mass cells and node positions
     V = cell_volumes(x_nodes, geom)
     m_cells = masses_from_initial_rho(x_nodes, rho, geom)
-    
+
     a = np.zeros_like(x_nodes)
 
     state = RadHydroState(
-        t=0.0, x=x_nodes, u=u, a=a, V=V, rho=rho,
+        t=float(case.t_sec_start), x=x_nodes, u=u, a=a, V=V, rho=rho,
         e_material=e, p=p, q=q, m_cells=m_cells,
         T_material=T_material, T_rad=T_rad, E_rad=E_rad,
     )
@@ -270,7 +295,14 @@ def compute_adaptive_dt(
     dt_floor = 1e-6 * t_end         # was 2e-15 s (~2e-6 * t_end at t_end = 1 ns)
 
     if step <= 2:
-        return min(1e-6 * t_end, t_end - t)
+        # Start far enough below t_end to resolve a singular initial layer.
+        # For a power-law drive T(0,t) = T0 t^tau with tau < 0 the drive
+        # diverges as t -> 0+, and that limit is what deposits the wave's
+        # entire energy budget (the exact solution carries zero energy flux
+        # at the origin for t > 0). Starting at 1e-6 * t_end misses ~9% of
+        # the energy and leaves the heat front correspondingly short; ~10
+        # decades captures it to a few tenths of a percent.
+        return min(1e-10 * t_end, t_end - t)
 
     if scenario == "hydro_only":
         dt_cfl = compute_dt_cfl(state, gamma, CFL)

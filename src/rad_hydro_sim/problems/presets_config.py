@@ -723,7 +723,9 @@ PRESET_TEST_CASES = {
         x_max = 0.1333,
         t_sec_end = 9e-25,
 
-        initial_condition="temperature, density",
+        t_sec_start = 9e-28,   # 1e-3 * t_sec_end; front starts at ~0.018 cm
+
+        initial_condition="analytic_supersonic_instantaneous",
         scenario="radiation_only",
         title=r"Constant temperature radiation only ($\omega=0.2$)",
         geom=planar(),

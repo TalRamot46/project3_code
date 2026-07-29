@@ -98,12 +98,13 @@ def _matter_energy_density(T: np.ndarray, rho: np.ndarray) -> np.ndarray:
 
 def calculate_conduction_abcd(
     D: np.ndarray,
-    m_cells: np.ndarray,
+    x_nodes: np.ndarray,
     rho: np.ndarray,
     u_old: np.ndarray,
     E_k: np.ndarray,
     T_k: np.ndarray,
     dt: float,
+    geom,
     T_left: float | None = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Tridiagonal coefficients for the paper's nonlinear conduction equation.
@@ -133,32 +134,53 @@ def calculate_conduction_abcd(
     This differs from ``calculate_black_abcd``, which stores the energy in the
     radiation field itself (d(aT^4)/dt = div(D grad aT^4)) -- a different PDE
     whenever a T^4 is not the dominant energy reservoir.
+
+    The divergence is discretised in conservative area-weighted form,
+
+        div(F)_j = [ A_{j+1/2} F_{j+1/2} - A_{j-1/2} F_{j-1/2} ] / V_j,
+
+    with A = beta r^alpha and V = zeta (r_{j+1}^{alpha+1} - r_j^{alpha+1}) taken
+    from ``geom``, so planar / cylindrical / spherical symmetry are all handled
+    (for planar, A = 1 and V = dx, recovering the plain 1D operator).
+
+    ``T_left=None`` imposes zero energy flux through the inner face, which is
+    the symmetry condition at the origin (paper Eq. 21) and the only option
+    available for omega >= omega_c, where the origin temperature diverges.
     """
     if HARMONIC_MEAN:
         D_face = harmonic_mean(D[:-1], D[1:])
     else:
         D_face = arithmetic_mean(D[:-1], D[1:])
 
-    dx_cells = m_cells / rho
-    dx_face = arithmetic_mean(dx_cells[:-1], dx_cells[1:])
+    a_geom = geom.alpha
+    r = np.asarray(x_nodes, dtype=float)
+    r_cent = 0.5 * (r[:-1] + r[1:])
 
-    flux_coeff = D_face / dx_face
-    flux_coeff = np.concatenate(([flux_coeff[0]], flux_coeff, [flux_coeff[-1]]))
+    V = geom.zeta * (r[1:] ** (a_geom + 1) - r[:-1] ** (a_geom + 1))
+    A_face = geom.beta * r[1:-1] ** a_geom          # interior faces
+    dr_face = r_cent[1:] - r_cent[:-1]              # centre-to-centre spacing
 
-    if T_left is not None:
-        # The Dirichlet value lives on the *left face* of cell 0, a distance
-        # dx[0]/2 from its centre -- not the cell-centre spacing that the
-        # edge-padding above copies in from face 1. Padding understates the
-        # boundary gradient (by ~2x on a uniform grid) and therefore starves
-        # the wave of the energy that sets its front position.
+    flux_coeff = A_face * D_face / dr_face
+
+    if T_left is None:
+        # Symmetry / no-flux inner boundary.
+        left_fc = 0.0
+    else:
+        # The Dirichlet value lives on the inner face of cell 0, a distance
+        # r_cent[0] - r[0] from its centre -- not the centre-to-centre spacing
+        # that edge-padding would copy in from face 1. Padding understates the
+        # boundary gradient and starves the wave of the energy that sets its
+        # front position.
         D_bc = arithmetic_mean(
             calculate_D_from_sigma(calculate_sigma_from_temperature_and_density(T_left, rho[0])),
             D[0],
         )
-        flux_coeff[0] = D_bc / (0.5 * dx_cells[0])
+        left_fc = geom.beta * r[0] ** a_geom * D_bc / (r_cent[0] - r[0])
+
+    flux_coeff = np.concatenate(([left_fc], flux_coeff, [flux_coeff[-1]]))
 
     chi_v = (f_Kelvin * beta_Rosen * T_k**(beta_Rosen - 1.0) * rho**(1.0 - mu)) / (4.0 * a_Kelvin * T_k**3)
-    lagrangian_coeff = 1.0 / (dx_cells * chi_v)
+    lagrangian_coeff = 1.0 / (V * chi_v)
 
     a = -lagrangian_coeff * flux_coeff[:-1]
     b = lagrangian_coeff * (flux_coeff[:-1] + flux_coeff[1:]) + 1.0 / dt
@@ -186,16 +208,24 @@ def conduction_radiation_step(
     alpha, beta_Rosen, mu, f_Kelvin, chi, lambda_, g_Kelvin = rad_hydro_case._get_params()
 
     rho = state_star.rho
-    m_cells = state_star.m_cells
+    x_nodes = state_star.x
+    geom = rad_hydro_case.geom
     E_old = state_star.E_rad if state_star.E_rad is not None else a_Kelvin * state_star.T_material**4
 
     T_old = (E_old / a_Kelvin) ** 0.25
     u_old = _matter_energy_density(T_old, rho)
 
-    t_drive = max(state_star.t, dt)
-    T0_left = rad_hydro_case.T0_Kelvin if rad_hydro_case.T0_Kelvin is not None else 0.0
-    T_left = T0_left * (t_drive / (10**-9)) ** rad_hydro_case.tau
-    E_left = a_Kelvin * T_left**4
+    # With no drive amplitude the inner boundary becomes the symmetry (zero
+    # flux) condition of Eq. (21). That is the correct closure for a pure point
+    # source, and the only usable one for omega >= omega_c, where the origin
+    # temperature diverges (paper Table I).
+    if rad_hydro_case.T0_Kelvin is None:
+        T_left = None
+        E_left = None
+    else:
+        t_drive = max(state_star.t, dt)
+        T_left = float(rad_hydro_case.T0_Kelvin) * (t_drive / (10**-9)) ** rad_hydro_case.tau
+        E_left = a_Kelvin * T_left**4
 
     # Picard iteration on the nonlinear u(E) relation. Coefficients D and
     # chi_v are re-evaluated at each iterate, so on convergence this is the
@@ -207,8 +237,11 @@ def conduction_radiation_step(
         sigma = calculate_sigma_from_temperature_and_density(T_k, rho)
         D = calculate_D_from_sigma(sigma)
 
-        a, b, c_coeff, d = calculate_conduction_abcd(D, m_cells, rho, u_old, E_k, T_k, dt, T_left=T_left)
-        d[0] -= a[0] * E_left
+        a, b, c_coeff, d = calculate_conduction_abcd(
+            D, x_nodes, rho, u_old, E_k, T_k, dt, geom, T_left=T_left
+        )
+        if E_left is not None:
+            d[0] -= a[0] * E_left
 
         E_new = solve_tridiagonal(a, b, c_coeff, d)
         E_new = np.maximum(E_new, 1e-300)  # keep T real for the next iterate
@@ -425,7 +458,7 @@ def _get_or_create_subsonic_heat_wave_solver(rad_hydro_case: RadHydroCase):
     )
     
     if case_key not in _subsonic_heat_wave_cache:
-        from project3_code.menahem_new.subsonic_heat_wave_og import SubsonicHeatWave
+        from menahem_new.subsonic_heat_wave_og import SubsonicHeatWave
         
         # Initialize the solver with case parameters
         # Note: Tb is T0_Kelvin, and gamma = r + 1

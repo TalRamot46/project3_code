@@ -86,6 +86,102 @@ def _snapshot_times_for_png(case: RadHydroCase, config) -> np.ndarray:
     return np.asarray(t, dtype=float)
 
 
+def _build_front_markers(case, sim_data, times_sec, *, include_sim: bool = True) -> list:
+    """Solver and simulation front locations (mass) for the requested snapshots.
+
+    The solver fronts come from closed-form expressions
+    (``run_menahem_front_masses``); the simulation fronts are read off its own
+    profiles by ``detect_front``. Plotting both turns the figure into a direct
+    front-position check: profile shapes can look right while a front sits in
+    the wrong place, and that is exactly the failure an under-resolved ablation
+    layer produces.
+    """
+    from hydro_sim.verification.compare_shock_plots import FrontMarkers, detect_front
+    from rad_hydro_sim.verification.menahem_comparison import run_menahem_front_masses
+
+    times = np.asarray(times_sec, dtype=float).ravel()
+    markers: list = []
+
+    fronts = run_menahem_front_masses(case, times)
+    if "heat" in fronts:
+        markers.append(FrontMarkers("Heat front (analytic)", fronts["heat"], "--"))
+    if "shock" in fronts:
+        markers.append(FrontMarkers("Shock front (analytic)", fronts["shock"], (0, (6, 2))))
+
+    if include_sim and sim_data is not None and getattr(sim_data, "m", None):
+        from hydro_sim.verification.compare_shock_plots import interpolate_to_time
+
+        heat_sim, shock_sim = [], []
+        for t in times:
+            k = interpolate_to_time(sim_data, float(t))
+            if k is None:
+                heat_sim.append(np.nan)
+                shock_sim.append(np.nan)
+                continue
+            m = np.asarray(sim_data.m[k], dtype=float)
+            # Temperature falls off a cliff at the heat front, pressure at the shock.
+            T = sim_data.T[k] if getattr(sim_data, "T", None) else None
+            heat_sim.append(detect_front(m, T) if T is not None else np.nan)
+            shock_sim.append(detect_front(m, np.asarray(sim_data.p[k], dtype=float)))
+        if "heat" in fronts and np.any(np.isfinite(heat_sim)):
+            markers.append(FrontMarkers("Heat front (simulation)", np.array(heat_sim), "-", 1.0))
+        if "shock" in fronts and np.any(np.isfinite(shock_sim)):
+            markers.append(FrontMarkers("Shock front (simulation)", np.array(shock_sim), (0, (1, 1)), 1.4))
+
+    return markers
+
+
+def _report_front_agreement(times_sec, markers) -> None:
+    """Print analytic vs simulated front positions, so the check is quantitative.
+
+    The vertical lines make agreement visible; this makes it measurable, which
+    matters because a front can be visibly "close" on a log axis while being
+    tens of percent out.
+    """
+    by_label = {m.label: np.asarray(m.values, dtype=float).ravel() for m in markers}
+    pairs = [
+        ("Heat front", "Heat front (analytic)", "Heat front (simulation)"),
+        ("Shock front", "Shock front (analytic)", "Shock front (simulation)"),
+    ]
+    rows = [(n, a, s) for n, a, s in pairs if a in by_label and s in by_label]
+    if not rows:
+        return
+    times = np.asarray(times_sec, dtype=float).ravel()
+    print("\nFront positions in mass [g/cm^2] (analytic vs simulation):")
+    print(f"  {'front':<12}{'t [ns]':>9}{'analytic':>14}{'simulation':>14}{'sim/ana':>10}")
+    for name, a_key, s_key in rows:
+        a, s = by_label[a_key], by_label[s_key]
+        for j in range(min(times.size, a.size, s.size)):
+            if not (np.isfinite(a[j]) and np.isfinite(s[j])):
+                continue
+            print(f"  {name:<12}{times[j]*1e9:9.3f}{a[j]:14.5e}{s[j]:14.5e}"
+                  f"{s[j]/a[j]:10.4f}")
+
+
+def _mass_xlim(*datasets) -> Optional[tuple[float, float]]:
+    """x limits for a *log* mass axis spanning the given datasets.
+
+    Semi-analytic references are evaluated on a mass grid that starts at
+    ~1e-30 g/cm^2, so the solver has a sample sitting on the ablation boundary
+    itself. Those points carry no profile information, but on a log axis they
+    stretch the plot over ~25 empty decades and squeeze the solution into the
+    right-hand edge. Taking the *largest* of the per-dataset smallest positive
+    masses skips them and lands on the innermost real cell instead.
+    """
+    lo: list[float] = []
+    hi: list[float] = []
+    for data in datasets:
+        for arr in getattr(data, "m", None) or []:
+            a = np.asarray(arr, dtype=float)
+            a = a[np.isfinite(a) & (a > 0.0)]
+            if a.size:
+                lo.append(float(a.min()))
+                hi.append(float(a.max()))
+    if not lo:
+        return None
+    return (max(lo) / 3.0, max(hi) * 1.5)
+
+
 def _verification_suptitle(case: RadHydroCase, subtitle: str) -> str:
     """Preset title first, then verification context (slider / PNG / GIF)."""
     preset = (getattr(case, "title", None) or "").strip()
@@ -638,6 +734,7 @@ def run_full_rad_hydro_comparison(
     save_png: bool = True,
     save_gif: bool = True,
     reference_solver: ReferenceSolver = ReferenceSolver.BOTH,
+    show_fronts: bool = True,
 ) -> None:
     """
     Run rad_hydro with constant temperature drive and compare to semi-analytic references:
@@ -782,16 +879,27 @@ def run_full_rad_hydro_comparison(
         )
 
     if save_png:
+        png_times = _snapshot_times_for_png(case, config)
+        markers = (
+            _build_front_markers(case, sim_data, png_times, include_sim=not skip_rad_hydro)
+            if show_fronts
+            else None
+        )
         plot_comparison_in_selected_times(
             sim_data,
             ref_data,
-            times=_snapshot_times_for_png(case, config),
+            times=png_times,
             xaxis="m",
             savepath=str(png_path),
             show=False,
             title=title_fig,
             extra_data=extra_refs or None,
+            log_axes=True,
+            xlim=_mass_xlim(sim_data, ref_data, *extra_refs),
+            front_markers=markers,
         )
+        if markers:
+            _report_front_agreement(png_times, markers)
     if save_gif and not skip_rad_hydro:
         save_history_gif(
             history_rh,
@@ -925,6 +1033,7 @@ def run_comparison(
     save_png: bool = True,
     save_gif: bool = True,
     reference_solver: ReferenceSolver = ReferenceSolver.BOTH,
+    show_fronts: bool = True,
 ) -> None:
     """Run the verification comparison for the given mode.
 
@@ -978,12 +1087,13 @@ def run_comparison(
                 save_png=save_png,
                 save_gif=save_gif,
                 reference_solver=reference_solver,
+                show_fronts=show_fronts,
             )
 
 def main() -> None:
     """Entry point: select mode and which reference solver(s) to overlay."""
-    # MODE = VerificationMode.FULL_RAD_HYDRO
-    MODE = VerificationMode.RADIATION_ONLY
+    MODE = VerificationMode.FULL_RAD_HYDRO
+    # MODE = VerificationMode.RADIATION_ONLY
     # MODE = VerificationMode.HYDRO_ONLY
 
     # REFERENCE_SOLVER = ReferenceSolver.BOTH

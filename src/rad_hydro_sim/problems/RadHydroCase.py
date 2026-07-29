@@ -92,6 +92,36 @@ class RadHydroCase(ABC):
     # tests that the power-law drive keeps the simulation on that solution.
     t_sec_start: float = 0.0
 
+    # Total energy of the instantaneous point source (erg for d=3, erg/cm^2 for
+    # d=1). Used instead of T0_Kelvin to pin the self-similar solution, which is
+    # the only option for omega >= omega_c where the origin temperature diverges.
+    Q_point_source: float | None = None
+
+
+    @property
+    def has_ablation_surface(self) -> bool:
+        """True when a radiatively driven surface at ``x_min`` ablates the medium.
+
+        Only then does the solution carry a thin ablation layer at the boundary
+        -- ~1e-3 g/cm^2 of mass for gold at 2 ns -- whose mass fixes the
+        ablation pressure that drives the shock. That layer is what the
+        Lagrangian mesh has to resolve *in mass* rather than in space (see
+        ``make_nonuniform_nodes``), and for rho ~ r^-omega the two are very
+        different things.
+
+        The two families that lack such a layer both need the ordinary spatial
+        refinement instead:
+
+        - ``hydro_only``: a piston drives the boundary, with no heat front.
+        - an instantaneous point source: the origin carries the symmetry
+          (zero-flux) condition and the structure sits at the expanding front,
+          so mass grading would starve the front of cells.
+        """
+        return (
+            self.scenario != "hydro_only"
+            and self.initial_condition != "analytic_supersonic_instantaneous"
+            and self.T0_Kelvin is not None
+        )
 
     def _get_params(
         self,

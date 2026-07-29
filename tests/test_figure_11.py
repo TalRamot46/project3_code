@@ -60,7 +60,7 @@ FIG11_MATERIAL = dict(
 )
 
 # Panel order matches the figure: left-to-right, top-to-bottom.
-FIG11_OMEGAS = [1.5, 2.0 / 3.0, 0.3, 0.0, -1.0, -3.0]
+FIG11_OMEGAS = [1.5, 2.0 / 3.0, 0.3, 0.0]
 
 # Front radii the snapshots are taken at.
 FIG11_RADII = [0.225, 0.45, 0.675, 0.9]
@@ -79,6 +79,97 @@ FIG11_YLIM = {
 def make_solver(omega: float) -> SupersonicInstantaneousAnalytic:
     """Solver for one Fig. 11 panel."""
     return SupersonicInstantaneousAnalytic(omega=omega, **FIG11_MATERIAL)
+
+
+# ---------------------------------------------------------------------------
+# Simulation side of the comparison
+# ---------------------------------------------------------------------------
+#
+# The paper deposits Q in the first cell at t = 0. That exact initial state is
+# a delta function, which no grid can represent, so the simulation is instead
+# started from the exact self-similar profile at a time when the front is
+# already resolved (r_h = FIG11_SEED_RADIUS) and left to evolve on its own.
+#
+# The inner boundary is the symmetry condition of Eq. (21) -- zero energy flux
+# at the origin -- which is what a point source actually obeys for t > 0, and
+# the only closure available for omega >= omega_c where T(0,t) diverges.
+
+# The seed is placed at a fixed *fraction* of each target radius rather than at
+# a fixed radius. The front advances as r ~ t^(1/p), so a fixed seed radius
+# makes the simulated time span (r_target/r_seed)^p, and p grows quickly as
+# omega goes negative (p = 16 at omega = -1, p = 27.5 at omega = -3). Seeding at
+# r = 0.05 would then ask for ~1e20 and ~1e34 in elapsed time respectively,
+# which the timestep controller can only cross in an impractical number of
+# steps. Seeding proportionally caps the span at (1/FIG11_SEED_FRACTION)^p for
+# every panel while still letting the front travel a factor of 1/0.4 = 2.5x.
+FIG11_SEED_FRACTION = 0.4
+FIG11_SIM_N = 80
+FIG11_X_MIN = 1e-5
+FIG11_X_MAX = 1.0
+
+
+def make_fig11_case(omega: float, r_target: float):
+    """Build the spherical (d=3) RadHydroCase for one curve of one panel."""
+    from hydro_sim.core.geometry import spherical
+    from rad_hydro_sim.problems.RadHydroCase import RadHydroCase
+
+    solver = make_solver(omega)
+    return RadHydroCase(
+        g_Kelvin=FIG11_MATERIAL["g"],
+        alpha=FIG11_MATERIAL["alpha"],
+        lambda_=FIG11_MATERIAL["lambdap"],
+        f_Kelvin=FIG11_MATERIAL["f"],
+        beta_Rosen=FIG11_MATERIAL["beta"],
+        mu=FIG11_MATERIAL["mu"],
+        chi=1.0,
+        T0_Kelvin=None,            # -> zero-flux (symmetry) inner boundary
+        P0_Barye=None,
+        tau=solver.tau,
+        rho0=FIG11_MATERIAL["rho0"],
+        p0=None,
+        u0=None,
+        T_initial_Kelvin=1e-6,     # numerically cold ambient
+        r=0.25,
+        x_min=FIG11_X_MIN,
+        x_max=FIG11_X_MAX,
+        t_sec_start=float(solver.heat_front_time(FIG11_SEED_FRACTION * r_target)),
+        t_sec_end=float(solver.heat_front_time(r_target)),
+        initial_condition="analytic_supersonic_instantaneous",
+        scenario="radiation_only",
+        geom=spherical(),          # d = 3, angular symmetry
+        omega=omega,
+        force_black="conduction",  # Krief Eq. (1)
+        Q_point_source=FIG11_MATERIAL["Q"],
+    )
+
+
+def run_fig11_simulation(omega: float, r_target: float, N: int = FIG11_SIM_N):
+    """Evolve the wave to the time its front should reach ``r_target``.
+
+    Returns ``(r_centers, T, energy_ratio)``, the last being the simulated
+    total energy divided by Q (1.0 if the scheme conserved energy exactly).
+    """
+    from hydro_sim.problems.simulation_config import SimulationConfig
+    from rad_hydro_sim.simulation.iterator import simulate_rad_hydro
+
+    case = make_fig11_case(omega, r_target)
+    config = SimulationConfig(N=N, CFL=1.0 / 3.0, sigma_visc=1.0, store_every=10)
+    _, state, _, _ = simulate_rad_hydro(rad_hydro_case=case, simulation_config=config)
+
+    r_nodes = np.asarray(state.x, dtype=float)
+    r_cent = 0.5 * (r_nodes[:-1] + r_nodes[1:])
+    T = np.asarray(state.T_material, dtype=float)
+
+    # Total energy int u dV with the spherical volume element.
+    volume = (4.0 * np.pi / 3.0) * (r_nodes[1:] ** 3 - r_nodes[:-1] ** 3)
+    u = (
+        FIG11_MATERIAL["f"]
+        * T ** FIG11_MATERIAL["beta"]
+        * np.asarray(state.rho, dtype=float) ** (1.0 - FIG11_MATERIAL["mu"])
+    )
+    energy_ratio = float(np.sum(u * volume) / FIG11_MATERIAL["Q"])
+
+    return r_cent, T, energy_ratio
 
 
 # ---------------------------------------------------------------------------
@@ -169,12 +260,63 @@ def test_profile_shape_is_monotonic_decreasing():
 
 
 # ---------------------------------------------------------------------------
+# Simulation vs analytic
+# ---------------------------------------------------------------------------
+
+@pytest.mark.slow
+@pytest.mark.parametrize("omega", FIG11_OMEGAS)
+def test_simulation_conserves_energy(omega):
+    """The d=3 solve must hold the deposited energy Q to a fraction of a percent.
+
+    This exercises the spherical area-weighted divergence: with a planar
+    operator the enclosed volume is wrong by a factor ~r^2 and the energy
+    drifts immediately.
+    """
+    _, _, energy_ratio = run_fig11_simulation(omega, FIG11_RADII[1])
+    assert energy_ratio == pytest.approx(1.0, abs=0.02)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("omega", FIG11_OMEGAS)
+def test_simulation_tracks_analytic_profile(omega):
+    """The simulated profile must follow the analytic one across the wave.
+
+    Compared on the analytic solution's own support, away from the front where
+    the profile turns over vertically and a small offset in front position
+    would dominate a pointwise comparison.
+    """
+    solver = make_solver(omega)
+    r_target = FIG11_RADII[1]
+    t = solver.heat_front_time(r_target)
+
+    r_sim, T_sim, _ = run_fig11_simulation(omega, r_target)
+    T_ana = np.asarray(solver.temperature_profile(r_sim, t), dtype=float)
+
+    inside = (r_sim > 1.2 * FIG11_SEED_FRACTION * r_target) & (r_sim < 0.8 * r_target)
+    assert np.count_nonzero(inside) > 10
+
+    rel = np.abs(T_sim[inside] - T_ana[inside]) / np.max(T_ana[inside])
+    assert np.median(rel) < 0.05
+
+
+# ---------------------------------------------------------------------------
 # Figure
 # ---------------------------------------------------------------------------
 
-def plot_figure_11(savepath: str | Path | None = None, show: bool = False):
-    """Render the six-panel Fig. 11 reproduction."""
+def plot_figure_11(
+    savepath: str | Path | None = None,
+    show: bool = False,
+    include_simulation: bool = True,
+    N: int = FIG11_SIM_N,
+):
+    """Render the six-panel Fig. 11 reproduction.
+
+    With ``include_simulation`` the numerical solution is overlaid on the
+    analytic one, in the paper's convention (simulation solid red, analytic
+    dashed blue).
+    """
     import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
 
     fig, axes = plt.subplots(3, 2, figsize=(11, 13))
 
@@ -183,11 +325,17 @@ def plot_figure_11(savepath: str | Path | None = None, show: bool = False):
 
         for r_front in FIG11_RADII:
             t = solver.heat_front_time(r_front)
+
+            if include_simulation:
+                r_sim, T_sim, e_ratio = run_fig11_simulation(omega, r_front, N=N)
+                ax.plot(r_sim, T_sim, color="red", linewidth=1.4)
+                print(f"  omega={omega:<9.4g} r={r_front:<6} E/Q={e_ratio:.4f}")
+
             # Start just off the origin: for omega >= omega_c the analytic
             # profile genuinely diverges there (paper Table I).
             r = np.linspace(1e-6, 1.0, 4000)
             T = solver.temperature_profile(r, t)
-            ax.plot(r, T, color="tab:blue", linestyle="--", linewidth=1.6)
+            ax.plot(r, T, color="blue", linestyle="--", linewidth=1.4)
 
         ax.set_title(rf"$\omega = {omega:g}$" if omega != FIG11_OMEGAS[1] else r"$\omega = 0.666667$")
         ax.set_xlabel(r"$r$")
@@ -196,9 +344,15 @@ def plot_figure_11(savepath: str | Path | None = None, show: bool = False):
         ax.set_ylim(0.0, FIG11_YLIM[omega])
         ax.grid(True, linestyle="--", alpha=0.4)
 
+    handles = [
+        Line2D([], [], color="red", linewidth=1.4, label="Simulation"),
+        Line2D([], [], color="blue", linestyle="--", linewidth=1.4, label="Analytic"),
+    ]
+    axes.ravel()[0].legend(handles=handles, loc="upper right", fontsize=9)
+
     fig.suptitle(
-        "Reproduction of Krief (2021) Fig. 11 — analytic solution [Eq. (42)]\n"
-        r"$d=3$, $\alpha=2$, $\beta=1.6$, $\lambda=1$, $\mu=0$, $n=2.75$, "
+        "Reproduction of Krief (2021) Fig. 11 — simulation vs analytic [Eq. (42)]\n"
+        r"$d=3$ (spherical), $\alpha=2$, $\beta=1.6$, $\lambda=1$, $\mu=0$, $n=2.75$, "
         r"$\rho_0=1$, $Q=1$; fronts at $r=0.225,\,0.45,\,0.675,\,0.9$",
         fontsize=11,
     )
@@ -216,4 +370,4 @@ def plot_figure_11(savepath: str | Path | None = None, show: bool = False):
 
 if __name__ == "__main__":
     repo_root = Path(__file__).resolve().parent.parent
-    plot_figure_11(savepath=repo_root / "results" / "figure_11_reproduction.png", show=False)
+    plot_figure_11(savepath=repo_root / "results" / "figure_11_reproduction.png", show=True)

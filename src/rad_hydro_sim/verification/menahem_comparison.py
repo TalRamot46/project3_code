@@ -184,7 +184,13 @@ def _build_mass_grid(
     x_max = float(case.x_max)
     omega = float(getattr(case, "omega", 0.0))
 
-    coordinate = make_nodes(x_min, x_max, num_cells, omega=omega)
+    # Mirror the grid the simulation builds in ``initialize_problem`` so the two
+    # curves are sampled on the same Lagrangian cells.
+    d_dim = float(getattr(getattr(case, "geom", None), "alpha", 0.0)) + 1.0
+    coordinate = make_nodes(
+        x_min, x_max, num_cells, omega=omega, d=d_dim,
+        refine_by_mass=bool(getattr(case, "has_ablation_surface", False)),
+    )
     dx = coordinate[1:] - coordinate[:-1]
 
     if omega != 1.0:
@@ -217,7 +223,7 @@ def run_menahem_subsonic_reference(
     (same conventions as the 1D Diffusion / Supersonic references).
     """
     try:
-        from subsonic_heat_wave_og import SubsonicHeatWave  # type: ignore
+        from menahem_new.subsonic_heat_wave_og import SubsonicHeatWave  # type: ignore
     except ImportError as exc:
         print(f"  Could not import Menahem SubsonicHeatWave: {exc}; skipping.")
         return None
@@ -237,7 +243,6 @@ def run_menahem_subsonic_reference(
     x_list: list[np.ndarray] = []
     T_list: list[np.ndarray] = []
     E_list: list[np.ndarray] = []
-    p_list = []
     for t in times:
         sol = solver.solve(mass=mass, time=float(t))
         rho = np.asarray(sol["density"], dtype=float)
@@ -254,19 +259,16 @@ def run_menahem_subsonic_reference(
         x_list.append(x)
         T_list.append(T_K)
         E_list.append(E_rad)
-        p_list.append(sol["pressure"])
 
-    return times, p_list, np.array(x_list) / float(case.rho0)
-
-    # return RadiationSimData(
-    #     times=times,
-    #     x=x_list,
-    #     T=T_list,
-    #     E_rad=E_list,
-    #     label=label,
-    #     color=color,
-    #     linestyle=linestyle,
-    # )
+    return RadiationSimData(
+        times=times,
+        x=x_list,
+        T=T_list,
+        E_rad=E_list,
+        label=label,
+        color=color,
+        linestyle=linestyle,
+    )
 
 
 def run_menahem_shock_reference(
@@ -280,7 +282,7 @@ def run_menahem_shock_reference(
 ) -> Optional[HydroSimData]:
     """Build hydro-only reference from Menahem's ``PistonShock``."""
     try:
-        from piston_shock_og import PistonShock  # type: ignore
+        from menahem_new.piston_shock_og import PistonShock  # type: ignore
     except ImportError as exc:
         print(f"  Could not import Menahem PistonShock: {exc}; skipping.")
         return None
@@ -324,6 +326,81 @@ def run_menahem_shock_reference(
         linestyle=linestyle,
     )
 
+def run_menahem_front_masses(
+    case,
+    times_sec: np.ndarray,
+) -> dict[str, np.ndarray]:
+    """Ablation and shock front *mass* coordinates from Menahem's solvers.
+
+    Both fronts are closed-form in the self-similar solution, so this is much
+    cheaper than evaluating whole profiles: ``SubsonicHeatWave.ablated_mass``
+    and ``PistonShock.shocked_mass`` are direct evaluations.
+
+    Returns a dict with whichever of ``"heat"`` / ``"shock"`` the scenario
+    actually has -- a piston run has no ablation front, and a radiation-only run
+    has no shock -- each an array parallel to ``times_sec``. Missing or
+    unbuildable solvers are simply omitted rather than raising, so a caller can
+    always overlay ``.get("heat")`` / ``.get("shock")``.
+
+    The mass coordinate is the one the verification plots use as their x axis,
+    and it is the natural place to compare fronts: it is Lagrangian, so a front
+    position in mass is unaffected by how far the mesh has moved.
+    """
+    times = np.asarray(times_sec, dtype=float).ravel()
+    times = times[times > 0.0]
+    out: dict[str, np.ndarray] = {}
+    if times.size == 0:
+        return out
+
+    scenario = getattr(case, "scenario", "")
+    wants_heat = scenario != "hydro_only" and case.T0_Kelvin is not None
+    wants_shock = scenario != "radiation_only" and (
+        case.P0_Barye is not None or wants_heat
+    )
+
+    if wants_heat and wants_shock:
+        # Ablation: the heat wave sets the piston that drives the shock, so both
+        # fronts have to come from the same patched solver.
+        try:
+            from menahem_new.ablation_solver_og import AblationSolver  # type: ignore
+
+            solver = AblationSolver(**_ablation_kwargs_from_case(case))
+            out["heat"] = np.array(
+                [float(solver.heat_solver.ablated_mass(time=float(t))) for t in times]
+            )
+            out["shock"] = np.array(
+                [float(np.ravel(solver.shock_solver.shocked_mass(time=float(t)))[0])
+                 for t in times]
+            )
+        except Exception as exc:
+            print(f"  Could not build Menahem ablation fronts: {exc}; skipping.")
+        return out
+
+    if wants_heat:
+        try:
+            from menahem_new.subsonic_heat_wave_og import SubsonicHeatWave  # type: ignore
+
+            hw = SubsonicHeatWave(**_heat_kwargs_from_case(case)).find_xsi_f()
+            out["heat"] = np.array(
+                [float(hw.ablated_mass(time=float(t))) for t in times]
+            )
+        except Exception as exc:
+            print(f"  Could not build Menahem heat front: {exc}; skipping.")
+
+    if wants_shock:
+        try:
+            from menahem_new.piston_shock_og import PistonShock  # type: ignore
+
+            ps = PistonShock(**_shock_kwargs_from_case(case))
+            out["shock"] = np.array(
+                [float(np.ravel(ps.shocked_mass(time=float(t)))[0]) for t in times]
+            )
+        except Exception as exc:
+            print(f"  Could not build Menahem shock front: {exc}; skipping.")
+
+    return out
+
+
 def run_menahem_piecewise_reference(
     case,
     config,
@@ -341,7 +418,7 @@ def run_menahem_piecewise_reference(
     linestyle = MENAHEM_LINESTYLE
 
     try:
-        from ablation_solver_og import AblationSolver  # type: ignore
+        from menahem_new.ablation_solver_og import AblationSolver  # type: ignore
     except ImportError as exc:
         print(f"  Could not import Menahem AblationSolver: {exc}; skipping.")
         return None

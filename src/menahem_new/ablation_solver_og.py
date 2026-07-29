@@ -15,7 +15,7 @@ from menahem_new.subsonic_heat_wave_og import SubsonicHeatWave, Units
 import logging
 logging.basicConfig(level = logging.INFO)
 logger = logging.getLogger('AblationSolver')
-
+RUN_AGAIN = True
 class AblationSolver():
     """An object to computes the solution an ablation problem
     including the ablative heat wave and shock regions
@@ -159,7 +159,7 @@ class AblationSolver():
 
         return result
  
-def test_profiles_omega():
+def test_profiles_omega(run_again=RUN_AGAIN):
     time_rise = Units.nsec
     tau = 0.123
     # tau = 0.
@@ -208,7 +208,7 @@ def test_profiles_omega():
     import pickle
     filename = "solver.pickle"
     from os import path
-    if path.isfile(filename):
+    if not RUN_AGAIN and path.isfile(filename):
         with open(filename, 'rb') as handle:
             solver = pickle.load(handle)
             for key, value in mat.items():
@@ -581,6 +581,5 @@ def test_profiles():
     quit()
 
 if __name__ == "__main__":
-
     # test_profiles()
-    test_profiles_omega()
+    test_profiles_omega(run_again=RUN_AGAIN)

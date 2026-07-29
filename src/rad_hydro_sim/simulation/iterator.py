@@ -29,22 +29,39 @@ from hydro_sim.problems.simulation_config import SimulationConfig
 def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydroState:
     """Initialize the problem state based on the case and simulation type."""
     # Unpack parameters from case & config
-    geom = planar()
+    geom = case.geom
+    d_dim = geom.alpha + 1          # 1 planar, 2 cylindrical, 3 spherical
     omega = case.omega
-    assert omega < 1.0, "Error: omega must be less than 1.0 to avoid singularity at x=0"
+    # Finite enclosed mass requires omega < d (paper Sec. II), not omega < 1;
+    # the tighter bound is only correct for planar symmetry.
+    assert omega < d_dim, (
+        f"Error: omega must be less than d ({d_dim}) for the enclosed mass to be finite"
+    )
 
-    # Spatial grid: refined near x=0 for omega != 0, uniform for omega == 0
-    x_nodes = make_nodes(case.x_min, case.x_max, config.N, omega=omega)
+    # Spatial grid: refined near x=0 for omega != 0, uniform for omega == 0.
+    # A driven ablation surface needs that refinement graded in mass rather
+    # than in space; see RadHydroCase.has_ablation_surface.
+    x_nodes = make_nodes(
+        case.x_min, case.x_max, config.N, omega=omega, d=d_dim,
+        refine_by_mass=case.has_ablation_surface,
+    )
     x_cells = 0.5 * (x_nodes[:-1] + x_nodes[1:])
-    dx = x_nodes[1:] - x_nodes[:-1]
 
-    if omega != 1.0:
-        m_cells_analytic = (case.rho0 / (1.0 - omega)) * (x_nodes[1:]**(1.0 - omega) - x_nodes[:-1]**(1.0 - omega))
+    # Cell masses of rho(r) = rho0 r^-omega, integrated over the true volume
+    # element of this geometry: m = beta * rho0 * int r^(alpha-omega) dr.
+    # For planar (alpha=0, beta=1) this reduces to the 1D expression.
+    expo = geom.alpha + 1.0 - omega
+    if expo != 0.0:
+        m_cells_analytic = (geom.beta * case.rho0 / expo) * (
+            x_nodes[1:]**expo - x_nodes[:-1]**expo
+        )
     else:
         x_nodes_non_zero = np.where(x_nodes == 0.0, 1e-30, x_nodes)
-        m_cells_analytic = case.rho0 * np.log(x_nodes_non_zero[1:] / x_nodes_non_zero[:-1])
+        m_cells_analytic = geom.beta * case.rho0 * np.log(
+            x_nodes_non_zero[1:] / x_nodes_non_zero[:-1]
+        )
 
-    rho = m_cells_analytic / dx
+    rho = m_cells_analytic / cell_volumes(x_nodes, geom)
     p = np.zeros_like(x_cells)
     u = np.zeros_like(x_nodes)
     e = np.zeros_like(x_cells)
@@ -71,11 +88,16 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
             "initial_condition='analytic_supersonic_instantaneous' requires "
             "t_sec_start > 0 (the exact profile is a delta function at t = 0)."
         )
+        amplitude = (
+            {"Q": float(case.Q_point_source)}
+            if case.Q_point_source is not None
+            else {"T0_Kelvin": case.T0_Kelvin}
+        )
         seed_solver = SupersonicInstantaneousAnalytic(
             g=case.g_Kelvin, alpha=case.alpha, lambdap=case.lambda_,
             f=case.f_Kelvin, beta=case.beta_Rosen, mu=case.mu,
             rho0=case.rho0, omega=case.omega,
-            T0_Kelvin=case.T0_Kelvin, d=1,
+            d=d_dim, **amplitude,
         )
         T_material = np.asarray(
             seed_solver.temperature_profile(x_cells, case.t_sec_start), dtype=float
@@ -302,7 +324,15 @@ def compute_adaptive_dt(
         # at the origin for t > 0). Starting at 1e-6 * t_end misses ~9% of
         # the energy and leaves the heat front correspondingly short; ~10
         # decades captures it to a few tenths of a percent.
-        return min(1e-10 * t_end, t_end - t)
+        dt0 = 1e-10 * t_end
+        if t > 0.0:
+            # Restarting from a seeded profile at t > 0: a self-similar wave
+            # advances as r ~ t^(1/p), so the step must be small against the
+            # *current* time, not against t_end. When t << t_end the t_end
+            # scaling alone can hand back a first step larger than t itself,
+            # which lurches the front forward and loses energy on step one.
+            dt0 = min(dt0, 1e-3 * t)
+        return min(dt0, t_end - t)
 
     if scenario == "hydro_only":
         dt_cfl = compute_dt_cfl(state, gamma, CFL)

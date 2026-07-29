@@ -202,6 +202,53 @@ def _legend_time_s(t_s: float) -> str:
 # 4-Panel comparison: all selected times on one figure (discrete legend)
 # ============================================================================
 
+@dataclass
+class FrontMarkers:
+    """One set of front locations to draw as vertical lines, one per snapshot.
+
+    ``values`` is parallel to the ``times`` passed to the plot function; entries
+    that are NaN are skipped. Colour follows the snapshot (so a front lines up
+    with the curves of its own time) and ``linestyle`` distinguishes the source,
+    matching the curve convention: dashed for the semi-analytic solver, solid
+    for the simulation.
+    """
+
+    label: str
+    values: np.ndarray
+    linestyle: str = "--"
+    lw: float = 1.2
+
+
+def detect_front(m: np.ndarray, y: np.ndarray) -> float:
+    """Locate a front as the steepest logarithmic drop of ``y`` along ``m``.
+
+    Both fronts in an ablative problem are, by construction, where a quantity
+    falls off a cliff: pressure across the shock, temperature across the heat
+    front. Taking the steepest ``dlog(y)/dlog(m)`` finds that cliff without a
+    per-problem threshold, and is insensitive to the absolute scale (which
+    varies by orders of magnitude between the ablated and shocked regions).
+
+    Checked against Menahem's closed-form fronts on the omega=0.5 gold case:
+    pressure recovers ``shocked_mass`` to ~1%, temperature recovers
+    ``ablated_mass`` to 2-4%, the latter being about one cell width at N=25.
+
+    Returns NaN if there is nothing usable to difference.
+    """
+    m = np.asarray(m, dtype=float)
+    y = np.asarray(y, dtype=float)
+    ok = np.isfinite(m) & np.isfinite(y) & (m > 0.0) & (y > 0.0)
+    if ok.sum() < 3:
+        return float("nan")
+    lm, ly = np.log(m[ok]), np.log(y[ok])
+    dlm = np.diff(lm)
+    good = dlm > 0.0
+    if not np.any(good):
+        return float("nan")
+    slope = np.full(dlm.shape, np.inf)
+    slope[good] = np.diff(ly)[good] / dlm[good]
+    return float(m[ok][int(np.argmin(slope))])
+
+
 def plot_comparison_in_selected_times(
     sim_data: HydroDataLike,
     ref_data: HydroDataLike,
@@ -213,6 +260,9 @@ def plot_comparison_in_selected_times(
     shock_data: HydroDataLike | None = None,
     cmap_name: str = "plasma",
     extra_data: list["HydroDataLike"] | None = None,
+    log_axes: bool = False,
+    xlim: tuple[float, float] | None = None,
+    front_markers: list["FrontMarkers"] | None = None,
 ) -> list[tuple[Any, Any]]:
     """
     One figure: overlay every requested snapshot (nearest stored time in each dataset).
@@ -230,6 +280,19 @@ def plot_comparison_in_selected_times(
         title: Figure title (optional)
         shock_data: Optional third dataset (e.g. shock solver P0*t^tau)
         cmap_name: Colormap used to pick distinct colors per snapshot index
+        log_axes: Log-scale the x axis and every positive-definite quantity
+            (rho, P, e, T, E_rad). Off by default so existing figures are
+            unchanged. An ablative case needs it: the ablated region occupies
+            the first ~1e-3 of the mass coordinate and several decades of
+            density, so on linear axes it collapses into the y axis. ``u``
+            keeps a linear scale -- it goes negative in the ablated flow.
+        xlim: Explicit x limits. Useful with ``log_axes`` to cut the padding
+            masses that reference solvers prepend (~1e-30 g/cm^2), which would
+            otherwise stretch the axis over 25 empty decades.
+        front_markers: Vertical lines marking front locations, one ``values``
+            entry per requested time. Overlaying the solver's fronts and the
+            simulation's own gives a front-position check that is independent of
+            how well the profile *shapes* agree.
 
     Returns:
         ``[(figure, axes)]`` (length 1) for compatibility with callers expecting a list.
@@ -416,6 +479,35 @@ def plot_comparison_in_selected_times(
         ax.set_xlabel(xlabel)
         ax.tick_params(axis="x", labelbottom=True)
         ax.grid(True, alpha=0.3)
+
+    if log_axes:
+        for ax in plot_axes:
+            ax.set_xscale("log")
+            # ax_u carries signed velocities, so it stays linear.
+            if ax is not ax_u:
+                ax.set_yscale("log")
+    if xlim is not None:
+        for ax in plot_axes:
+            ax.set_xlim(*xlim)
+
+    for marker in front_markers or []:
+        vals = np.asarray(marker.values, dtype=float).ravel()
+        drawn = False
+        for j in range(min(n_t, vals.size)):
+            v = vals[j]
+            if not np.isfinite(v):
+                continue
+            for ax in plot_axes:
+                ax.axvline(
+                    v, color=colors[j % len(colors)], linestyle=marker.linestyle,
+                    lw=marker.lw, alpha=0.65,
+                )
+            drawn = True
+        if drawn:
+            legend_handles.append(
+                Line2D([0], [0], color="0.35", lw=marker.lw,
+                       linestyle=marker.linestyle, label=marker.label)
+            )
 
     nh = len(legend_handles)
     fig.legend(

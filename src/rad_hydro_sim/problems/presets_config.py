@@ -8,6 +8,7 @@ Presets are physical case names (SIMPLE_TEST_CASES keys) - not case+config coupl
 Simulation config is a general setting; use get_default_config() and override
 N, store_every, png_time_frac manually when running a test.
 """
+from dataclasses import replace
 from typing import Dict, Tuple
 
 import numpy as np
@@ -27,6 +28,7 @@ PRESET_FIG_8_CONSTANT_TEMPERATURE_MARSHAK = "fig_8_comparison_marshak"
 CONSTANT_TEMPERATURE_OMEGA_0_5_HYDRO_ONLY = "constant_temperature_omega_0_5_hydro_only"
 CONSTANT_TEMPERATURE_OMEGA_0_5_RADIATION_ONLY = "constant_temperature_omega_0_5_radiation_only"
 CONSTANT_TEMPERATURE_OMEGA_0_5_FULL = "constant_temperature_omega_0_5_full"
+CONSTANT_TEMPERATURE_OMEGA_MINUS_0_5_FULL = "constant_temperature_omega_minus_0_5_full"
 PRESET_FIG_9_CONSTANT_FLUX = "fig_9_comparison"
 PRESET_FIG_10_CONSTANT_ABLATION_PRESSURE = "fig_10_comparison"
 PRESET_MATLAB = "matlab_comparison"
@@ -361,17 +363,83 @@ PRESET_TEST_CASES = {
 
         # grid parameters
         x_min = 0,
-        x_max = 2.5e-2 / 19.32,
+        # Just past the shock front at t_end, so the domain is spent on the
+        # perturbed region instead of far field the wave never reaches.
+        # Menahem's PistonShock puts the front at 5.6419e-5 cm at 2 ns
+        # (AblationSolver(**_ablation_kwargs_from_case(case))
+        #  .shock_solver.shock_position(time=t_sec_end)).
+        # The margin is 10% of the enclosed *mass*, which is what the outer
+        # boundary actually has to hold back. Since m ~ x^(1-omega), that is
+        # 1.1**(1/(1-omega)) = 1.1**2 in position -- a 10% margin in x would
+        # have left only 5% in mass.
+        x_max = 1.1**2 * 5.6419e-5,
         t_sec_end = 2e-9,
 
         initial_condition="temperature, density",
         scenario="full_rad_hydro",
         title=r"Constant temperature radiation only ($\omega=0.5$, $Au$, $2~ns$)",
         geom=planar(),
-        times_for_png=np.array([0.05e-9, 0.1e-9, 0.15e-9], dtype=float),
+        # Late times: the paper quotes Test 1 profiles at 1.0/1.5/2.0 ns, and
+        # these are where the ablation layer is best resolved. The former
+        # 0.05/0.1/0.15 ns sampled only the run's least accurate window.
+        times_for_png=np.array([1.0e-9, 1.5e-9, 2.0e-9], dtype=float),
         bc_type="Marshak",
         omega=0.5
     ),
+    CONSTANT_TEMPERATURE_OMEGA_MINUS_0_5_FULL: RadHydroCase(
+        # Rosen's opacity parameters
+        g_Kelvin = 1.0 / (7200 * KELVIN_PER_HEV**1.5),
+        alpha = 1.5,
+        lambda_ = 0.2,
+
+        # Rosen's specific energy parameters
+        f_Kelvin = 3.4e13 / (KELVIN_PER_HEV**1.6),
+        beta_Rosen = 1.6,
+        mu = 0.14, # ensure
+
+        # coupling factor
+        chi = 1,
+
+        # Boundary conditions
+        T0_Kelvin = 1* KELVIN_PER_HEV,
+        P0_Barye = None,
+        tau = 0.00,
+
+        # initial conditions
+        rho0 = 19.32,
+        p0 = None,
+        u0 = None,
+        T_initial_Kelvin = 300, # 300 K in Hev
+
+        # adiabatic index
+        r = 0.25, # r = \gamma_adiabatic - 1
+
+        # grid parameters
+        x_min = 0,
+        # Just past the shock front at t_end, so the domain is spent on the
+        # perturbed region instead of far field the wave never reaches.
+        # Menahem's PistonShock puts the front at 5.6419e-5 cm at 2 ns
+        # (AblationSolver(**_ablation_kwargs_from_case(case))
+        #  .shock_solver.shock_position(time=t_sec_end)).
+        # The margin is 10% of the enclosed *mass*, which is what the outer
+        # boundary actually has to hold back. Since m ~ x^(1-omega), that is
+        # 1.1**(1/(1-omega)) = 1.1**2 in position -- a 10% margin in x would
+        # have left only 5% in mass.
+        x_max = 1.1**2 * 5.6419e-3,
+        t_sec_end = 2e-9,
+
+        initial_condition="temperature, density",
+        scenario="full_rad_hydro",
+        title=r"Constant temperature radiation only ($\omega=-0.5$, $Au$, $2~ns$)",
+        geom=planar(),
+        # Late times: the paper quotes Test 1 profiles at 1.0/1.5/2.0 ns, and
+        # these are where the ablation layer is best resolved. The former
+        # 0.05/0.1/0.15 ns sampled only the run's least accurate window.
+        times_for_png=np.array([1.0e-9, 1.5e-9, 2.0e-9], dtype=float),
+        bc_type="Marshak",
+        omega=-0.5
+    ),
+
     PRESET_COPPER_CONST_TEMPERATURE: RadHydroCase(
         # Rosen's opacity parameters
         g_Kelvin = 1.0 / (2237 * KELVIN_PER_HEV**2.21),
@@ -754,9 +822,42 @@ def get_default_config() -> SimulationConfig:
 
 
 # ---------------------------------------------------------------------------
+# Per-preset numerical overrides.
+#
+# Most presets run fine on DEFAULT_SIMULATION_CONFIG. A few do not, and pairing
+# every preset with the shared default silently hands those an unusable setting.
+# Timings below are measured on this repo, running to the preset's own t_end.
+# ---------------------------------------------------------------------------
+PRESET_CONFIG_OVERRIDES: Dict[str, SimulationConfig] = {
+    # rho ~ r^-1/2 concentrates the mass at small r, so resolving the ablation
+    # layer (~1e-3 g/cm^2, i.e. the first ~1e-9 cm) costs cells that are minute
+    # in *space*, and the acoustic CFL -- which binds on 99% of steps -- scales
+    # with them. Measured to 2 ns: N=25 finishes in ~2 min; N=50 reaches only
+    # 3.9% of t_end in 5 min; N=100 was still running after 74 min.
+    # N=25 is not a compromise on accuracy: against Menahem's AblationSolver the
+    # shocked-plateau pressure agrees to 0.3-3% from 0.5 ns onwards (12% at
+    # 0.05 ns, while the layer still spans only ~3 cells) and the surface holds
+    # 1.0003 HeV against the 1 HeV drive.
+    CONSTANT_TEMPERATURE_OMEGA_0_5_FULL: replace(
+        DEFAULT_SIMULATION_CONFIG, N=25, store_every=200
+    ),
+    CONSTANT_TEMPERATURE_OMEGA_MINUS_0_5_FULL: replace(
+        DEFAULT_SIMULATION_CONFIG, N=100, store_every=200
+    ),
+    # ~2.5e5 steps over 1397 cells. At store_every=10 the history buffer alone
+    # is ~2.6 GB and the run dies in np.stack after the solve has succeeded.
+    CONSTANT_TEMPERATURE_OMEGA_0_5_HYDRO_ONLY: replace(
+        DEFAULT_SIMULATION_CONFIG, store_every=500
+    ),
+}
+
+
+# ---------------------------------------------------------------------------
 # PRESETS: preset_name -> (case, config)
-# Preset name = physical case key (SIMPLE_TEST_CASES). Config is always all_outputs.
+# Preset name = physical case key (SIMPLE_TEST_CASES). Config is all_outputs
+# unless the preset appears in PRESET_CONFIG_OVERRIDES.
 # ---------------------------------------------------------------------------
 PRESETS: Dict[str, Tuple[RadHydroCase, SimulationConfig]] = {
-    k: (v, DEFAULT_SIMULATION_CONFIG) for k, v in PRESET_TEST_CASES.items()
+    k: (v, PRESET_CONFIG_OVERRIDES.get(k, DEFAULT_SIMULATION_CONFIG))
+    for k, v in PRESET_TEST_CASES.items()
 }

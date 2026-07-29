@@ -45,6 +45,9 @@ package = true
 pythonpath = [
   "src"
 ]
+markers = [
+  "slow: test runs a full simulation (deselect with '-m \"not slow\"')",
+]
 
 [tool.setuptools]
 packages = { find = { where = ["src"] } }

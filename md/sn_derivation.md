@@ -6,11 +6,11 @@ five things:
 1. **Where the method comes from** (Section 1): the foundational papers, and
    which of them plays the role that Fleck & Cummings play for IMC.
 2. **How the paper's transport problem maps onto the variables of `sn.py`**
-   (Section 2). `sn.py` is written in neutron-transport language (particle
-   density, speed $v$, cross sections $\Sigma_t,\Sigma_s$). The paper is
-   written in radiation language ($I$, $E_r$, $k_a$, $k_s$, $T_{\rm bath}$).
-   The map between them is exact, and two numerical checks confirm the
-   normalization.
+   (Section 2). $S_N$ is usually written in neutron-transport language
+   (particle density, speed $v$, cross sections $\Sigma_t,\Sigma_s$); the
+   paper is written in radiation language ($I$, $E_r$, $k_a$, $k_s$,
+   $T_{\rm bath}$). The map between them is exact. `sn.py` works directly in
+   the radiation form.
 3. **The chain of discretizations** (Sections 3–7): time linearization (the
    same as F&C with $\alpha=1$), backward Euler, the $S_N$ angular quadrature,
    diamond differencing in space with the set-to-zero fixup, and source
@@ -22,8 +22,14 @@ five things:
 5. **What `sn.py` does not do yet** (Section 10), which is the bridge to
    `md/full_plan_sn_comparison.md`.
 
+`sn.py` is the deterministic twin of the SiO₂ IMC script
+(`src/imc/sio2_1mm_gray_imc_check_og.py`): the same problem, constants, drive
+and Fleck linearization, with the random walk replaced by an $S_N$ solve.
+On that problem the two agree within IMC's error bars (Section 11).
+
 The spherical sweep (Lewis–Miller) is derived in Section 9 for completeness.
-The paper is planar, so the sphere is not on the critical path.
+The paper is planar, so the sphere is not on the critical path, and the
+current `sn.py` no longer contains it.
 
 Labels such as (R), (L), (T$_N$), (DD) and the numbering of lemmas and
 theorems are this document's own. "Paper Eq. `x`" refers to the `\label{x}`
@@ -108,9 +114,11 @@ The analysis that matters for this problem came later:
 > copied from `datab.bib`. Check volume and page numbers before any of them
 > enter the manuscript.
 
-`sn.py` itself is a port of a Fortran code (`sn1_spherical.f90`, referenced in
-its docstrings). That source is not in the repository. The fixup and
-negative-source schemes are copied from it line by line.
+The first version of `sn.py` (up to commit `6d0bcfa`) was a generic slab and
+sphere solver ported from a Fortran code (`sn1_spherical.f90`, not in the
+repository), with anisotropic scattering and two negative-source fixups. The
+current version keeps only what the paper needs: planar geometry and
+isotropic scattering, with the thermal coupling and the bath built in.
 
 ---
 
@@ -143,8 +151,8 @@ F&C's ratio, and $\mu$ is always a direction cosine.
 
 ### 2.2 The equation `sn.py` solves
 
-`sn.py` solves, for an angular flux $\psi(x,\mu,t)$ and scalar flux
-$\phi=\tfrac12\int_{-1}^1\psi\,d\mu$ (`scalar_flux`, line 61):
+The general $S_N$ equation, for an angular flux $\psi(x,\mu,t)$ and scalar
+flux $\phi=\tfrac12\int_{-1}^1\psi\,d\mu$ (`scalar_flux`, line 146), is
 
 $$
 \frac1v\partial_t\psi+\mu\partial_x\psi+\Sigma_t\psi=\Sigma_s\,\phi+S(x).
@@ -154,7 +162,6 @@ $$
 Two features of the normalization are easy to get wrong:
 
 * The factor $\tfrac12$ in $\phi$ means **an isotropic $\psi$ equals $\phi$**.
-  The initial condition `np.tile(v * n0, (n_mu, 1))` (line 492) relies on this.
 * The external source $S$ enters (N) **without** a factor $\tfrac12$.
   Integrating (N) over $\mu$ and dividing by 2 gives the balance law
   $$
@@ -163,7 +170,11 @@ Two features of the normalization are easy to get wrong:
   $$
   So $n=\phi/v$ is a particle density and $S$ is particles per volume per time.
 
-**Numerical check** (scratch script, not committed). In a 200-mfp slab with
+`sn.py` solves the instance of (N) derived in Section 3: $v=c$,
+$\Sigma_t=\sigma_i$, $\Sigma_s=(1-f_i)\sigma_i$ and $S=f_i\sigma_icB_i$, all
+cell-wise (`transport_step`, lines 197–199).
+
+**Numerical check** (on the generic version, commit `6d0bcfa`). In a 200-mfp slab with
 8 ordinates and $\Delta t=0.01$:
 (i) pure absorber, $\phi_{\rm centre}(t=1)=0.369713$, against the
 backward-Euler value $(1+\Sigma_tv\Delta t)^{-100}=0.369711$;
@@ -196,8 +207,10 @@ $$
 J^+(0)=\tfrac12\!\int_0^1\!\mu\,acT_{\rm bath}^4\,d\mu=\tfrac14acT_{\rm bath}^4=\sigma_{\rm SB}T_{\rm bath}^4=F_{\rm inc},
 $$
 
-which is paper Eq. `f_inc_bath`. The initial condition (cold, equilibrium) is
-$\psi=acT_0^4$, i.e. `n0` $=aT_0^4$.
+which is paper Eq. `f_inc_bath`. The paper's initial condition (cold,
+equilibrium) is $\psi=acT_0^4$. Like the IMC script, `sn.py` starts the SiO₂
+problem with no radiation ($\psi=0$, line 232). At 300 K the difference is
+negligible.
 
 ### 2.4 Why the transport BC is the Marshak BC (intuition for the surface layer)
 
@@ -329,8 +342,8 @@ So a time step is a **steady** transport problem with an augmented total cross
 section and an extra source:
 
 $$
-\Sigma_{\rm eff}=\Sigma_t+\frac{1}{v\Delta t}\quad(\texttt{sig\_eff}, \text{line 490}),\qquad
-\text{rhs}=q+\frac{\psi^n}{v\Delta t}\quad(\text{line 342}).
+\Sigma_{\rm eff}=\Sigma_t+\frac{1}{v\Delta t}\quad(\texttt{sig\_eff}, \text{line 197}),\qquad
+\text{rhs}=q+\frac{\psi^n}{v\Delta t}\quad(\text{line 211}).
 $$
 
 The term $1/(v\Delta t)$ is **time absorption**. Particles that "do not make it
@@ -341,11 +354,11 @@ makes every time step strictly subcritical (Section 7).
 
 Two consequences for the comparison:
 
-* **$\psi^n$ is stored per ordinate.** `psi_old` (line 324) is the
-  angular census. The angular shape of the radiation is carried between
-  steps, as IMC carries particle directions. A driver that restarts from an
-  isotropic $\psi$ each step (as `run_sn`'s `n0` argument would) would throw
-  this away.
+* **$\psi^n$ is stored per ordinate.** `psi_old` (line 200) is the
+  angular census, and `run_one` carries `psi` from step to step (line 232).
+  The angular shape of the radiation is kept, as IMC keeps particle
+  directions. Restarting from an isotropic $\psi$ each step would throw it
+  away.
 * **The time error is $O(\Delta t)$ and diffusive.** Backward Euler damps the
   wave front. Its leading error is
   $\tfrac12v\Delta t\,\partial_t^2\psi$ per unit length, which smears a
@@ -359,9 +372,10 @@ Two consequences for the comparison:
 
 ### 5.1 The quadrature
 
-`make_quadrature` (line 37): Gauss–Legendre nodes and weights on $[-1,1]$,
-$N=$ `n_mu` even, sorted increasing, $\sum w_m=2$. The method collocates (N)
-at $\mu_m$ and replaces $\phi$ by $\tfrac12\sum_mw_m\psi_m$.
+`make_quadrature` (line 100): Gauss–Legendre nodes and weights on $[-1,1]$
+(`"gauss"`) or the double-Gauss set of Section 5.2 (`"double-gauss"`, the
+default); $N=$ `n_mu` even, sorted increasing, $\sum w_m=2$. The method
+collocates (N) at $\mu_m$ and replaces $\phi$ by $\tfrac12\sum_mw_m\psi_m$.
 
 Properties used below, all from exactness of Gauss quadrature for polynomials
 of degree $\le2N-1$:
@@ -378,6 +392,11 @@ of degree $\le2N-1$:
 4. $N$ even means no ordinate at $\mu=0$. Every ordinate streams, so each
    ordinate can be swept from one boundary.
 
+Double-Gauss uses an $N/2$-point Gauss rule on each half, exact up to degree
+$N-1$ there. So properties 1, 2 and 4 hold for $N\ge4$ (property 2 needs
+$\mu^2$, degree 2), and every half-range moment up to degree $N-1$ is exact
+as well. Property 3 is specific to Gauss–Legendre.
+
 ### 5.2 The half-range defect at the bath boundary
 
 Gauss–Legendre quadrature on $[-1,1]$ is **not** exact for half-range
@@ -393,7 +412,8 @@ is not exactly $\tfrac14$:
 With $\psi_b=acT_{\rm bath}^4$ imposed naively, $S_8$ injects 1.15% too much
 energy from the bath. That raises $T_s$ by about 0.3% and moves the front.
 This is a systematic bias of the size of the effects the paper wants to
-measure. There are two remedies (plan, S2):
+measure. There are two remedies, both in `sn.py` (`--bath-norm`,
+`--quadrature`; `run_one`, lines 229 and 255):
 
 * **(a) normalize the bath:** $\psi_b=F_{\rm inc}\big/\big(\tfrac12\sum_{\mu_m>0}w_m\mu_m\big)$,
   so the discrete incoming current is exactly $\sigma_{\rm SB}T_{\rm bath}^4$;
@@ -401,10 +421,22 @@ measure. There are two remedies (plan, S2):
   on $[-1,0]$ separately. Half-range moments are then exact, which is the
   standard choice for problems driven at a surface.
 
-### 5.3 The scattering source (general, and why it is trivial here)
+**Measured on the SiO₂ problem** (peak of $F_{\rm out}/\sigma_{\rm SB}(165\,{\rm eV})^4$;
+IMC: $0.953\pm0.029$ at 2 s.e.):
 
-`scattering_source` (line 83) implements the azimuthally integrated
-Legendre expansion
+| run | $S_8$ Gauss, naive | $S_8$ Gauss, current | $S_4$ double-Gauss | $S_{16}$ double-Gauss | $S_{32}$ double-Gauss |
+|---|---|---|---|---|---|
+| peak | 0.9551 | 0.9383 | 0.9440 | 0.9506 | 0.9506 |
+| breakout [ns] | 1.4645 | 1.4745 | 1.4715 | 1.4675 | 1.4675 |
+
+The naive bath's extra 1.15% of inflow partly hides $S_8$'s angular error:
+with the inflow made exact, $S_8$ Gauss is 1.3% low. Double-Gauss converges
+faster, and $S_{16}$ already agrees with $S_{32}$ to six digits.
+
+### 5.3 The scattering source (general, and why it is isotropic here)
+
+The generic version of `sn.py` (commit `6d0bcfa`) implemented the azimuthally
+integrated Legendre expansion
 
 $$
 Q_s(\mu_m)=\Sigma_s\sum_{l=0}^{L}(2l+1)f_l\,P_l(\mu_m)\,\phi_l,\qquad
@@ -420,12 +452,12 @@ $Q_s=\Sigma_s\int K\psi\,d\mu'=\Sigma_s\sum_l(2l+1)f_lP_l(\mu)\phi_l$. ∎
 
 **For this problem only $l=0$ is used.** Both physical scattering ($k_s$ is
 Thomson-like and isotropic in the gray model) and the effective scattering
-$(1-f)k_a$ are isotropic. So `scatter_model="isotropic"`, `lmax=0`, and
-$Q_s=\Sigma_s\phi$.
+$(1-f)k_a$ are isotropic, so $Q_s=\Sigma_s\phi$, and the current `sn.py`
+builds the source $(1-f)\sigma\phi+f\sigma cB$ directly (line 211).
 
-**Lemma 1 (the negative-source fixups are no-ops here).** If $Q_s$ is
-isotropic and $S\ge0$, then `fixup_scale_clip` (line 96) and
-`fixup_min_blend` (line 116) leave $q$ unchanged, up to a
+**Lemma 1 (dropping the negative-source fixups loses nothing).** If $Q_s$ is
+isotropic and $S\ge0$, the two fixups of commit `6d0bcfa`
+(`fixup_scale_clip`, `fixup_min_blend`) leave $q$ unchanged, up to a
 relative change of $10^{-80}$.
 
 *Proof.* $q_m=q_{\rm iso}\ge0$ for all $m$. In scale_clip, $S_{\rm neg}=0$, so
@@ -434,8 +466,8 @@ If $q_{\rm iso}\le10^{-40}$, `fac`$=0$ and $q_m\leftarrow\max(0,q_{\rm iso})=q_m
 In min_blend, `src_neg` stays $0\ge\min(0,q_{\rm iso})=0$, so the cell is
 skipped. If $q_{\rm iso}\le10^{-40}$, $q_m\leftarrow q_{\rm iso}=q_m$. ∎
 
-The anisotropic machinery (HG, `scatter_fl`, the two Fortran fixups) can be
-ignored for the paper.
+So the anisotropic machinery (HG, `scatter_fl`, the two Fortran fixups) was
+removed without changing any result for this problem.
 
 ---
 
@@ -473,8 +505,8 @@ $$
 \psi_{\rm out}=\frac{2\bar q+(2|\mu|/\Delta x-\Sigma_{\rm eff})\psi_{\rm in}}{\Sigma_{\rm eff}+2|\mu|/\Delta x}.
 $$
 
-This is exactly lines 147–149 of `sweep_slab`. One loop serves both
-directions: for $\mu<0$ the cell index runs right to left (line 146).
+This is exactly lines 172–173 of `sweep`. One loop serves both
+directions: for $\mu<0$ the cell index runs right to left (line 171).
 
 ### 6.3 Positivity, and the set-to-zero fixup
 
@@ -491,7 +523,7 @@ negative. In the cold gold ahead of the front ($T\approx300$ K, where
 $\kappa_R\propto T^{-1.5}$ is enormous), $k_a\Delta x\gg1$ (of order $10^3$ for a
 1000-cell mesh), so **the fixup is active there all the time**.
 
-The fixup (lines 150–152) sets $\psi_{\rm out}=0$ and keeps the balance (B):
+The fixup (lines 174–177) sets $\psi_{\rm out}=0$ and keeps the balance (B):
 
 $$
 \frac{\mu}{\Delta x}(0-\psi_{\rm in})+\Sigma_{\rm eff}\bar\psi=\bar q
@@ -506,8 +538,9 @@ This is exactly the code. The fixup is
 * **nonlinear and locally first order**: the scheme now depends on the
   solution, and in the fixed-up cell it behaves like the step scheme.
 
-`time_loop` asserts $\psi\ge0$ after each sweep (line 355). With the fixup on and
-$S\ge0$, $\psi_{\rm in}\ge0$, this assertion can only fail through round-off.
+In `sweep` the fixup is always on. With non-negative sources and bath, every
+$\psi$ it produces is therefore non-negative, so no separate positivity check
+is needed.
 
 ### 6.4 The sweep
 
@@ -517,10 +550,10 @@ $\mu_m<0$ the sweep runs right to left. One sweep **inverts the streaming–coll
 operator $\mathcal L=\mu\partial_x+\Sigma_{\rm eff}$ exactly** (for the discrete
 scheme) at cost $O(N\cdot N_x)$, with no matrix.
 
-**Boundary conditions in the code.** `psi_face = 0.0` at the start of every
-ordinate (line 144): vacuum on both sides. The bath BC needs
-`psi_face = psi_b` for $\mu_m>0$ (Section 5.2). This is the first change the
-plan makes.
+**Boundary conditions in the code.** Each ordinate starts from
+`psi_face = psi_bath` if $\mu_m>0$ and from 0 if $\mu_m<0$ (line 169): bath at
+$x=0$, vacuum at $x=L$. The face value leaving the last cell of each sweep
+gives the outgoing partial currents (lines 180–183), which Theorem 2 needs.
 
 ---
 
@@ -531,7 +564,7 @@ plan makes.
 Write one step as $\psi=\mathcal L^{-1}(\Sigma_s\phi+s)$ with
 $s=S+\psi^n/(v\Delta t)$, and $\phi=\mathcal D\psi$, where
 $\mathcal D\psi=\tfrac12\sum w_m\psi_m$. The scattering source depends on the
-unknown $\phi$, so the code iterates (`time_loop`, lines 328–367):
+unknown $\phi$, so the code iterates (`transport_step`, lines 207–217):
 
 $$
 \phi^{(\ell+1)}=\mathcal D\,\mathcal L^{-1}\big(\Sigma_s\phi^{(\ell)}+s\big).
@@ -577,12 +610,15 @@ $\Sigma_{\rm eff}=k_t+1/(c\Delta t)>k_t\ge(1-f)k_a+k_s$, because $f>0$. ∎
   same rate is observed. Larsen–Morel–Miller-type Fourier analysis covers the
   unfixed DD case.
 * **Stopping rule and false convergence.** The code stops when
-  $\max_i|\phi_i^{(\ell+1)}-\phi_i^{(\ell)}|/(\phi_i+10^{-3}\phi_{\max})<\texttt{conv\_tol}$.
+  $\max_i|\phi_i^{(\ell+1)}-\phi_i^{(\ell)}|/(\phi_i+10^{-3}\phi_{\max})<\texttt{tol}$
+  (line 216; `--tol`, default $10^{-10}$).
   Because of geometric convergence, the true error is
   $\le\frac{c_{\rm eff}}{1-c_{\rm eff}}\times$ the last change. At
   $c_{\rm eff}=0.86$ that is a factor of 6. The floor $10^{-3}\phi_{\max}$
   makes the criterion absolute in cells ahead of the front, where $\phi$ is
   tiny. That is acceptable, because those cells carry no energy.
+* **Measured on SiO₂** ($S_{16}$, $\Delta t=1$ ps): typically 4 sweeps per
+  step, at most 62.
 
 **Numbers for the paper's materials** (the plan has the full table). For
 $\chi=1$ ($k_s=0$), $c_{\rm eff}\le0.37$ for $\Delta t\le10^{-12}$ s in all three
@@ -645,8 +681,15 @@ $\sum\Delta x\,u_m$. ∎
   step, and $\phi$ to be the DD cell average `psi[m,i]`. A material update in
   $u_r$ form (the diffusion code's current default, IMC plan finding 2a) breaks
   it when $\beta_{\rm EOS}$ varies.
-* The code must **tally the boundary face currents**. `sn.py` does not
-  return them yet (plan, S0).
+* **How `sn.py` makes it exact for any tolerance.** `sweep` returns the
+  boundary currents (lines 180–183). `transport_step` takes the deposition
+  from the last sweep itself (line 221):
+  $\Delta t\,[\sigma\phi^{(\ell+1)}-(1-f)\sigma\phi^{(\ell)}-f\sigma cB]$. The
+  balance of that sweep, summed as in the proof, contains exactly these
+  terms, so the residual above moves into the material and the total is
+  conserved to round-off. At convergence the deposition equals (M).
+  Measured on SiO₂: largest relative energy error $5\times10^{-14}$ over
+  3000 steps.
 
 ### 8.2 Proposition 1 (the material energy stays positive)
 
@@ -711,6 +754,10 @@ measures it (S9).
 
 ## 9. The spherical sweep (Lewis–Miller), for completeness
 
+The generic version of `sn.py` (commit `6d0bcfa`) implemented this sweep; the
+current, planar version does not. Line numbers in this section refer to that
+commit.
+
 The conservative form of the spherical $S_N$ equation in cell $i$ (shell
 $[r_{i-1/2},r_{i+1/2}]$, areas $A=4\pi r^2$, volume $V_i$):
 
@@ -753,54 +800,39 @@ denominator, as in Section 6.3.
 
 ### 10.1 Line-by-line map
 
+`sn.py` has the same structure and names as the SiO₂ IMC script wherever the
+two do the same job (`Drive`, `material_coefficients`,
+`invert_material_energy`, `transport_step`, `run_one`, `main`).
+
 | Code | Equation | Section |
 |---|---|---|
-| `make_quadrature` (37) | Gauss–Legendre $\mu_m,w_m$, $\sum w=2$ | 5.1 |
-| `legendre_table` (46) | $P_l(\mu_m)$ by the 3-term recurrence | 5.3 |
-| `scalar_flux`, `angular_moments` (61, 71) | $\phi=\tfrac12\sum w\psi$, $\phi_l=\tfrac12\sum wP_l\psi$ | 2.2, 5.3 |
-| `scattering_source` (83) | $Q_s=\Sigma_s\sum(2l+1)f_lP_l\phi_l$ | 5.3 |
-| `fixup_scale_clip`, `fixup_min_blend` (96, 116) | no-ops for isotropic sources (Lemma 1) | 5.3 |
-| `sweep_slab` (133) | (B)+(DD)+set-to-zero fixup, vacuum BCs | 6 |
-| `lewis_miller_alpha`, `sphere_cell`, `sweep_sphere` (158, 168, 203) | Lewis–Miller | 9 |
-| `sig_eff` (490), `rhs` (342) | backward Euler, time absorption | 4 |
-| SI loop in `time_loop` (328–367) | $\phi^{(\ell+1)}=\mathcal D\mathcal L^{-1}(\Sigma_s\phi^{(\ell)}+s)$ | 7 |
-| convergence test (357–364) | relative change with floor $10^{-3}\phi_{\max}$ | 7.2 |
-| adaptive $\Delta t$ (375–382) | $\Delta t\leftarrow\min(\Delta t\cdot\texttt{dtfac}/\delta,\;1.1\Delta t,\;\Delta t_{\max})$ | — |
-| `scattering_coefficients` (390) | $f_l$: isotropic, HG $g^l$, or user-given | 5.3 |
-| `run_sn` (410) | validation, setup, one-line log | — |
+| `Drive` (76), `flux_average` (92) | $T_D(t)$; step average of $\sigma_{\rm SB}T_D^4$ | 5.2, 8.3 |
+| `make_quadrature` (100) | Gauss–Legendre or double-Gauss, $\sum w=2$ | 5.1, 5.2 |
+| `material_coefficients` (118) | $\sigma$, $f$ ($\alpha=1$), $B=aT^4$, $U$ at $T^n$ | 3 |
+| `invert_material_energy` (137) | $T$ from $U^{n+1}$ | 3 (A5) |
+| `scalar_flux` (146) | $\phi=\tfrac12\sum w\psi=cE_r$ | 2.2 |
+| `sweep` (156) | (B)+(DD)+fixup; bath at $x=0$, vacuum at $x=L$; outgoing currents | 6 |
+| `transport_step` (188) | backward Euler (197–200), source iteration (207–217), deposition (221) | 4, 7, 8.1 |
+| `run_one` (225) | bath normalization (229, 255), material update (263), energy ledger (271) | 3, 5.2, 8.1 |
+| `main` (301) | command line; npz, plot with IMC overlay, summary | — |
 
 ### 10.2 Gaps between `sn.py` and the paper's problem
 
-`sn.py` solves (N) with **constant scalars** $\Sigma_t,\Sigma_s,v$ and a
-**constant-in-time** source. Each item below is a change in the plan:
+`sn.py` now has cell-wise coefficients, the bath boundary with exact discrete
+inflow, boundary-current tallies, a per-step solve carrying the angular
+census, and the material coupling. What the paper's Tests 1–6 still need:
 
-1. **Cell-wise coefficients.** $k_t$, $\Sigma_s^{\rm eff}=(1-f)k_a$ and
-   $S^{\rm eff}$ vary by many orders of magnitude across the front.
-   `sig_eff` is already an array; `sigma_s` and the SI source are scalars.
-2. **Non-uniform mesh.** `run_sn` rejects non-uniform edges (line 436). The
-   slab sweep already takes `dx_arr`. Only the tracer lookup assumes uniform
-   spacing.
-3. **Incoming boundary data.** Both slab boundaries are hard-wired to vacuum
-   (line 144). The bath needs $\psi_b$ for $\mu>0$ at the left, normalized as
-   in Section 5.2.
-4. **A single-step API with an angular census.** The driver owns the time
-   loop and starts from an isotropic `n0`. The coupled problem needs
-   `sn_step(psi_old, coeffs, dt, psi_b) -> (psi_new, phi, J_left, J_right, iters)`,
-   called once per hydro step, with **no printing** inside the JIT.
-5. **Boundary-current tallies** for Theorem 2.
-6. **Material coupling** ($f$, (M), Newton $T(u_m)$). This belongs in a shared
-   `material.py` (the same module as IMC plan M0).
-7. **Small issues to fix while there:**
-   - In adaptive mode, the last step can overshoot `t_final`, because `dt` is
-     not clipped to `t_final - t`.
-   - Snapshots are taken at the first step with $t\ge t_{\rm snap}$, not at
-     $t_{\rm snap}$ itself.
-   - `n_steps = int(round(t_final/dt))` silently changes the final time when
-     `t_final/dt` is not an integer.
-   - The adaptive formula reacts to the global maximum relative change. With
-     the $10^{-3}\phi_{\max}$ floor, a moving front controls $\Delta t$. That
-     is the desired behaviour, but it must be the same controller as in the
-     diffusion run for a like-for-like comparison.
+1. **The paper's material model.** Hammer–Rosen Au, Cu, Al with the density
+   dependence, and the $-aT^4$ term in $u_m$. With that term, $T(u_m)$ needs
+   Newton's method instead of the closed form in `invert_material_energy`.
+2. **A non-uniform mesh** and a density profile $\rho(x)$ ($\omega\ne0$).
+   `DX` is a global constant, as in the IMC script.
+3. **The analytic step average of the power-law $T_{\rm bath}$**
+   (Proposition 2) instead of a tabulated drive.
+4. **Hydro coupling**: the census remap $\psi\leftarrow\psi\,V^{\rm old}/V^{\rm new}$
+   and the hook in the rad-hydro integrator.
+5. **A material module shared with the IMC**, so both solvers read the same
+   coefficients (plan S0, S3).
 
 ---
 
@@ -808,13 +840,14 @@ denominator, as in Section 6.3.
 
 | Link | Status |
 |---|---|
-| Dictionary (N) ↔ paper transport problem (Lemma 0) | Exact; normalization checked numerically. |
+| Dictionary (N) ↔ paper transport problem (Lemma 0) | Exact; normalization checked numerically (commit `6d0bcfa`). |
 | Linearization (L) = F&C (2.1) at $\alpha=1$ | Exact algebra given L1, L2; same as IMC. |
-| Backward Euler, $S_N$, DD | Standard approximations, orders $O(\Delta t)$, $P_{N-1}$-equivalent in angle, $O(\Delta x^2)$ smooth / $O(\Delta x)$ where fixed up. |
+| Backward Euler, $S_N$, DD | Standard approximations, orders $O(\Delta t)$, $P_{N-1}$-equivalent in angle (Gauss), $O(\Delta x^2)$ smooth / $O(\Delta x)$ where fixed up. |
 | SI convergence (Theorem 1) | Proved for exact streaming; $c_{\rm eff}<1$ always; $\le0.86$ for the paper's materials. |
-| Energy conservation (Theorem 2) | Proved for the discrete scheme including the fixup; needs (M) and boundary tallies. |
+| Energy conservation (Theorem 2) | Proved for the discrete scheme including the fixup; implemented exactly for any tolerance ($5\times10^{-14}$ on SiO₂). |
 | $u_m>0$ (Proposition 1) | Proved for $\beta_{\rm EOS}<4$. |
 | Thick limit (Section 8.4) | Formal asymptotics for $S_N$; DD+fixup degrades it in fixed-up cells (literature). |
+| $S_N$ vs. IMC on the SiO₂ problem | $S_{16}$ lies within IMC's 2 s.e. band in 99% of the bins where the flux exceeds 5% (77 bins; mean offset −0.02 s.e.). Breakout 1.4675 vs. 1.47 ns; peak 0.9506 vs. $0.953\pm0.029$. |
 | Convergence of the coupled nonlinear scheme as $\Delta t,\Delta x\to0$, $N\to\infty$ | Same status as IMC (`imc_mc_derivation.md` §8): conditional on smoothness; open in the cold front region. |
 
 ## Summary
@@ -830,11 +863,14 @@ $c_{\rm eff}<1$. The scheme conserves energy exactly and keeps $u_m$
 positive. Its thick limit is the paper's diffusion equation with exactly
 $D=1/(3k_t)$.
 
-Three facts matter most for the paper comparison:
+Four facts matter most for the paper comparison:
 
-1. `sn.py` needs a bath boundary whose discrete current is normalized (a 1.15%
-   energy bias at $S_8$ otherwise).
-2. It needs cell-wise coefficients and a per-step API carrying the angular
-   census.
-3. For $\chi=1$, plain source iteration is fast enough. No acceleration is
+1. The bath's discrete inflow must be exact: either normalize $\psi_b$ or use
+   double-Gauss. Otherwise there is a 1.15% energy bias at $S_8$.
+2. On the SiO₂ problem, `sn.py` and the IMC script solve the same equations
+   and agree within IMC's error bars. That makes `sn.py` a noise-free
+   reference for the IMC.
+3. What remains for Tests 1–6 is the paper's material model, a non-uniform
+   mesh, the analytic bath average and hydro coupling (Section 10.2).
+4. For $\chi=1$, plain source iteration is fast enough. No acceleration is
    needed for Tests 1–6.

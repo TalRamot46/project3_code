@@ -5,10 +5,22 @@
 **Goal.** Produce deterministic transport ($S_N$) results for the paper's
 benchmarks, alongside the gray diffusion rad-hydro code (`src/rad_hydro_sim`),
 the semi-analytic solution, and the IMC of `md/full_plan_imc_comparison.md`.
-The starting point is `src/sn/sn.py`: a linear, constant-coefficient,
-vacuum-boundary $S_N$ solver. The theory is in `md/sn_derivation.md`
+The starting point is `src/sn/sn.py`, the deterministic twin of the SiO₂
+IMC script: the same problem, drive and Fleck linearization, with cell-wise
+coefficients, a bath boundary with exact discrete inflow, and exact energy
+bookkeeping. The theory is in `md/sn_derivation.md`
 (cited below as "derivation §x"). Each milestone has a **Learn** part, a
 **Build** part and a **Gate**, as in the IMC plan.
+
+### Status (2026-10-17)
+
+| Milestone | State |
+|---|---|
+| S0 per-step kernel | **Done for a uniform mesh**: `transport_step` (sweep + source iteration, angular census, boundary currents). Still needed: a non-uniform mesh and a shared material module. |
+| S2 bath boundary | **Done for a tabulated drive**: step-averaged inflow, `--bath-norm current/naive`, `--quadrature gauss/double-gauss`. Still needed: the analytic power-law average for Tests 1–6. |
+| S3 thermal coupling | **Done for the SiO₂ closed-form EOS.** Still needed: Hammer–Rosen with $\rho$ and $-aT^4$ (Newton inversion), `newton_outer`, Su–Olson and 0-D gates. |
+| S4 $S_N$ vs. IMC | **Nonlinear SiO₂ comparison passed** (S4a below). The frozen linear-step test is still open. |
+| S1, S5–S11 | Not started. |
 
 ### Why $S_N$ is worth building alongside the IMC
 
@@ -27,7 +39,7 @@ vacuum-boundary $S_N$ solver. The theory is in `md/sn_derivation.md`
 coupled to hydro) **before** IMC M4–M5. The two plans share `material.py`,
 the bath integrator, the energy diagnostics and the hydro hook (IMC M0, M3,
 M4). $S_N$ exercises all of them without noise. IMC M1 ("linear step vs.
-`sn.py`") becomes S4 below.
+`sn.py`") becomes S4 below and uses `transport_step`.
 
 ### The six tests
 
@@ -61,15 +73,18 @@ the existing presets** in `src/rad_hydro_sim/problems/presets_config.py`.
 
 ### Findings from the code and the numbers that shape the plan
 
-1. **`sn.py` is linear, with scalar coefficients and vacuum boundaries**
-   (derivation §10.2). The work is in the coupling, not in the transport
-   kernel. The sweep, the fixup and source iteration are correct and reusable
-   (derivation §§6–7).
+1. **`sn.py` solves the coupled SiO₂ problem** (derivation §10). What is
+   left for the paper is the material model, the mesh, the analytic bath
+   average and the hydro coupling (derivation §10.2). The sweep, the fixup
+   and source iteration are correct and reusable (derivation §§6–7).
 2. **Half-range current bias.** With Gauss–Legendre on $[-1,1]$, imposing
    $\psi_b=acT_{\rm bath}^4$ injects
    $\tfrac12\sum_{\mu>0}w\mu/\tfrac14-1$ too much energy: +4.3% ($S_4$),
    +1.15% ($S_8$), +0.30% ($S_{16}$). Fix by normalizing $\psi_b$ or by
-   double-Gauss quadrature (derivation §5.2).
+   double-Gauss quadrature (derivation §5.2). Both are implemented, and the
+   bias is visible on SiO₂: the $S_8$ Gauss peak is 0.9551 with the naive bath
+   vs. 0.9383 with the exact inflow. $S_{16}$ and $S_{32}$ double-Gauss both
+   give 0.9506.
 3. **Source iteration is fast enough without acceleration** for $\chi=1$.
    Here $c_{\rm eff}=(1-f)k_a/(k_a+1/(c\Delta t))$, with
    $f=1/(1+\beta_Fck_a\Delta t)$. Estimates from the presets' EOS and opacity:
@@ -103,29 +118,33 @@ optional, as in IMC A7.
 
 ## Phase A: foundations
 
-### S0. Turn `sn.py` into a reusable per-step kernel (keep `run_sn` as a regression baseline)
+### S0. A reusable per-step kernel (done for a uniform mesh; keep `sn.py` as the SiO₂ baseline)
 
 - **Learn:** derivation §§2, 4–7, 10.
-  *Exercise:* reproduce Lemma 0 and the two normalization checks (pure
-  absorber vs. $(1+\Sigma v\Delta t)^{-n}$; pure scatterer with $S=1$ gives
-  $\phi=vSt$) as tests.
-- **Build** under `src/sn/`:
-  - `kernels.py`: `sweep_slab` with **cell-wise** `sig_eff[i]`, `sig_s[i]`,
-    `src[i]`, non-uniform `dx[i]`, and **per-ordinate boundary inflow**
-    `psi_left[m]` ($\mu>0$) and `psi_right[m]` ($\mu<0$). It returns the
-    outgoing face values for the boundary tallies.
-  - `step.py:sn_step(psi_old, dx, sigma_t, sigma_s, src, c, dt, psi_left, psi_right, quad, tol)`
-    returning `(psi_new, phi, J_left, J_right, n_iters, converged)`. No
-    printing inside the JIT. Raise or flag instead of `assert`.
-  - `quadrature.py`: Gauss–Legendre (current) and double-Gauss (half-range).
-  - Rebuild `run_sn` on top of `sn_step`; fix the small issues in derivation
-    §10.2(7): clip the last `dt`, exact snapshot times.
+  *Exercise:* turn Lemma 0 and the two normalization checks into tests on
+  `transport_step`. Pure absorber: $f=1$, $B=0$ against
+  $(1+\sigma c\Delta t)^{-n}$. Pure source: $f=1$ with $B$ chosen so that
+  $f\sigma cB=S$, giving $\phi$ growing as $cSt$ when $\sigma c\Delta t\ll1$.
+- **Done** in `src/sn/sn.py`:
+  - `sweep`: cell-wise `sig_eff`, bath inflow for $\mu>0$, vacuum for
+    $\mu<0$, outgoing currents returned;
+  - `transport_step`: backward Euler with the angular census, source
+    iteration, deposition taken from the last sweep;
+  - `make_quadrature`: Gauss–Legendre and double-Gauss.
+- **Still to build** (in a package next to the frozen `sn.py`):
+  - cell widths `dx[i]` instead of the global `DX`;
+  - per-ordinate inflow on both faces (`psi_left[m]`, `psi_right[m]`), for
+    reflecting walls and the 0-D problem;
+  - coefficients from a shared `material.py` instead of `material_coefficients`.
 - **Gate:**
-  - `run_sn` reproduces its current output on a few saved cases, to round-off.
+  - `sn.py` stays as the SiO₂ baseline: breakout 1.4675 ns, peak 0.9506 at
+    1.9485 ns, energy error $\le10^{-13}$ ($S_{16}$, double-Gauss,
+    $\Delta t=1$ ps). The generalized kernel must reproduce these to
+    round-off with uniform `dx`.
   - `tests/sn/` passes: the two normalization checks, a symmetric problem
     stays symmetric, and $\psi\ge0$.
-  - Per-step energy balance (derivation Theorem 2, linear version) closes to
-    $\le10\times$ `conv_tol`.
+  - Energy balance (derivation Theorem 2) at round-off for any tolerance.
+    Already true in `sn.py`: $5\times10^{-14}$.
 
 ### S1. Linear verification of the kernel
 
@@ -154,7 +173,9 @@ optional, as in IMC A7.
   - `bath.py` (shared with the IMC `sources.py`): exact step average
     $\overline{F_{\rm inc}}=\Delta t^{-1}\int\sigma_{\rm SB}T_{\rm bath}^4dt$,
     analytic for the power law (needed at $t\to0$ in Test 1).
-  - `psi_left[m]` set by option `bath_norm ∈ {"naive","current","double_gauss"}`.
+  - Already in `sn.py`: `--bath-norm {current,naive}` and
+    `--quadrature {gauss,double-gauss}`, with a tabulated drive averaged by an
+    8-point Gauss rule. Still to add: the analytic average of the power law.
 - **Gate:**
   - With `"current"` or `"double_gauss"`, the discrete incoming current equals
     $\sigma_{\rm SB}T_{\rm bath}^4$ to round-off.
@@ -167,10 +188,12 @@ optional, as in IMC A7.
 - **Learn:** derivation §3 (the linearization, the ledger L1–L5), §8.1
   (Theorem 2), §8.2 (positivity of $u_m$). Compare line by line with
   `imc_mc_derivation.md` §§1.2–1.8: it is the same algebra at $\alpha=1$.
+- **Already in `sn.py`** for the SiO₂ EOS: steps 1–3 and 6 below, with the
+  closed-form inversion instead of Newton.
 - **Build:** `src/sn/thermal.py:sn_thermal_step(state, dt, bath)`:
   1. From $T^n$, $\rho$ (via the shared `material.py`), compute $k_t$, $k_a$,
      $\beta_F$, $f$, $\Sigma_s^{\rm eff}=(1-f)k_a$ and $S^{\rm eff}=fk_aacT_n^4$.
-  2. `sn_step`.
+  2. `transport_step`.
   3. Material update (M): $u_m^{n+1}=u_m^n+\Delta tfk_a(\phi-acT_n^4)$.
   4. Newton inversion $T(u_m,\rho)$ including the $-aT^4$ term.
   5. Option `newton_outer=k`: re-linearize around $T^*$ $k$ times (removes
@@ -185,10 +208,27 @@ optional, as in IMC A7.
     amplification factor matches IMC M2's analysis at $\alpha=1$.
   - Energy closes to the SI tolerance in every step; $u_m>0$ always.
 
+### S4a. $S_N$ vs. IMC on the full SiO₂ problem (done)
+
+- `python src/sn/sn.py --imc sio2_1mm_gray_imc_check.npz` overlays the IMC
+  mean and its 2 s.e. band.
+- **Result** ($S_{16}$, double-Gauss, $\Delta t=1$ ps, 4 s wall time):
+  - breakout 1.4675 ns vs. IMC 1.47 ns;
+  - peak 0.9506 at 1.9485 ns vs. IMC $0.953\pm0.029$ at 1.95 ns;
+  - in 99% of the 77 bins where the flux exceeds 5%, $S_N$ lies inside the
+    IMC 2 s.e. band (mean offset −0.02 s.e.).
+- **Open:** the IMC run on disk (`sio2_1mm_gray_imc_check.npz`) has a
+  relative energy error of about 80 up to $t\approx0.01$ ns, 0.3 at 0.1 ns,
+  and $5\times10^{-5}$–$10^{-4}$ for $t\ge1$ ns. $S_N$'s is $\le5\times10^{-14}$
+  throughout. The late-time IMC value is far above round-off, so the IMC
+  script's bookkeeping is not exact. That contradicts the "energy error about
+  $10^{-14}$" gate in IMC M0. Find the cause in IMC M0, comparing step by step
+  with `sn.py`'s ledger.
+
 ### S4. $S_N$ vs. IMC on a frozen linear step (this is IMC plan M1)
 
 - **Learn:** derivation §0 (why the two differ only by L3–L5).
-- **Build:** `tests/imc/test_linear_vs_sn.py` from IMC M1, using `sn_step`
+- **Build:** `tests/imc/test_linear_vs_sn.py` from IMC M1, using `transport_step`
   with cell-wise coefficients and $S_N$ sub-stepping in time.
 - **Gate:** census $E_r$, deposition and leakage agree within 3 s.e. plus the
   $S_N$ error, estimated from $(N,\Delta x,\Delta t)$ refinement, for
@@ -357,19 +397,20 @@ optional, as in IMC A7.
 ## Critical files
 
 - **New:**
-  - `src/sn/{kernels,step,quadrature,bath,thermal,hydro_step}.py`
+  - `src/sn/{kernels,quadrature,bath,thermal,hydro_step}.py` (generalizing
+    `sweep`, `transport_step`, `make_quadrature` and `Drive` from `sn.py`)
   - `src/sn/problems/radiation_only.py`
   - `tests/sn/*.py`
   - `bath.py` and `material.py` shared with `src/imc/`, placed where both
     packages can import them (e.g. `src/transport_common/`)
 - **Modified:**
-  - `src/sn/sn.py` (becomes a thin wrapper)
   - `src/rad_hydro_sim/simulation/{integrator,iterator}.py` (solver dispatch)
   - `src/rad_hydro_sim/problems/presets_config.py` (Test 2 with χ = 1; Tests
     3–6 checked)
   - `src/rad_hydro_sim/verification/verification_config.py`
   - `md/sn_derivation.md` (exercises)
-- **Frozen:** the current `run_sn` behaviour (regression in S0).
+- **Frozen:** `src/sn/sn.py` as the SiO₂ $S_N$ baseline (S0 gate), next to
+  the frozen IMC script it mirrors.
 
 ## Verification
 

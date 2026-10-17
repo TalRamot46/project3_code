@@ -1,497 +1,398 @@
-"""Time-dependent discrete-ordinates (S_N) transport in a 1D slab or sphere.
+#!/usr/bin/env python3
+"""Deterministic gray 1D S_N check for the Back SiO2 problem.
 
-Solves, for the angular flux psi(x, mu, t),
+This is the discrete-ordinates twin of src/imc/sio2_1mm_gray_imc_check_og.py:
+the same problem, material model, drive and Fleck-Cummings linearization.
+Only the solution of each step's linear transport equation differs: here it
+is deterministic (ordinates, diamond difference, source iteration) instead of
+a random walk, so S_N minus IMC is IMC noise plus S_N discretization error.
+Derivation and proofs: md/sn_derivation.md.
 
-    (1/v) d(psi)/dt + mu d(psi)/dx + sigma_t psi = Q_s(mu) + S(x),
-    phi = 0.5 * sum_m w_m psi_m          (so an isotropic psi equals phi),
+Each step freezes sigma, the Fleck factor f and B = a T^4 at T^n and solves
 
-with constant sigma_t, sigma_s, v.  Note that S enters without a factor 1/2:
-integrating over mu gives (1/v) d(phi)/dt + dJ/dx + sigma_a phi = S, so phi/v
-is the particle density.  The derivation, and the map to gray radiation
-(psi = 4 pi I, phi = c E_r, v = c, S = k_a a c T^4), is in md/sn_derivation.md.
+    (1/c) dpsi/dt + mu dpsi/dx + sigma psi = (1-f) sigma phi + f sigma c B,
+    phi = 0.5 * sum_m w_m psi_m = c E_r     (an isotropic psi equals phi),
+
+then updates the material with what the radiation left behind:
+
+    U^{n+1} = U^n + dt * f sigma (phi^{n+1} - c B^n).
+
+Geometry and material model (as in the IMC script):
+  * 1D slab, L = 1 mm, 100 cells, unit transverse area
+  * rho = 0.05 g/cm^3 SiO2, gray pure absorption, Hammer-Rosen opacity and EOS
+  * initial T_m = 300 K and no radiation
+  * left blackbody bath from back_pulse.txt (synthetic), right vacuum
 
 Discretization:
-  * angle: Gauss-Legendre ordinates, n_mu even, sum(w) = 2
-  * scattering: Legendre expansion Q_s = sigma_s sum_l (2l+1) f_l P_l(mu) phi_l
-    (isotropic, Henyey-Greenstein f_l = g^l, or user-given f_l)
-  * time: backward Euler, i.e. sigma_eff = sigma_t + 1/(v dt) and
-    rhs = Q + psi^n / (v dt)
-  * slab: diamond difference, vacuum on both faces
-  * sphere: Lewis-Miller diamond difference with angular redistribution,
-    a mu = -1 starting direction and reflection at r = 0
-  * both: set-to-zero fixup for negative outgoing fluxes
-  * the scattering source is converged by source iteration every step
+  * time: backward Euler, i.e. extra absorption 1/(c dt) and source psi^n/(c dt)
+  * angle: Gauss-Legendre on [-1,1], or double-Gauss (exact half-range moments)
+  * space: diamond difference, outgoing fluxes < 0 set to 0 (balance kept)
+  * bath: psi_b on mu > 0, scaled so the discrete incoming current equals the
+    step-averaged sigma_SB T_D^4 (or the naive psi_b = 4 F_inc, for comparison)
 
-The negative-source fixups (only active for anisotropic scattering) and the
-sphere sweep follow the Fortran code sn1_spherical.f90 line by line.
+The result is deterministic; refine --n-mu, --dt and N_CELLS to estimate its
+discretization error.
 """
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
 import time
 
+import matplotlib.pyplot as plt
 import numpy as np
 from numba import njit
 
-FOUR_PI_OVER_THREE = 4.0 * np.pi / 3.0
-PHI_FLOOR = 1e-3            # relative floor in the convergence and dt tests
+# Units: cm, ns, MJ, K.  Same constants and material as the IMC script.
+C = 29.9792458                        # speed of light [cm/ns]
+EV_TO_K = 11604.518121550082          # 1 eV expressed in kelvin
+K_TO_EV = 1.0 / EV_TO_K
+A_RAD = 7.56573325003e-28             # radiation constant a [MJ/(cm^3 K^4)]
+SIGMA_SB = A_RAD * C / 4.0            # Stefan-Boltzmann sigma = ac/4 [MJ/(cm^2 ns K^4)]
+E100 = A_RAD * (100.0 * EV_TO_K) ** 4  # a*T^4 at T = 100 eV: the radiation energy scale
+
+L_CM = 0.1                            # slab thickness = 1 mm
+N_CELLS = 100
+DX = L_CM / N_CELLS                   # uniform cell width [cm]
+RHO = 0.05                            # SiO2 foam density [g/cm^3]
+ALPHA = 3.53                          # opacity temperature exponent, sigma ~ theta^-alpha
+BETA = 1.10                           # EOS temperature exponent, u_m ~ theta^beta
+EOS_MU = 0.09                         # EOS density exponent, u_m ~ rho^(1-mu)
+LAMBDA = 0.75                         # opacity density exponent, sigma ~ rho^(1+lambda)
+F_EOS = 8.78                          # EOS prefactor (Hammer-Rosen units)
+G_OP = 1.0 / 9175.0                   # opacity prefactor (Hammer-Rosen units)
+T0_K = 300.0                          # initial (cold) material temperature
+THETA0 = T0_K * K_TO_EV / 100.0       # everything below uses theta = T / (100 eV)
+THETA_FLOOR = 1.0e-12                 # keeps theta^-alpha and theta^(1/beta) finite
+
+# Material energy density: U = E100 * H * theta^beta  [MJ/cm^3]
+H = F_EOS * RHO ** (1.0 - EOS_MU) / E100
+# Gray absorption opacity: sigma = SIGMA0 * theta^-alpha  [1/cm]
+SIGMA0 = RHO ** (1.0 + LAMBDA) / G_OP
+
+PHI_FLOOR = 1.0e-3                    # relative floor in the convergence test
 
 
-def make_quadrature(n_mu):
-    """Gauss-Legendre nodes (increasing, mu_0 < 0 < mu_{N-1}) and weights."""
+class Drive:
+    """Tabulated left-boundary blackbody drive temperature T_D(t)."""
+
+    def __init__(self, path: Path):
+        data = np.loadtxt(path)               # two columns: t [ns], T_D [eV]
+        order = np.argsort(data[:, 0])        # tolerate unsorted input
+        self.t = np.asarray(data[order, 0], dtype=float)
+        self.T_eV = np.asarray(data[order, 1], dtype=float)
+        if self.t[0] > 0.0:
+            # Pad back to t = 0 with the cold initial temperature.
+            self.t = np.insert(self.t, 0, 0.0)
+            self.T_eV = np.insert(self.T_eV, 0, T0_K * K_TO_EV)
+
+    def temperature_eV(self, t):
+        return np.interp(t, self.t, self.T_eV)   # linear in t, flat outside the table
+
+    def flux_average(self, t0, t1):
+        # Eight-point Gauss-Legendre quadrature of sigma_SB*T_D(t)^4 over the step.
+        nodes, weights = np.polynomial.legendre.leggauss(8)
+        ts = 0.5 * (t0 + t1) + 0.5 * (t1 - t0) * nodes
+        vals = SIGMA_SB * (self.temperature_eV(ts) * EV_TO_K) ** 4
+        return 0.5 * np.sum(weights * vals)      # the *average* incident flux
+
+
+def make_quadrature(n_mu, kind):
+    """Ordinates mu (increasing, none at 0) and weights w with sum(w) = 2."""
     if n_mu < 2 or n_mu % 2 != 0:
         raise ValueError("n_mu must be an even integer >= 2.")
-    mu, w = np.polynomial.legendre.leggauss(n_mu)
+    if kind == "gauss":
+        mu, w = np.polynomial.legendre.leggauss(n_mu)
+    elif kind == "double-gauss":
+        # Gauss-Legendre on [0,1], mirrored to [-1,0]: half-range moments exact.
+        x, wx = np.polynomial.legendre.leggauss(n_mu // 2)
+        half_mu, half_w = 0.5 * (x + 1.0), 0.5 * wx
+        mu = np.concatenate((-half_mu[::-1], half_mu))
+        w = np.concatenate((half_w[::-1], half_w))
+    else:
+        raise ValueError("quadrature must be 'gauss' or 'double-gauss'.")
     return mu.astype(np.float64), w.astype(np.float64)
 
 
 @njit(cache=True)
-def legendre_table(mu, lmax):
-    """P[l, m] = P_l(mu_m) from (l+1) P_{l+1} = (2l+1) mu P_l - l P_{l-1}."""
-    n_mu = len(mu)
-    P = np.empty((lmax + 1, n_mu))
-    for m in range(n_mu):
-        P[0, m] = 1.0
-        if lmax >= 1:
-            P[1, m] = mu[m]
-    for l in range(1, lmax):
-        for m in range(n_mu):
-            P[l + 1, m] = ((2 * l + 1) * mu[m] * P[l, m] - l * P[l - 1, m]) / (l + 1)
-    return P
+def material_coefficients(theta, dt):
+    """Per-cell opacity, Fleck factor, Planck energy density a*T^4 and material energy."""
+    n = theta.size
+    sigma = np.empty(n)
+    fleck = np.empty(n)
+    B = np.empty(n)
+    U = np.empty(n)
+    for i in range(n):
+        th = max(theta[i], THETA_FLOOR)
+        sigma[i] = SIGMA0 * th ** (-ALPHA)      # absorption opacity [1/cm]
+        B[i] = E100 * th ** 4                   # a*T^4, equilibrium radiation energy density
+        U[i] = E100 * H * th ** BETA            # material internal energy density
+        # gamma = (dB/dT)/(dU/dT), the "beta" of Fleck-Cummings.
+        gamma = 4.0 * th ** (4.0 - BETA) / (H * BETA)
+        fleck[i] = 1.0 / (1.0 + C * sigma[i] * dt * gamma)   # Fleck factor f in (0,1]
+    return sigma, fleck, B, U
 
 
 @njit(cache=True)
-def scalar_flux(psi, w, phi):
-    """phi_i = 0.5 * sum_m w_m psi[m, i], written into phi."""
-    for i in range(psi.shape[1]):
-        s = 0.0
-        for m in range(psi.shape[0]):
-            s += w[m] * psi[m, i]
-        phi[i] = 0.5 * s
+def invert_material_energy(U):
+    """Invert U = E100*H*theta^beta to recover theta from the updated energy."""
+    theta = np.empty(U.size)
+    for i in range(U.size):
+        theta[i] = max(THETA_FLOOR, (max(U[i], 0.0) / (E100 * H)) ** (1.0 / BETA))
+    return theta
 
 
 @njit(cache=True)
-def angular_moments(psi, w, P):
-    """phi_l(i) = 0.5 * sum_m w_m P_l(mu_m) psi[m, i]."""
-    moments = np.zeros((P.shape[0], psi.shape[1]))
-    for l in range(P.shape[0]):
-        for m in range(psi.shape[0]):
-            wP = 0.5 * w[m] * P[l, m]
-            for i in range(psi.shape[1]):
-                moments[l, i] += wP * psi[m, i]
-    return moments
+def scalar_flux(psi, w):
+    """phi_i = 0.5 * sum_m w_m psi[m, i]  (= c E_r)."""
+    phi = np.zeros(psi.shape[1])
+    for m in range(psi.shape[0]):
+        for i in range(psi.shape[1]):
+            phi[i] += 0.5 * w[m] * psi[m, i]
+    return phi
 
 
 @njit(cache=True)
-def scattering_source(moments, sigma_s, f_l, P):
-    """Q_s(mu_m, i) = sigma_s * sum_l (2l+1) f_l P_l(mu_m) phi_l(i)."""
-    q = np.zeros((P.shape[1], moments.shape[1]))
-    for l in range(P.shape[0]):
-        coeff = sigma_s * (2 * l + 1) * f_l[l]
-        for m in range(P.shape[1]):
-            cP = coeff * P[l, m]
-            for i in range(moments.shape[1]):
-                q[m, i] += cP * moments[l, i]
-    return q
+def sweep(psi, rhs, mu, w, sig_eff, psi_bath):
+    """Diamond-difference sweep of every ordinate: bath at x = 0, vacuum at x = L.
 
-
-@njit(cache=True)
-def fixup_scale_clip(q, q_iso, w):
-    """Fortran anisotropic_method=2: shrink the isotropic level, then clip at 0.
-
-    fac = q_iso / (q_iso - S_neg) with S_neg = 0.5 sum w min(q, 0); no-op
-    (fac = 1) when no ordinate is negative, e.g. for isotropic scattering.
-    """
-    for i in range(q.shape[1]):
-        fac = 0.0
-        if q_iso[i] > 1e-40:
-            sum_neg = 0.0                       # weighted negative part, <= 0
-            for m in range(q.shape[0]):
-                if q[m, i] < 0.0:
-                    sum_neg += 0.5 * w[m] * q[m, i]
-            fac = q_iso[i] / (q_iso[i] - sum_neg)
-            q_iso[i] *= fac
-        for m in range(q.shape[0]):
-            q[m, i] = max(0.0, q_iso[i] + (q[m, i] - q_iso[i] / (fac + 1e-80)) * fac)
-
-
-@njit(cache=True)
-def fixup_min_blend(q, q_iso):
-    """Fortran anisotropic_method=1: blend q toward q_iso until min(q) = 0."""
-    for i in range(q.shape[1]):
-        fac = 0.0
-        if q_iso[i] > 1e-40:
-            src_neg = 0.0                       # most negative ordinate source
-            for m in range(q.shape[0]):
-                if q[m, i] < src_neg:
-                    src_neg = q[m, i]
-            if src_neg >= min(0.0, q_iso[i]):
-                continue                        # nothing negative in this cell
-            fac = -q_iso[i] / (src_neg - q_iso[i])
-        for m in range(q.shape[0]):
-            q[m, i] = q_iso[i] + (q[m, i] - q_iso[i]) * fac
-
-
-@njit(cache=True)
-def sweep_slab(psi, rhs, mu, dx, sig_eff, do_fixup):
-    """Diamond-difference sweep of every ordinate, vacuum on both faces.
-
-    Cell balance mu (psi_out - psi_in)/dx + sig_eff psi_cell = rhs with
+    Cell balance mu (psi_out - psi_in)/DX + sig_eff psi_cell = rhs with
     psi_cell = (psi_in + psi_out)/2.  If psi_out < 0, set it to 0 and keep
-    the balance: psi_cell = (rhs + |mu| psi_in/dx) / sig_eff.
+    the balance.  Returns the outgoing partial currents (left, right).
     """
-    n_mu, n_cells = psi.shape
-    for m in range(n_mu):
+    out_left = 0.0
+    out_right = 0.0
+    for m in range(mu.size):
+        backward = mu[m] < 0.0                  # mu < 0 sweeps right to left
         mu_abs = abs(mu[m])
-        backward = m < n_mu // 2                # mu < 0 sweeps right to left
-        psi_face = 0.0                          # vacuum inflow
-        for j in range(n_cells):
-            k = n_cells - 1 - j if backward else j
-            two_mu_dx = 2.0 * mu_abs / dx[k]
+        two_mu_dx = 2.0 * mu_abs / DX
+        psi_face = 0.0 if backward else psi_bath
+        for j in range(N_CELLS):
+            k = N_CELLS - 1 - j if backward else j
             psi_cell = (rhs[m, k] + two_mu_dx * psi_face) / (sig_eff[k] + two_mu_dx)
             psi_out = 2.0 * psi_cell - psi_face
-            if psi_out < 0.0 and do_fixup:
-                psi_cell = (rhs[m, k] + mu_abs * psi_face / dx[k]) / sig_eff[k]
+            if psi_out < 0.0:
+                # Set-to-zero fixup: thick cells would otherwise overshoot below 0.
+                psi_cell = (rhs[m, k] + mu_abs * psi_face / DX) / sig_eff[k]
                 psi_out = 0.0
             psi[m, k] = psi_cell
             psi_face = psi_out                  # outflow of k is inflow of the next cell
+        if backward:
+            out_left += 0.5 * w[m] * mu_abs * psi_face    # leaves through the drive face
+        else:
+            out_right += 0.5 * w[m] * mu_abs * psi_face   # leaves through the vacuum face
+    return out_left, out_right
 
 
 @njit(cache=True)
-def lewis_miller_alpha(mu, w):
-    """alpha_{1/2} = 0, alpha_{m+1/2} = alpha_{m-1/2} - mu_m w_m, alpha_{N+1/2} = 0."""
-    alpha = np.zeros(len(mu) + 1)
-    for j in range(len(mu)):
-        alpha[j + 1] = alpha[j] - mu[j] * w[j]
-    alpha[len(mu)] = 0.0                        # exact in theory; removes round-off
-    return alpha
+def transport_step(psi, sigma, fleck, B, dt, psi_bath, mu, w, tol, max_iters):
+    """Backward-Euler S_N step for the Fleck-Cummings equation, by source iteration.
 
-
-@njit(cache=True)
-def sphere_cell(psi_in, psi_ang_in, rhs, mu_abs, w, alpha_lo, alpha_hi,
-                area_in, area_out, dA, vol, sig, do_fixup):
-    """Lewis-Miller balance of one cell and ordinate, with diamond in r and mu.
-
-    Returns (psi_cell, spatial outflow, angular outflow).  A negative outflow
-    is set to 0 (flags iff / muff) and the cell is re-solved without it.
+    Each iteration sweeps with the scattering source (1-f) sigma phi of the
+    previous iterate; it converges at rate <= (1-f) sigma / (sigma + 1/(c dt)).
+    Returns psi^{n+1} (in place), the energy deposited per cell [MJ/cm^3],
+    the outgoing currents and the number of sweeps.
     """
-    iff = 0
-    muff = 0
-    psi_out = psi_in
-    psi_ang_out = psi_ang_in
-    while True:
-        denom = (2.0 * mu_abs * area_out * (1.0 - iff)
-                 + 2.0 / w * dA * alpha_hi * (1.0 - muff)
-                 + vol * sig)
-        numer = (mu_abs * (area_in + area_out * (1.0 - iff)) * psi_in
-                 + 1.0 / w * dA * (alpha_hi * (1.0 - muff) + alpha_lo) * psi_ang_in
-                 + vol * rhs)
-        psi_cell = numer / denom
-        if iff == 0:
-            psi_out = 2.0 * psi_cell - psi_in
-        if muff == 0:
-            psi_ang_out = 2.0 * psi_cell - psi_ang_in
-        if psi_out < 0.0 and iff == 0 and do_fixup:
-            iff = 1
-            psi_out = 0.0
-            continue
-        if psi_ang_out < 0.0 and muff == 0 and do_fixup:
-            muff = 1
-            psi_ang_out = 0.0
-            continue
-        return psi_cell, psi_out, psi_ang_out
-
-
-@njit(cache=True)
-def sweep_sphere(psi, rhs, q_total, mu, w, alpha, r_edges, vol, surf, sig_eff,
-                 do_fixup, psi_start_old, psi_start_new, inv_v_dt):
-    """Lewis-Miller sweep: mu = -1 start, mu < 0 inward, mu > 0 outward."""
-    n_mu, n_cells = psi.shape
-    psi_ang = np.empty(n_cells)                 # flux on the angular edge m - 1/2
-    psi_center = np.zeros(n_mu)                 # inward flux reaching r = 0
-
-    # Starting direction mu = -1: a slab-like inward sweep, no redistribution.
-    # It uses the most negative ordinate's source and its own time census.
-    psi_face = 0.0
-    for k in range(n_cells - 1, -1, -1):
-        dr = r_edges[k + 1] - r_edges[k]
-        rhs_start = q_total[0, k] + psi_start_old[k] * inv_v_dt
-        psi_cell = (2.0 * psi_face + dr * rhs_start) / (2.0 + dr * sig_eff[k])
-        psi_out = 2.0 * psi_cell - psi_face
-        if psi_out < 0.0 and do_fixup:
-            psi_cell = (psi_face + dr * rhs_start) / (dr * sig_eff[k])
-            psi_out = 0.0
-        psi_start_new[k] = psi_cell
-        psi_ang[k] = psi_cell
-        psi_face = psi_out
-
-    # mu < 0: inward, inflow through the outer face surf[k+1].
-    for j in range(n_mu // 2):
-        psi_face = 0.0                          # vacuum at the outer radius
-        for k in range(n_cells - 1, -1, -1):
-            psi[j, k], psi_face, psi_ang[k] = sphere_cell(
-                psi_face, psi_ang[k], rhs[j, k], abs(mu[j]), w[j],
-                alpha[j], alpha[j + 1], surf[k + 1], surf[k],
-                surf[k + 1] - surf[k], vol[k], sig_eff[k], do_fixup)
-        psi_center[j] = psi_face
-
-    # mu > 0: outward, starting from the reflected inward flux at r = 0.
-    for j in range(n_mu // 2, n_mu):
-        psi_face = psi_center[n_mu - 1 - j]
-        for k in range(n_cells):
-            psi[j, k], psi_face, psi_ang[k] = sphere_cell(
-                psi_face, psi_ang[k], rhs[j, k], abs(mu[j]), w[j],
-                alpha[j], alpha[j + 1], surf[k], surf[k + 1],
-                surf[k + 1] - surf[k], vol[k], sig_eff[k], do_fixup)
-
-
-@njit(cache=True)
-def time_loop(sphere, mu, w, alpha, P, f_l, sigma_t, sigma_s, v, dt, sig_eff,
-              dx, r_edges, vol, surf, psi, source, do_fixup, neg_fixup,
-              max_iters, conv_tol, snapshot_times, tracer_cells,
-              logging_interval, adaptive, dtfac, dtmax, t_final, max_steps):
-    """Backward-Euler time steps, each converged by source iteration.
-
-    neg_fixup: 0 none, 1 min_blend, 2 scale_clip.  With adaptive=True,
-    dt <- min(dtfac*dt/delta, 1.1*dt, dtmax), where delta is the largest
-    relative change of phi over the step.
-    """
-    n_mu, n_cells = psi.shape
-    psi_old = np.empty((n_mu, n_cells))         # psi^n for backward Euler
-    rhs = np.empty((n_mu, n_cells))
-    q_iso = np.empty(n_cells)
-    phi = np.empty(n_cells)
-    phi_prev = np.empty(n_cells)                # previous SI iterate
-    phi_step = np.empty(n_cells)                # phi^n, for the dt controller
-    psi_start_old = psi[0].copy()               # sphere mu = -1 census
-    psi_start_new = psi[0].copy()
-    inv_v_dt = 1.0 / (v * dt)
-
-    n_snap = len(snapshot_times)
-    phi_snap = np.zeros((n_snap, n_cells))
-    avg_mu_snap = np.zeros((n_snap, n_cells))   # <mu>   = J / phi
-    avg_mu2_snap = np.zeros((n_snap, n_cells))  # <mu^2> = 0.5 sum w mu^2 psi / phi
-    time_snap = np.zeros(n_snap)
-    size = max_steps + 1                        # history buffers, doubled if needed
-    step_times = np.zeros(size)
-    step_iters = np.zeros(size, dtype=np.int64)
-    step_particles = np.zeros(size)
-    n_tracers = len(tracer_cells)
-    tracer_density = np.zeros((size if n_tracers > 0 else 0, n_tracers))
-
-    snap = 0
-    t = 0.0
-    step = 0
-    while True:
-        if step >= size:                        # adaptive runs may outgrow the guess
-            step_times = np.concatenate((step_times, np.zeros_like(step_times)))
-            step_iters = np.concatenate((step_iters, np.zeros_like(step_iters)))
-            step_particles = np.concatenate((step_particles, np.zeros_like(step_particles)))
-            if n_tracers > 0:
-                tracer_density = np.concatenate((tracer_density, np.zeros_like(tracer_density)))
-            size *= 2
-
-        # Diagnostics of the state at time t.
-        scalar_flux(psi, w, phi)
-        total = 0.0
-        for i in range(n_cells):
-            total += phi[i] / v * vol[i]        # particle count, phi/v = density
-        step_times[step] = t
-        step_particles[step] = total
-        if step % logging_interval == 0:
-            print("step=", step, " t=", round(t, 6), " dt=", round(dt, 8),
-                  " particles=", round(total, 6))
-        while snap < n_snap and t >= snapshot_times[snap] - 1e-10:
-            for i in range(n_cells):
-                phi_snap[snap, i] = phi[i]
-                m1 = 0.0
-                m2 = 0.0
-                for m in range(n_mu):
-                    m1 += w[m] * mu[m] * psi[m, i]
-                    m2 += w[m] * mu[m] * mu[m] * psi[m, i]
-                if phi[i] > 0.0:
-                    avg_mu_snap[snap, i] = 0.5 * m1 / phi[i]
-                    avg_mu2_snap[snap, i] = 0.5 * m2 / phi[i]
-            time_snap[snap] = t
-            snap += 1
-        for tr in range(n_tracers):
-            tracer_density[step, tr] = phi[tracer_cells[tr]] / v
-
-        if adaptive:
-            if t >= t_final - 1e-10 * (abs(t_final) + 1e-300):
-                break
-        elif step >= max_steps:
+    inv_c_dt = 1.0 / (C * dt)
+    sig_eff = sigma + inv_c_dt                  # time absorption, backward Euler
+    scatter = (1.0 - fleck) * sigma             # effective scattering
+    emission = fleck * sigma * C * B            # effective emission f sigma c B
+    psi_old = psi.copy()                        # psi^n, the angular census
+    rhs = np.empty_like(psi)
+    phi = scalar_flux(psi, w)
+    phi_prev = phi
+    out_left = 0.0
+    out_right = 0.0
+    sweeps = 0
+    for it in range(max_iters):
+        phi_prev = phi
+        for m in range(mu.size):
+            for i in range(N_CELLS):
+                rhs[m, i] = scatter[i] * phi_prev[i] + emission[i] + psi_old[m, i] * inv_c_dt
+        out_left, out_right = sweep(psi, rhs, mu, w, sig_eff, psi_bath)
+        phi = scalar_flux(psi, w)
+        sweeps = it + 1
+        floor = PHI_FLOOR * phi.max() + 1.0e-300
+        if np.max(np.abs(phi - phi_prev) / (phi + floor)) < tol:
             break
-
-        phi_step[:] = phi
-        psi_old[:, :] = psi
-
-        # Source iteration: build Q from the last psi, sweep, repeat.
-        n_iters = 0
-        for it in range(max_iters):
-            n_iters = it + 1
-            scalar_flux(psi, w, phi_prev)
-            moments = angular_moments(psi, w, P)
-            q_total = scattering_source(moments, sigma_s, f_l, P)
-            for i in range(n_cells):
-                q_total[:, i] += source[i]
-                q_iso[i] = sigma_s * moments[0, i] + source[i]
-            if neg_fixup == 2:
-                fixup_scale_clip(q_total, q_iso, w)
-            elif neg_fixup == 1:
-                fixup_min_blend(q_total, q_iso)
-            for m in range(n_mu):
-                for i in range(n_cells):
-                    rhs[m, i] = q_total[m, i] + psi_old[m, i] * inv_v_dt
-
-            if sphere:
-                sweep_sphere(psi, rhs, q_total, mu, w, alpha, r_edges, vol, surf,
-                             sig_eff, do_fixup, psi_start_old, psi_start_new, inv_v_dt)
-            else:
-                sweep_slab(psi, rhs, mu, dx, sig_eff, do_fixup)
-
-            for m in range(n_mu):
-                for i in range(n_cells):
-                    if psi[m, i] < 0.0:
-                        print("NEGATIVE psi: step=", step, " iter=", n_iters,
-                              " m=", m, " i=", i, " psi=", psi[m, i])
-                        assert False, "Negative angular flux after sweep"
-
-            # Converged when max_i |dphi| / (phi + 1e-3 phi_max) < conv_tol.
-            scalar_flux(psi, w, phi)
-            phi_min = PHI_FLOOR * phi.max() + 1e-300
-            err = 0.0
-            for i in range(n_cells):
-                err = max(err, abs(phi[i] - phi_prev[i]) / (phi[i] + phi_min))
-            if err < conv_tol:
-                break
-            if n_iters == 100:
-                print("WARNING: SI not converged after 100 iters, step=",
-                      step, " err=", err, " tol=", conv_tol)
-
-        step_iters[step] = n_iters
-        if sphere:
-            psi_start_old[:] = psi_start_new    # advance the mu = -1 census
-        t += dt
-        step += 1
-
-        if adaptive:
-            phi_min = PHI_FLOOR * phi.max() + 1e-300
-            delta = 1e-80
-            for i in range(n_cells):
-                delta = max(delta, abs(phi[i] - phi_step[i]) / (phi[i] + phi_min))
-            dt = min(dt / delta * dtfac, 1.1 * dt, dtmax)
-            inv_v_dt = 1.0 / (v * dt)
-            sig_eff[:] = sigma_t + inv_v_dt
-
-    n_out = step + 1
-    return (phi_snap, avg_mu_snap, avg_mu2_snap, time_snap,
-            step_times[:n_out], step_iters[:n_out], step_particles[:n_out],
-            tracer_density[:n_out] if n_tracers > 0 else tracer_density)
+    # Absorbed minus re-emitted in the last sweep.  At convergence this equals
+    # dt f sigma (phi - c B); taking it from the sweep itself makes the energy
+    # balance exact for any tolerance.
+    deposited = dt * (sigma * phi - scatter * phi_prev - emission)
+    return deposited, out_left, out_right, sweeps
 
 
-def scattering_coefficients(scatter_model, g, lmax, scatter_fl):
-    """Legendre coefficients f_l of the scattering kernel, and lmax."""
-    if scatter_fl is not None:
-        if scatter_model == "hg":
-            raise ValueError("Use either scatter_model='hg' or scatter_fl, not both.")
-        if lmax is None:
-            raise ValueError("lmax is required when scatter_fl is given.")
-        f_l = np.asarray(scatter_fl, dtype=np.float64)
-        if not np.isclose(f_l[0], 1.0):
-            raise ValueError("scatter_fl[0] must be 1.")
-        if len(f_l) != lmax + 1:
-            raise ValueError(f"len(scatter_fl)={len(f_l)} must equal lmax+1={lmax + 1}.")
-        return f_l, lmax
-    if scatter_model == "isotropic":
-        return np.array([1.0]), 0
-    if lmax is None:
-        raise ValueError("lmax is required for scatter_model='hg'.")
-    return np.array([g ** l for l in range(lmax + 1)]), lmax
+def run_one(drive, dt, end_time, n_mu, quadrature, bath_norm, tol, max_iters, progress=False):
+    """Run the S_N calculation to end_time and return the diagnostics."""
+    mu, w = make_quadrature(n_mu, quadrature)
+    # Discrete incoming current of a unit isotropic bath: 1/4 if exact.
+    unit_current = 0.5 * np.sum(w[mu > 0.0] * mu[mu > 0.0])
+
+    theta = np.full(N_CELLS, THETA0)            # cold slab at t = 0
+    psi = np.zeros((n_mu, N_CELLS))             # no radiation initially
+
+    steps = int(np.ceil(end_time / dt))
+    time_mid = np.empty(steps)                  # step-centred time [ns]
+    outgoing = np.empty(steps)                  # right-face flux [MJ/(cm^2 ns)]
+    material_T_max = np.empty(steps)            # max material temperature [eV]
+    sweep_count = np.empty(steps, dtype=np.int64)
+    energy_error = np.empty(steps)              # relative global balance error
+
+    _, _, _, U0 = material_coefficients(theta, dt)
+    initial_energy = np.sum(U0) * DX            # baseline for the energy balance
+    cumulative_boundary = 0.0                   # energy injected by the drive
+    cumulative_left = 0.0                       # energy leaked back out the left
+    cumulative_right = 0.0                      # energy leaked out the right
+
+    t0 = 0.0
+    for step in range(steps):
+        t1 = min(end_time, t0 + dt)             # last step may be shorter
+        local_dt = t1 - t0
+        sigma, fleck, B, U = material_coefficients(theta, local_dt)
+
+        flux_avg = drive.flux_average(t0, t1)   # time-averaged incident flux
+        # "current": the discrete inflow is exactly flux_avg; "naive": psi_b = 4 F_inc.
+        psi_bath = flux_avg / unit_current if bath_norm == "current" else 4.0 * flux_avg
+        cumulative_boundary += unit_current * psi_bath * local_dt
+
+        deposited, escaped_left, escaped_right, sweeps = transport_step(
+            psi, sigma, fleck, B, local_dt, psi_bath, mu, w, tol, max_iters,
+        )
+
+        # Material update: absorbed minus emitted, as energy density.
+        U_new = U + deposited
+        if np.any(U_new <= 0.0) or np.any(~np.isfinite(U_new)):
+            raise RuntimeError(f"Non-positive material energy at step {step}, t={t1:g} ns.")
+        theta = invert_material_energy(U_new)
+
+        cumulative_left += escaped_left * local_dt
+        cumulative_right += escaped_right * local_dt
+        # Global check: matter + radiation should equal initial + in - out.
+        current_total = (np.sum(U_new) + np.sum(scalar_flux(psi, w)) / C) * DX
+        expected_total = initial_energy + cumulative_boundary - cumulative_left - cumulative_right
+
+        time_mid[step] = 0.5 * (t0 + t1)
+        outgoing[step] = escaped_right          # end-of-step flux, as backward Euler leaks it
+        material_T_max[step] = 100.0 * np.max(theta)   # theta -> eV
+        sweep_count[step] = sweeps
+        energy_error[step] = (current_total - expected_total) / max(abs(expected_total), 1.0e-30)
+
+        if progress and (step % max(1, steps // 20) == 0 or step == steps - 1):
+            # About twenty progress lines per run, plus the final step.
+            print(
+                f"step={step+1:5d}/{steps}, t={t1:7.4f} ns, "
+                f"Tmax={material_T_max[step]:7.2f} eV, sweeps={sweeps:4d}, "
+                f"energy err={energy_error[step]:+.3e}",
+                flush=True,
+            )
+        t0 = t1
+
+    return {
+        "time_ns": time_mid,
+        "Fout": outgoing,
+        "Tm_final_eV": 100.0 * theta,           # final material temperature profile [eV]
+        "Tmax_eV": material_T_max,
+        "sweeps": sweep_count,
+        "energy_error": energy_error,
+        "unit_current": unit_current,
+    }
 
 
-def run_sn(geometry, x_edges, sigma_t, sigma_s, v, dt, t_final, n0, n_mu, *,
-           snapshot_times=None, source_density=None, logging_interval=100,
-           scatter_model="isotropic", g=0.0, lmax=None, scatter_fl=None,
-           max_iters=5000, conv_tol=1e-10, fixup=True,
-           negative_source_fixup="scale_clip", adaptive_dt=True, dtfac=0.1,
-           dtmax=None, tracer_positions=None):
-    """Run S_N from an isotropic initial state psi = v*n0 to t_final.
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--drive", type=Path,
+                        default=Path(__file__).resolve().parent.parent / "imc" / "back_pulse.txt")
+    parser.add_argument("--dt", type=float, default=0.001, help="time step [ns]")
+    parser.add_argument("--end", type=float, default=3.0, help="end time [ns]")
+    parser.add_argument("--n-mu", type=int, default=16, help="number of ordinates (even)")
+    parser.add_argument("--quadrature", choices=["gauss", "double-gauss"], default="double-gauss")
+    parser.add_argument("--bath-norm", choices=["current", "naive"], default="current")
+    parser.add_argument("--tol", type=float, default=1.0e-10, help="source-iteration tolerance")
+    parser.add_argument("--max-iters", type=int, default=1000)          # sweeps per step
+    parser.add_argument("--imc", type=Path, default=Path("sio2_1mm_gray_imc_check.npz"),
+                        help="IMC result to overlay, if it exists")
+    parser.add_argument("--prefix", type=str, default="sio2_1mm_gray_sn_check")
+    parser.add_argument("--no-progress", action="store_true")
+    args = parser.parse_args()
 
-    geometry "slab" or "sphere"; x_edges uniform cell edges (radii for the
-    sphere); n0 initial density per cell; source_density S per cell.
-    Scattering: "isotropic", "hg" with g and lmax, or scatter_fl = [1, f_1, ...]
-    with lmax.  negative_source_fixup: "scale_clip", "min_blend" or "none".
-    adaptive_dt needs dtmax; dt is then the first step.
-
-    Returns (phi_snap, avg_mu_snap, avg_mu2_snap, time_snap, step_times,
-    step_n_iters, step_total_particles, tracer_density).
-    """
-    x_edges = np.asarray(x_edges, dtype=np.float64)
-    n0 = np.asarray(n0, dtype=np.float64)
-    n_cells = len(x_edges) - 1
-    dx = np.diff(x_edges)
-
-    if geometry not in ("slab", "sphere"):
-        raise ValueError(f"Unknown geometry '{geometry}'. Use 'slab' or 'sphere'.")
-    if np.any(dx <= 0):
-        raise ValueError("x_edges must be strictly increasing.")
-    if not np.allclose(dx, dx[0]):
-        raise ValueError("Non-uniform grids are not supported.")
-    if sigma_t < 0 or sigma_s < 0 or sigma_s > sigma_t:
-        raise ValueError("Need 0 <= sigma_s <= sigma_t.")
-    if v <= 0 or dt <= 0 or t_final < 0:
-        raise ValueError("Need v > 0, dt > 0 and t_final >= 0.")
-    if len(n0) != n_cells:
-        raise ValueError(f"len(n0)={len(n0)} != n_cells={n_cells}.")
-    if geometry == "sphere" and x_edges[0] < 0:
-        raise ValueError("Sphere geometry requires x_edges[0] >= 0.")
-    if scatter_model not in ("isotropic", "hg"):
-        raise ValueError("scatter_model must be 'isotropic' or 'hg'.")
-    if not -1.0 < g < 1.0:
-        raise ValueError("HG parameter g must satisfy -1 < g < 1.")
-    if adaptive_dt and (dtmax is None or dtmax <= 0 or dtfac <= 0):
-        raise ValueError("adaptive_dt needs dtmax > 0 and dtfac > 0.")
-    if negative_source_fixup not in ("scale_clip", "min_blend", "none"):
-        raise ValueError("negative_source_fixup must be 'scale_clip', 'min_blend' or 'none'.")
-
-    f_l, lmax = scattering_coefficients(scatter_model, g, lmax, scatter_fl)
-    if lmax >= n_mu:
-        raise ValueError(f"lmax={lmax} must be < n_mu={n_mu}.")
-    mu, w = make_quadrature(n_mu)
-    P = legendre_table(mu, lmax)
-    alpha = lewis_miller_alpha(mu, w)
-
-    if geometry == "slab":
-        vol = dx.copy()                         # unit transverse area
-        surf = np.zeros(n_cells + 1)
-    else:
-        vol = FOUR_PI_OVER_THREE * (x_edges[1:] ** 3 - x_edges[:-1] ** 3)
-        surf = 4.0 * np.pi * x_edges ** 2
-
-    source = np.zeros(n_cells) if source_density is None else np.asarray(source_density, dtype=np.float64)
-    if len(source) != n_cells:
-        raise ValueError(f"len(source_density)={len(source)} != n_cells={n_cells}.")
-    snapshot_times = np.sort(np.array([t_final] if snapshot_times is None else snapshot_times, dtype=np.float64))
-
-    tracer_cells = np.zeros(0, dtype=np.int64)
-    if tracer_positions is not None:
-        tracer_positions = np.asarray(tracer_positions, dtype=np.float64)
-        if np.any(tracer_positions < x_edges[0]) or np.any(tracer_positions >= x_edges[-1]):
-            raise ValueError(f"tracer_positions must lie in [{x_edges[0]}, {x_edges[-1]}).")
-        tracer_cells = np.minimum(((tracer_positions - x_edges[0]) / dx[0]).astype(np.int64), n_cells - 1)
-
-    # Fixed dt: exactly round(t_final/dt) steps.  Adaptive: a buffer-size guess.
-    max_steps = int(np.ceil(t_final / dtmax)) * 3 + 1000 if adaptive_dt else int(round(t_final / dt))
-
-    print(f"S_N {geometry}: cells={n_cells} n_mu={n_mu} sigma_t={sigma_t:.6g} "
-          f"sigma_s={sigma_s:.6g} v={v:.6g} dt={dt:.6g} t_final={t_final:.6g} "
-          f"scatter={scatter_model} lmax={lmax} adaptive={adaptive_dt}")
     wall0 = time.time()
-    result = time_loop(
-        geometry == "sphere", mu, w, alpha, P, f_l, sigma_t, sigma_s, v, dt,
-        np.full(n_cells, sigma_t + 1.0 / (v * dt)),   # sigma_eff, backward Euler
-        dx, x_edges.copy(), vol, surf,
-        np.tile(v * n0, (n_mu, 1)),                   # isotropic psi = v*n0
-        source, fixup, {"none": 0, "min_blend": 1, "scale_clip": 2}[negative_source_fixup],
-        max_iters, conv_tol, snapshot_times, tracer_cells, logging_interval,
-        adaptive_dt, dtfac, dtmax if dtmax is not None else dt, t_final, max_steps)
-    print(f"S_N runtime (including JIT compilation on first call): {time.time() - wall0:.2f} s")
-    return result
+    run = run_one(
+        Drive(args.drive), args.dt, args.end, args.n_mu, args.quadrature,
+        args.bath_norm, args.tol, args.max_iters, progress=not args.no_progress,
+    )
+    wall = time.time() - wall0
+
+    t = run["time_ns"]
+    norm = SIGMA_SB * (165.0 * EV_TO_K) ** 4    # plots are normalized to 165 eV
+    flux = run["Fout"] / norm
+
+    output_npz = Path(args.prefix + ".npz")
+    np.savez_compressed(
+        output_npz,
+        time_ns=t,
+        Fout=run["Fout"],
+        normalization_flux=norm,
+        dt_ns=args.dt,
+        n_mu=args.n_mu,
+        quadrature=args.quadrature,
+        bath_norm=args.bath_norm,
+        final_material_temperature_eV=run["Tm_final_eV"],
+        sweeps=run["sweeps"],
+        energy_error=run["energy_error"],
+        wall_seconds=wall,
+    )
+
+    fig, ax = plt.subplots(figsize=(8.8, 5.6))
+    if args.imc.exists():
+        # Overlay the IMC mean and its 2 s.e. band from the IMC script's output.
+        d = np.load(args.imc)
+        ax.plot(d["smooth_time_ns"], d["smooth_normalized_mean"], color="black",
+                linewidth=2.0, label="IMC mean")
+        ax.fill_between(
+            d["smooth_time_ns"],
+            d["smooth_normalized_mean"] - 2.0 * d["smooth_normalized_stderr"],
+            d["smooth_normalized_mean"] + 2.0 * d["smooth_normalized_stderr"],
+            color="black", alpha=0.15, label=r"IMC $\pm2$ s.e.",
+        )
+    ax.plot(t, flux, color="tab:red", linewidth=1.6,
+            label=f"$S_{{{args.n_mu}}}$ ({args.quadrature}, bath {args.bath_norm})")
+    ax.set_xlabel("Time [ns]")
+    ax.set_ylabel(r"$F_{\rm out}/[\sigma_{\rm SB}(165\,{\rm eV})^4]$")
+    ax.set_title(f"Gray $S_N$: L=1 mm, {N_CELLS} cells, dt={args.dt:g} ns")
+    ax.set_xlim(0.8, args.end)    # nothing interesting before breakout
+    ax.set_ylim(bottom=0.0)
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    plot_path = Path(args.prefix + "_Fout.png")
+    fig.savefig(plot_path, dpi=220)
+    plt.close(fig)
+
+    summary_path = Path(args.prefix + "_summary.txt")
+    crossing = np.flatnonzero(flux >= 0.01)     # 1% of the 165 eV flux
+    breakout = t[crossing[0]] if crossing.size else np.nan
+    peak_index = int(np.argmax(flux))
+    with summary_path.open("w", encoding="utf-8") as f:
+        f.write(f"Deterministic gray S_N check for L=1 mm, {N_CELLS} cells\n")
+        f.write(f"dt_ns {args.dt}\n")
+        f.write(f"n_mu {args.n_mu}\n")
+        f.write(f"quadrature {args.quadrature}\n")
+        f.write(f"bath_norm {args.bath_norm}\n")
+        f.write(f"discrete_unit_bath_current {run['unit_current']:.12g}\n")
+        f.write(f"breakout_normalized_0p01_ns {breakout:.12g}\n")
+        f.write(f"peak_time_ns {t[peak_index]:.12g}\n")
+        f.write(f"peak_normalized {flux[peak_index]:.12g}\n")
+        f.write(f"maximum_sweeps_per_step {int(run['sweeps'].max())}\n")
+        f.write(f"maximum_absolute_energy_error {np.max(np.abs(run['energy_error'])):.12g}\n")
+        f.write(f"wall_seconds {wall:.6f}\n")
+
+    print(f"Completed S_N run in {wall:.1f} s")
+    print(f"Breakout (normalized flux >=0.01): {breakout:.6f} ns")
+    print(f"Peak: {flux[peak_index]:.6f} at {t[peak_index]:.6f} ns")
+    print(f"Saved: {output_npz}")
+    print(f"Saved: {plot_path}")
+    print(f"Saved: {summary_path}")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,29 @@
+# Synthetic Back-type hohlraum drive for the 1 mm, 0.05 g/cc SiO2 foam problem.
+# NOT measured data: a smooth, physically plausible stand-in shaped like a
+# ~3 ns laser-driven hohlraum pulse (fast rise, ~190 eV flat top, slow decay).
+# Columns: time [ns]   drive radiation temperature T_D [eV]
+0.00    0.026
+0.05   25.0
+0.10   55.0
+0.15   80.0
+0.20  100.0
+0.30  125.0
+0.40  143.0
+0.50  156.0
+0.60  166.0
+0.70  174.0
+0.80  180.0
+0.90  184.0
+1.00  187.0
+1.20  190.0
+1.40  191.0
+1.60  191.0
+1.80  190.0
+2.00  188.0
+2.20  184.0
+2.40  178.0
+2.60  168.0
+2.80  155.0
+3.00  140.0
+3.20  122.0
+3.50   95.0

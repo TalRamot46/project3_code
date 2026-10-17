@@ -377,7 +377,7 @@ PRESET_TEST_CASES = {
 
         initial_condition="temperature, density",
         scenario="full_rad_hydro",
-        title=r"Constant temperature radiation only ($\omega=0.5$, $Au$, $2~ns$)",
+        title=r"Constant temperature full rad hydro ($\omega=0.5$, $Au$, $2~ns$)",
         geom=planar(),
         # Late times: the paper quotes Test 1 profiles at 1.0/1.5/2.0 ns, and
         # these are where the ablation layer is best resolved. The former

@@ -23,6 +23,7 @@ from datetime import datetime
 from rad_hydro_sim.problems.presets_config import (
     CONSTANT_TEMPERATURE_OMEGA_0_5_FULL,
     CONSTANT_TEMPERATURE_OMEGA_0_5_RADIATION_ONLY,
+    CONSTANT_TEMPERATURE_OMEGA_MINUS_0_5_FULL,
     PRESET_CONSTANT_T_RADIATION_ONLY,
     PRESET_CONSTANT_PRESSURE,
     PRESET_FIG_7_SHOCK_ONLY_ABLATION_FROM_CONSTANT_TEMPERATURE,
@@ -72,9 +73,9 @@ class ReferenceSolver(str, Enum):
 # Preset names (physical case keys) and mode → preset mapping
 # ============================================================================
 
-RADIATION_ONLY_PRESET = PRESET_SUPERSONIC_INSTANTANEOUS_ANALYTIC  
+RADIATION_ONLY_PRESET = CONSTANT_TEMPERATURE_OMEGA_0_5_RADIATION_ONLY  
 HYDRO_ONLY_PRESET = CONSTANT_TEMPERATURE_OMEGA_0_5_HYDRO_ONLY            
-FULL_RAD_HYDRO_PRESET = CONSTANT_TEMPERATURE_OMEGA_MINUS_0_5_FULL
+FULL_RAD_HYDRO_PRESET = PRESET_COPPER_CONST_TEMPERATURE
 # Map each verification mode to its preset name (SIMPLE_TEST_CASES key)
 MODE_TO_PRESET: dict[VerificationMode, str] = {
     VerificationMode.RADIATION_ONLY: RADIATION_ONLY_PRESET,

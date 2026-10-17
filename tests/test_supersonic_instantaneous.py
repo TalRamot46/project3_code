@@ -122,5 +122,6 @@ def test_gold_supersonic_instantaneous_solver():
 
 if __name__ == "__main__":
     test_gold_supersonic_instantaneous_solver()
+    plot_figure_1()
     plot_figure_11(omega=0.3)
     print("All tests passed cleanly!")

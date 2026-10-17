@@ -1,6 +1,6 @@
 # Implicit Monte Carlo for the gray slab problem: from Fleck & Cummings Eq. (1.1) to a proof that the code solves the linearized equation
 
-This document is a self-contained account of three things:
+This document is a self-contained account of five things:
 
 1. **How Fleck & Cummings (F&C) turn the nonlinear radiation–matter system,
    their Eq. (1.1), into a linear transport equation that a Monte Carlo
@@ -10,8 +10,16 @@ This document is a self-contained account of three things:
    `src/sio2_1mm_gray_imc_check_og.py` produces, in expectation, the unique
    solution of that linear equation, and that its tallies are unbiased
    (Sections 2–5).
-3. **What is *not* established**: the rigor of the linearization itself, and
-   convergence of the full simulation to the true radiation field (Section 6).
+3. **Guarantees for the code as written** (Section 6): the material energy
+   stays positive, a bound on the bias from the 20000-event cap, and a bound
+   on the error from averaging the drive over each step.
+4. **Convergence over many coupled steps as the number of packets grows**
+   (Section 7).
+5. **A conditional convergence theorem in $\Delta t$** for the F&C scheme,
+   and an explanation of why full convergence to the true radiation field
+   remains open (Section 8).
+
+Section 9 summarizes the status of every link.
 
 Appendix A maps every line of the algorithm to the corresponding F&C equation.
 
@@ -19,7 +27,8 @@ Primary source: J. A. Fleck Jr. and J. D. Cummings, "An Implicit Monte Carlo
 Scheme for Calculating Time and Frequency Dependent Nonlinear Radiation
 Transport", *J. Comput. Phys.* **8**, 313–342 (1971). A copy is in the
 companion repository `project3_docs`, at `src_papers/Fleck and Cummings.pdf`. Equation numbers "F&C (x.y)"
-refer to that paper. Labels such as (T), (Mild), (G) are this document's own.
+refer to that paper. Labels such as (T), (Mild), (Mild-$\Pi$) and (P), and the numbering of
+lemmas, propositions and theorems, are this document's own.
 
 ---
 
@@ -27,16 +36,19 @@ refer to that paper. Labels such as (T), (Mild), (G) are this document's own.
 
 ```
   original nonlinear system, F&C Eq. (1.1)
-        │  (A) F&C linearization over one time step        ── Section 1
-        │      exact algebra + 4 approximations; consistent, NOT proved convergent
+        │  (A) F&C linearization over one time step         ── Sections 1, 8
+        │      Δt → 0, continuous in space: PROVED under smoothness hypotheses
+        │      (Theorem 4); its constants are useless for the cold foam
         ▼
   linear transport equation F&C (2.1) = (T), frozen coefficients
-        │  (B) packet random walk                          ── Sections 2–5
+        │  (B) packet random walk, one step                 ── Sections 2–6
         │      PROVED: mean packet density = unique solution of (T)
         ▼
   expected packet density / expected tallies of the code
-        │  (C) N → ∞, Δt → 0, Δx → 0 over many coupled steps ── Section 6
-        │      NOT proved
+        │  (C1) N → ∞ over many coupled steps, Δt and Δx fixed ── Section 7
+        │       PROVED: convergence to the deterministic IMC scheme (Theorem 3)
+        │  (C2) Δx → 0, and error bounds that do not depend on the opacity
+        │       OPEN (Section 8.5)
         ▼
   true solution I of Eq. (1.1)
 ```
@@ -326,7 +338,9 @@ $$
 method "appears to be unconditionally stable". Densmore & Larsen (2004, *J.
 Comput. Phys.*) analyzed IMC's asymptotic time accuracy. Wollaber (2016, *J.
 Comput. Theor. Transport*, "Four decades of implicit Monte Carlo") reviews the
-later theory.
+later theory. Section 8 of this document proves a conditional first-order
+convergence result (Theorem 4) and explains why it does not cover the SiO₂
+problem.
 
 ### 1.12 The Monte-Carlo-ready problem
 
@@ -496,6 +510,13 @@ Multiply by $h(x,\mu)$ and integrate in $x$ and $\mu$.
   $\int dx\,h\,\phi_L(t-x/c\mu)A_{x/c\mu}(0,\mu)=\int du\,c\mu\,\phi_L(u)\,h(X_{t-u}(0,\mu),\mu)A_{t-u}(0,\mu)$,
   which is the $\beta_u$ term. $\square$
 
+The same proof applies unchanged in two more general cases. First, (T) may
+carry an additional bounded measurable source $r(x,\mu,t)$; that source then
+appears in (Mild) as the source measure $r\,dx\,d\mu\,du$ (see (Mild-$\Pi$) in
+Section 4.3). Second, $\sigma$, $f$ and $q$ may be any bounded measurable
+functions of $x$, not only piecewise constant ones. Sections 3–4 use only
+boundedness and measurability of the coefficients.
+
 ### 3.4 Theorem 1 (uniqueness and existence)
 
 (Mild) has at most one solution. A solution exists.
@@ -535,6 +556,47 @@ factorial bounds.
 > coincides with the unique mild solution. In all cases, "the solution of
 > (2.1)" means the mild solution.
 
+The factorial bound is enough for uniqueness. Used as a *stability* estimate
+it would carry the factor $e^{c\sigma_{\max}\Delta t}$, which is astronomically
+large here: $\sigma\approx2.2\times10^{14}\,$cm⁻¹ in the cold foam. Lemma B
+(Section 4.3) gives stability with constant $1$ instead.
+
+### 3.5 Lemma P (changing the absorption coefficient)
+
+Let $\sigma,\sigma'$ be bounded measurable, and let $S,S'$ be the corresponding
+streaming–attenuation operators. Then for every finite measure $\nu$ and every
+$s\ge0$,
+
+$$
+S'(s)\nu=S(s)\nu+\int_0^s S(s-v)\Big[c(\sigma-\sigma')\cdot S'(v)\nu\Big]\,dv,
+$$
+
+where $g\cdot\lambda$ denotes the measure $g(y)\lambda(dy,d\mu)$.
+
+*Proof.* Fix a ray from $z$ and write $a(v)=c\sigma(X_v(z))$ and
+$a'(v)=c\sigma'(X_v(z))$. Differentiating
+$v\mapsto e^{-\int_v^s a}\,e^{-\int_0^v a'}$ and integrating over $[0,s]$ gives
+the scalar Duhamel identity
+
+$$
+e^{-\int_0^s a'}-e^{-\int_0^s a}=\int_0^s e^{-\int_v^s a}\,(a-a')(v)\,e^{-\int_0^v a'}\,dv .
+$$
+
+The flow property gives $e^{-\int_v^s a}=A_{s-v}(X_v(z))$ and
+$\mathbf 1\{s<\tau(z)\}=\mathbf 1\{v<\tau(z)\}\,\mathbf 1\{s-v<\tau(X_v(z))\}$.
+Multiply the identity by $\mathbf 1\{s<\tau(z)\}\,h(X_s(z),\mu)$ and integrate
+against $\nu(dz)$; by Fubini, this is the claim. $\square$
+
+**Consequence.** Suppose $\psi'$ is a mild solution with coefficients
+$(\sigma',f',q')$, census $\nu$ and inflow $\beta$. Apply Lemma P to every $S'$
+in its mild equation and change the order of integration ($w=u+v$). Then
+$\psi'$ is also a mild solution with coefficients $(\sigma,f,q)$ and the
+additional source
+
+$$
+\rho_u=c(\sigma-\sigma')\cdot\psi'_u+(R'-R)\psi'_u+(Q'-Q). \tag{P}
+$$
+
 ---
 
 ## 4. Theorem 2: the mean packet density is the mild solution
@@ -570,7 +632,7 @@ reaches $t^{n+1}$ (census).
   density $2\mu$ and $t$ uniform on the step.
 
 The 20000-event cap and the $10^{-10}\Delta x$ face nudge are not part of this
-process (Section 6).
+process. Proposition 2 (Section 6.2) bounds the effect of the cap.
 
 Let $\nu_t=\sum_{\text{alive}}w_p\delta_{Z_p(t)}$ and define the mean measure
 by $\langle h,m_t\rangle=\mathbb E\langle h,\nu_t\rangle$.
@@ -648,6 +710,62 @@ a random census (the previous step's output) gives the same statement with
 $\nu^n$ replaced by $\mathbb E\nu^n$, provided the coefficients are held
 fixed.
 
+### 4.3 Lemma B (positivity, and stability with constant 1)
+
+It is convenient to allow general data. Let $\nu$ be a finite signed census
+measure on $\bar D$, and let $\Pi$ be a finite signed source measure on
+$\bar D\times[t^n,t^{n+1}]$. $\Pi$ can contain $Q\,du$, $\beta_u\,du$, or a
+residual $r\,dx\,d\mu\,du$. The general mild equation is
+
+$$
+\langle h,\phi_t\rangle=\langle h,S(t-t^n)\nu\rangle+\int_{\bar D\times[t^n,t]}K_{t-u}h(z)\,\Pi(dz,du)+\int_{t^n}^t\langle h,S(t-u)R\phi_u\rangle\,du .
+\tag{Mild-$\Pi$}
+$$
+
+Here $K_s$ is the survival kernel of Section 4.2(b), with
+$\langle K_sh,\nu\rangle=\langle h,S(s)\nu\rangle$. The proof of Theorem 1
+applies unchanged, because the sources cancel in the difference of two
+solutions. So (Mild-$\Pi$) has at most one solution.
+
+> **Lemma B.**
+> 1. If $\nu\ge0$ and $\Pi\ge0$, the solution exists and is a nonnegative
+>    measure.
+> 2. For signed data, $\displaystyle\|\phi_t\|\le\|\nu\|+|\Pi|\big(\bar D\times[t^n,t]\big)$
+>    for every $t$ in the step.
+> 3. Define a tally of the solution as the expected tally of the particle
+>    representation used in the proof: deposition in a set of cells, escape
+>    at either face, or the census mass. For nonnegative data each tally is
+>    at most $\|\nu\|+\|\Pi\|$. For signed data (extended by linearity), the
+>    absolute value of each tally is at most $\|\nu\|+|\Pi|$.
+>
+> The constant is $1$, independent of $\sigma$, $f$ and $\Delta t$.
+
+*Proof.*
+
+1. **Nonnegative data.** Build a particle process as in 4.1. Draw $N$ census
+   packets i.i.d. from $\nu/\|\nu\|$, each with weight $\|\nu\|/N$. Draw $N'$
+   source packets i.i.d. from $\Pi/\|\Pi\|$, each with weight $\|\Pi\|/N'$.
+   Each source packet starts at its sampled point $(z,u)$. Steps (a)–(d) of
+   Theorem 2 go through unchanged. The only modification is in (c), where the
+   births now give $\mathbb E\sum wF=\int F\,d\Pi$. So the mean measure solves
+   (Mild-$\Pi$). It is nonnegative, being the expectation of a nonnegative
+   measure. No packet is ever created except by a birth, and weights never
+   increase, so pathwise
+   $\langle1,\nu_t\rangle\le\|\nu\|+\Pi(\bar D\times[t^n,t])$. Taking
+   expectations gives item 2 for nonnegative data.
+2. **Signed data.** Use the Jordan decompositions $\nu=\nu^+-\nu^-$ and
+   $\Pi=\Pi^+-\Pi^-$, and let $\phi^\pm$ be the solutions for
+   $(\nu^\pm,\Pi^\pm)$. By linearity, $\phi^+-\phi^-$ solves (Mild-$\Pi$)
+   with data $(\nu,\Pi)$, so it is *the* solution. Then
+   $\|\phi_t\|\le\|\phi^+_t\|+\|\phi^-_t\|\le\|\nu^+\|+\|\nu^-\|+\Pi^+(\cdot)+\Pi^-(\cdot)=\|\nu\|+|\Pi|(\cdot)$.
+3. **Tallies.** Pathwise, every unit of weight ends up in exactly one of:
+   deposition, escape left, escape right, or census (Section 5.2). So for
+   nonnegative data each tally is at most the input mass. The signed case
+   follows from the Jordan decomposition as in item 2. $\square$
+
+For a measure with a density, the total-variation norm is the $L^1$ norm, so
+Lemma B is an $L^1$ stability estimate.
+
 ---
 
 ## 5. Tallies, energy conservation, and F&C's continuous absorption
@@ -668,7 +786,7 @@ is F&C (2.2).
 **Census.** $\mathbb E[\text{census measure}]=m_{t^{n+1}}$, which is the
 initial datum of the next step.
 
-**Material update.** Line 408, $U_j^{n+1}=U_j^n+(\mathcal E_j-E_j)/\Delta x$,
+**Material update.** Line 409, $U_j^{n+1}=U_j^n+(\mathcal E_j-E_j)/\Delta x$,
 is F&C (1.18) with $S=0$ (Section 1.8). The expected update equals the update
 driven by the exact solution of (T).
 
@@ -709,19 +827,549 @@ variance and cost.
 
 ---
 
-## 6. What is not covered
+## 6. Guarantees for the code as written
+
+### 6.1 Proposition 1 (the material energy stays positive in every run)
+
+> **Proposition 1.** Assume $d\ln u_m/d\ln T<4$ at the temperatures that
+> occur. This holds at every temperature when $u_m\propto T^{b}$ with $b<4$.
+> Then, with $\alpha=1$, in every realization, every cell and every step,
+> $$U_j^{n+1}>U_j^n-\frac{T}{4}\frac{du_m}{dT}\Big|_{T_j^n}>0 .$$
+> For the code's EOS ($b=\beta_{\rm EOS}=1.10$) this gives
+> $U_j^{n+1}>(1-b/4)\,U_j^n=0.725\,U_j^n$, and
+> $\theta_j^{n+1}>0.725^{1/b}\,\theta_j^n\approx0.7465\,\theta_j^n$.
+
+*Proof.* The update (line 409) is $U^{n+1}=U^n+(\mathcal E_j-E_j)/\Delta x$
+with $\mathcal E_j\ge0$, so $U^{n+1}\ge U^n-E_j/\Delta x$.
+
+* By definition, $E_j/\Delta x=fc\sigma\Delta t\,u_r^n$.
+* $fc\sigma\Delta t=\frac{c\sigma\Delta t}{1+\beta c\sigma\Delta t}<\frac1\beta$,
+  since $x/(1+\beta x)<1/\beta$ for every $x\ge0$. Hence $E_j/\Delta x<u_r/\beta$.
+* $u_r/\beta=u_r\frac{du_m}{du_r}=u_r\frac{du_m/dT}{4aT^3}=\frac T4\frac{du_m}{dT}$,
+  and this is less than $u_m$ by hypothesis.
+* For $u_m=E_{100}H\theta^b$, $\frac T4\frac{du_m}{dT}=\frac b4u_m$. The
+  temperature bound follows from $\theta\propto U^{1/b}$. $\square$
+
+**Consequences.**
+
+* The code's `RuntimeError` branch (non-positive material energy) cannot be
+  reached for any $\Delta t$ or any number of packets, apart from
+  floating-point round-off.
+* Positive material energy bounds the total packet weight (Lemma D in
+  Section 7).
+* The per-step temperature bound is too weak to bound temperatures from below
+  over a whole run: $0.7465^{3000}$ is negligible.
+
+### 6.2 Proposition 2 (the 20000-event cap)
+
+> **Proposition 2.** Fix a step and assume $f_j\ge f_{\min}>0$ in every cell.
+> Let
+> $$K^*=\Big\lceil\tfrac12\Big(19999-\frac{c\Delta t}{(1-10^{-10})\,\Delta x}\Big)\Big\rceil .$$
+> Then for every packet, $\Pr[\text{the cap is reached}]\le(1-f_{\min})^{K^*-1}$.
+> Consequently, for every tally, the expected difference between the code and
+> the idealized process is at most $W(1-f_{\min})^{K^*-1}$, where $W$ is the
+> total packet weight in the step.
+
+*Proof.*
+
+* **Counting passes.** Each pass through the loop in `transport_step` ends in
+  exactly one of: a collision, a face crossing, census, or escape. Census and
+  escape end the history, so at most one pass is terminal. With $K$
+  collisions and $F$ face crossings there are at most $K+F+1$ passes. The cap
+  is checked at the top of pass 20001, so reaching it requires $K+F\ge20000$.
+* **Bounding face crossings.** The history consists of at most $K+1$ straight
+  segments separated by collisions. After a crossing, the nudge places the
+  packet $\epsilon=10^{-10}\Delta x$ past the face without using time. So on
+  one segment, consecutive crossings are separated by horizontal flight of at
+  least $\Delta x-\epsilon$, and a segment with horizontal flight $e_i$ has at
+  most $e_i/(\Delta x-\epsilon)+1$ crossings. Time advances by flight
+  length$/c$ and the step lasts at most $\Delta t$, so $\sum_ie_i\le c\Delta t$.
+  Hence $F\le c\Delta t/(\Delta x-\epsilon)+K+1$.
+* **Combining.** $K+F\ge20000$ then forces
+  $2K\ge19999-c\Delta t/(\Delta x-\epsilon)$, i.e. $K\ge K^*$.
+* **Probability.** A history reaches $K^*$ collisions only if its first
+  $K^*-1$ collisions were all scatterings. At each collision, the code uses a
+  fresh uniform (line 313), so conditionally on the past, absorption happens
+  with probability $f_{\rm cell}\ge f_{\min}$. Therefore
+  $\Pr[K\ge K^*]\le(1-f_{\min})^{K^*-1}$.
+* **Tally bias.** A capped packet differs from the idealized one only in
+  where its weight $w$ is tallied, so each tally changes by at most $w$.
+  Summing over packets gives the bound. $\square$
+
+**Numbers for the default run.** Here $c\Delta t/\Delta x=29.98$, so
+$K^*=9985$. In this model
+$\beta\sigma=\frac{4\sigma_0}{Hb}\theta^{4-b-\alpha_{\rm op}}=\frac{4\sigma_0}{Hb}\theta^{-0.63}$
+grows as $\theta$ falls. So $f$ is smallest in the coldest cell:
+
+| Coldest $\theta$ in the step | $\beta c\sigma\Delta t$ | $f_{\min}$ | Bound on $\Pr[\text{cap}]$ |
+|---|---|---|---|
+| $\theta_0$ (300 K) | 2.30 | 0.303 | $10^{-1567}$ |
+| $\theta_0/1000$ (0.3 K) | 178 | 0.0056 | $6\times10^{-25}$ |
+| $\theta_{\rm floor}=10^{-12}$ | $4.6\times10^{5}$ | $2.2\times10^{-6}$ | 0.98 (no information) |
+
+The condition on the coldest temperature is **not proved**. Proposition 1
+alone allows a 25 % temperature drop per step. It can, however, be checked
+at runtime: recording $\min_j\theta_j$ at every step would certify the bound
+for a given run. The script does not record it. The final profile of the
+default run has a minimum of 110.9 eV, which says nothing about earlier steps.
+
+### 6.3 Proposition 3 (the step-averaged drive)
+
+> **Proposition 3.** Fix a step's coefficients and census. Let $m_t$ solve (T)
+> with the exact inflow $\phi_L(t)=\tfrac12aT_D(t)^4$, and let $\bar m_t$
+> solve it with the step-averaged inflow $\bar\phi_L$ used by the code. Then
+> for every $t$ in the step,
+> $$\|m_t-\bar m_t\|\le\sigma_{SB}\int_{t^n}^{t^{n+1}}\big|T_D(u)^4-\overline{T_D^4}\big|\,du\le\frac{\sigma_{SB}\,\mathrm{Lip}(T_D^4)}{3}\,\Delta t^2 .$$
+> Every expected tally (deposition in any cell, escape at either face, census
+> mass) differs by at most the same amount. The total energy delivered in the
+> step is identical.
+
+*Proof.*
+
+* The difference $m_t-\bar m_t$ is a solution of (Mild-$\Pi$) with zero
+  census, zero volume source and the signed inflow source
+  $\Pi=(\beta_u-\bar\beta_u)\,du$.
+* Its total variation is
+  $\int du\int_0^1c\mu\cdot\tfrac12a\,|T_D^4-\overline{T_D^4}|\,d\mu=\sigma_{SB}\int|T_D^4-\overline{T_D^4}|\,du$.
+* Lemma B(2) gives the first inequality, and Lemma B(3) the statement for
+  tallies.
+* For the second inequality, let $g=T_D^4$, which is Lipschitz on the step.
+  Then $|g(u)-\bar g|\le\frac1{\Delta t}\int|g(u)-g(v)|\,dv$, so
+  $\int|g-\bar g|\,du\le\frac{\mathrm{Lip}(g)}{\Delta t}\iint_{[t^n,t^{n+1}]^2}|u-v|\,du\,dv=\frac{\mathrm{Lip}(g)\,\Delta t^2}{3}$.
+* The drive table is interpolated linearly, so
+  $\mathrm{Lip}(T_D^4)\le4T_{D,\max}^3\max|dT_D/dt|$. $\square$
+
+The bound holds per step, at fixed coefficients. How the error propagates
+through later steps is not quantified.
+
+---
+
+## 7. Theorem 3: many coupled steps as the number of packets grows
+
+### 7.1 Setting
+
+* **What is fixed:** the cells (number $J$), $\Delta t$, the number of steps
+  $n_s$, and the drive.
+* **The packet-count parameter $N$:** `n_boundary` $=\lceil a_bN\rceil$, the
+  material target is $\lceil a_mN\rceil$, and `max_census`
+  $=M_N=\lceil a_cN\rceil$, where $a_c=\infty$ means no resampling.
+* **The process:** the idealized process of 4.1, without the cap; Proposition
+  2 bounds the difference. Random numbers are idealized as independent
+  uniforms.
+* **Resampling:** one of the following holds.
+  * **(R0)** resampling is never triggered; or
+  * **(R1)** the resampling is unbiased, $\mathbb E[\langle g,\nu_{\rm post}\rangle\mid\nu_{\rm pre}]=\langle g,\nu_{\rm pre}\rangle$,
+    and has conditional variance at most $W^2\|g\|_\infty^2/M$, where $W$ is
+    the total weight and $M$ the number of output packets. Multinomial
+    resampling satisfies (R1). Stratified resampling has conditional variance
+    no larger than multinomial (Douc, Cappé & Moulines 2005), so it satisfies
+    (R1) too.
+
+  The code's systematic resampling is unbiased (Section 9). However, no
+  general variance bound is known for systematic resampling; Douc, Cappé &
+  Moulines discuss this. If it is triggered, Theorem 3 does not cover it. In
+  the default runs it was never triggered: the census peaked at about 17,600
+  packets against `max_census` = 120,000. Replacing the single comb offset by
+  one independent offset per tooth turns it into stratified resampling.
+
+**The deterministic IMC scheme $\mathfrak D$.** The state is
+$x=(\theta,\nu)$: cell temperatures $\theta\in[\theta_{\rm floor},\infty)^J$
+and a finite nonnegative census measure $\nu$. The map $\mathfrak D(x)$ does
+the following:
+
+* compute the coefficients from $\theta$;
+* solve (T) exactly with census $\nu$, the sources $Q(\theta)$ and the
+  step-averaged drive;
+* take the new census $\nu'$ as the solution at $t^{n+1}$, and the
+  depositions $\bar{\mathcal E}_j$ as in Section 5.1;
+* update $U'_j=U_j(\theta_j)+(\bar{\mathcal E}_j-E_j(\theta))/\Delta x$ and
+  $\theta'=\mathrm{EOS}^{-1}(U')$, with the floor.
+
+Then $\bar x^n=\mathfrak D^n(x^0)$, with $x^0=(\theta_0\mathbf 1,0)$. In words:
+exact transport, exact deposition, F&C (1.18), on the code's grid, with no
+Monte Carlo noise. Proposition 1 holds for $\mathfrak D$ as well.
+
+**History functionals.** A history functional $\Phi$ is a bounded measurable
+function of one packet's start $(z,u)$ and its path during the step,
+including its fate. For coefficients $\theta$, let
+$\hat\Phi^\theta(z,u)=\mathbb E^\theta_{z,u}[\Phi]$. Examples:
+
+* $\Phi=\mathbf 1\{\text{absorbed in cell }j\}$: deposition;
+* $\Phi=\mathbf 1\{\text{escapes at }x=L\}$: leakage;
+* $\Phi=g(Z_{t^{n+1}})\mathbf 1\{\text{in census}\}$: the census functional
+  $\langle g,\cdot\rangle$.
+
+### 7.2 Lemma C (the transport kernel depends continuously on the coefficients)
+
+For coefficient sets $\theta,\theta'$, let $\hat\sigma=\max(\sigma_{\max},\sigma'_{\max})$.
+Then
+
+$$
+\sup_{z,u}\big|\hat\Phi^\theta(z,u)-\hat\Phi^{\theta'}(z,u)\big|\le2\|\Phi\|_\infty\Big(c\Delta t\max_j|\sigma_j-\sigma'_j|+c\hat\sigma\Delta t\max_j|f_j-f'_j|\Big).
+$$
+
+Since $\sigma_j$ and $f_j$ are continuous in $\theta_j\ge\theta_{\rm floor}$,
+the map $\theta\mapsto\hat\Phi^\theta$ is continuous in the sup norm.
+
+*Proof (coupling by thinning).*
+
+* Let $\Lambda=c\hat\sigma$. Run a Poisson process of candidate events with
+  rate $\Lambda$ along the flight.
+* At each candidate, at position $x$ in cell $j$, draw independent uniforms
+  $U_1,U_2,U_3$:
+  * it is a collision if $U_1<c\sigma_j/\Lambda$;
+  * a collision is an absorption if $U_2<f_j$;
+  * otherwise the packet scatters to $\mu=2U_3-1$.
+* Accepted candidates form a point process with intensity $c\sigma(x(t))$
+  (Lewis–Shedler thinning). So this construction has the law of the process
+  in 4.1.
+* Drive the $\theta$ and $\theta'$ processes with the same Poisson process and
+  the same uniforms. Their paths coincide until the first candidate at which
+  the decisions differ.
+* At a given candidate, the decisions differ with probability at most
+  $c|\sigma_j-\sigma'_j|/\Lambda+|f_j-f'_j|$. The uniforms at a candidate are
+  independent of whether that candidate exists.
+* The expected number of candidates in the step is at most $\Lambda\Delta t$.
+  A union bound over candidates gives
+  $\Pr[\text{paths differ}]\le c\Delta t\max|\sigma-\sigma'|+\Lambda\Delta t\max|f-f'|$.
+* When the paths coincide, so does $\Phi$. Hence
+  $|\hat\Phi^\theta-\hat\Phi^{\theta'}|\le2\|\Phi\|_\infty\Pr[\text{differ}]$,
+  uniformly in the start. $\square$
+
+### 7.3 Lemma D (weights are $O(1/N)$ and total energy is bounded)
+
+Let $E_{\max}=\sum_jU_j^0\Delta x+\int_0^{t_{\rm end}}\sigma_{SB}T_D^4\,dt$.
+For $N>2J/a_m$, at every step:
+
+* the total packet weight is at most $E_{\max}$;
+* every packet weight is at most $C_w/N$, with
+  $C_w=E_{\max}\max(1/a_b,\,2/a_m,\,1/a_c)$.
+
+*Proof.*
+
+* **Total weight.** Energy is conserved in every run (Section 5.2), and the
+  material energy is positive (Proposition 1). So the radiation energy, i.e.
+  the packet weight, is at most $E_{\max}$. The births in one step total
+  $E_b+\sum_jE_j$, where $\sum_jE_j<\sum_j(b/4)U_j\Delta x$. Both are also
+  at most $E_{\max}$.
+* **Boundary packets.** Their weight is $E_b/n_b\le E_{\max}/(a_bN)$.
+* **Material packets.** The code sets $N_j=1+\lfloor\text{remaining}\cdot E_j/E_{\rm tot}\rfloor$,
+  possibly plus one leftover. With remaining $\ge a_mN-J\ge a_mN/2$, this
+  gives $E_j/N_j\le E_{\rm tot}/\text{remaining}\le2E_{\max}/(a_mN)$.
+* **Census packets.** They keep their birth weight (absorption is analog), or
+  have weight $W/M_N\le E_{\max}/(a_cN)$ after resampling. $\square$
+
+### 7.4 Theorem 3
+
+> **Theorem 3.** Under the setting of 7.1, for every $n\le n_s$, as
+> $N\to\infty$:
+> 1. $\theta^n\to\bar\theta^n$ in probability;
+> 2. $\langle g,\nu^n\rangle\to\langle g,\bar\nu^n\rangle$ in probability, for
+>    every bounded Borel $g$ on $\bar D$;
+> 3. every tally of step $n$ (deposition per cell, `escaped_left`,
+>    `escaped_right`, and hence `Fout`) converges in probability to the
+>    corresponding value of $\mathfrak D$.
+>
+> All tallies are bounded by $E_{\max}$. So by bounded convergence the
+> expectations converge too: **the bias of the multi-step Monte Carlo
+> estimator tends to $0$.** No rate is claimed.
+
+*Proof.* By induction on $n$. For $n=0$ everything is deterministic and
+equal. Assume items 1–2 hold for step $n$. Let $\mathcal F_n$ be the history
+up to the start of step $n$. Fix a history functional $\Phi$ and let
+$Y=\sum_pw_p\Phi(\text{history}_p)$, summed over all packets of step $n$
+(census and births).
+
+1. **Conditional mean.** By 4.2(c), and independently of the packet counts,
+   $$\mathbb E[Y\mid\mathcal F_n]=\langle\hat\Phi^{\theta^n}(\cdot,t^n),\nu^n\rangle+B_\Phi(\theta^n),$$
+   where $B_\Phi(\theta)=\sum_jE_j(\theta)\,\mathrm{avg}_j[\hat\Phi^\theta]+E_b\,\mathrm{avg}_b[\hat\Phi^\theta]$
+   averages over the birth distributions. $B_\Phi$ is continuous, by Lemma C
+   and the continuity of $E_j$.
+2. **Conditional variance.** Given $\mathcal F_n$, the histories are
+   independent. So
+   $\mathrm{Var}(Y\mid\mathcal F_n)\le\sum_pw_p^2\|\Phi\|_\infty^2\le\|\Phi\|_\infty^2\,(C_w/N)\cdot3E_{\max}$
+   by Lemma D. (The census weighs at most $E_{\max}$, and the births at most
+   $2E_{\max}$.) Hence $Y-\mathbb E[Y\mid\mathcal F_n]\to0$ in $L^2$, and so in
+   probability.
+3. **Deterministic value.** Let
+   $\bar y=\langle\hat\Phi^{\bar\theta^n}(\cdot,t^n),\bar\nu^n\rangle+B_\Phi(\bar\theta^n)$.
+   This is the corresponding quantity of $\mathfrak D$: apply Theorem 2 to a
+   census sampled from $\bar\nu^n$, as in the proof of Lemma B.
+4. **Comparison.** Split the difference:
+   $$|\mathbb E[Y\mid\mathcal F_n]-\bar y|\le\|\hat\Phi^{\theta^n}-\hat\Phi^{\bar\theta^n}\|_\infty E_{\max}+|\langle\hat\Phi^{\bar\theta^n},\nu^n-\bar\nu^n\rangle|+|B_\Phi(\theta^n)-B_\Phi(\bar\theta^n)|.$$
+   * The first term tends to $0$ in probability, by item 1 of the hypothesis,
+     Lemma C and the continuous mapping theorem.
+   * The second tends to $0$ by item 2 of the hypothesis, applied to the
+     *fixed* bounded Borel function $\hat\Phi^{\bar\theta^n}(\cdot,t^n)$.
+   * The third tends to $0$ by continuity of $B_\Phi$.
+
+   Therefore $Y\to\bar y$ in probability, which proves item 3 for step $n$.
+5. **Census.** Take $\Phi=g(Z_{t^{n+1}})\mathbf 1\{\text{census}\}$; this gives
+   item 2 before resampling. Under (R1), resampling adds a term with zero
+   conditional mean and conditional variance at most
+   $E_{\max}^2\|g\|_\infty^2/(a_cN)\to0$. Under (R0) there is no change. So
+   item 2 holds at step $n+1$.
+6. **Temperatures.** $U_j^{n+1}=U_j(\theta_j^n)+(\mathcal E_j-E_j(\theta^n))/\Delta x\to\bar U_j^{n+1}$
+   by item 4 and continuity, and $\mathrm{EOS}^{-1}$ is continuous. So item 1
+   holds at step $n+1$. $\square$
+
+### 7.5 What Theorem 3 does and does not say
+
+* **Bias and rate.** The bias provably tends to $0$. The rate, heuristically
+  $O(1/N)$, is not proved. A rate would need
+  Lipschitz rather than mere continuous dependence, plus a CLT-type
+  argument.
+* **Order of limits.** The convergence holds for a fixed $\Delta t$, $\Delta x$
+  and number of steps. Nothing is claimed uniformly as $\Delta t\to0$, which
+  would mean $n_s\to\infty$.
+* **Resampling.** The code's systematic resampling is covered only while it
+  is not triggered (R0).
+
+---
+
+## 8. Convergence in $\Delta t$: a conditional theorem, and why the general problem is open
+
+This section isolates link (A), the F&C time linearization. Monte Carlo
+noise and spatial cells are removed. The question is whether the
+deterministic IMC scheme converges to the solution of Eq. (1.1) as
+$\Delta t\to0$.
+
+### 8.1 Setting and hypotheses
+
+**The semi-discrete scheme $\mathfrak D_{\Delta t}$** (continuous in $x$ and
+$\mu$). Given $(\phi^n,u_m^n)$, with temperature $T^n(x)$:
+
+1. compute the coefficients $\sigma^n(x)$, $\beta^n(x)$, $f^n(x)$ and
+   $u_r^n(x)$ from $T^n(x)$, pointwise;
+2. solve (T) exactly over the step (mild solution, Section 3), with the exact
+   inflow $\phi_L(t)$;
+3. update $u_m^{n+1}(x)=u_m^n+f^nc\sigma^n\int_{t^n}^{t^{n+1}}\!\int\phi\,d\mu\,dt-f^nc\sigma^n\Delta t\,u_r^n$,
+   which is F&C (1.18).
+
+**Error norm.** $e^n=\|\phi^n-\phi(t^n)\|_{L^1(D)}+\|u_m^n-u_m(t^n)\|_{L^1(0,L)}$.
+
+**Hypotheses.** Fix $K=[T_{\rm lo},T_{\rm hi}]$ with $T_{\rm lo}>0$ and
+$\Delta t\le\Delta t_0$.
+
+* **(H1) Material data.** $u_m$ is $C^1$ on $K$ with $du_m/dT\ge\kappa>0$.
+  $\sigma$ and $\beta$ are Lipschitz on $K$. Write $\sigma_{\max}$,
+  $\beta_{\max}$, $u_{\max}=aT_{\rm hi}^4$ for the bounds on $K$. Let
+  $\mathcal L$ be a common Lipschitz constant on $K$ (in $T$) of $\sigma$,
+  $\sigma u_r$, $f\sigma$ and $f\sigma u_r$, uniform in
+  $\Delta t\le\Delta t_0$. It exists because $f\sigma=\sigma/(1+c\Delta t\beta\sigma)$
+  has bounded derivatives in $(\sigma,\beta)$ on bounded sets.
+* **(H2) Exact solution.** Eq. (1.1) with the boundary and initial data has a
+  solution on $[0,t_{\rm end}]$ that is classical along characteristics, with
+  $0\le\phi\le\Phi_{\max}$, $T(x,t)\in K$, and
+  $|T(x,t)-T(x,s)|\le M_T|t-s|$.
+* **(H3) The scheme stays in $K$.** Every scheme step used below, started
+  either from the scheme's own state or from the exact state $x(t^n)$, has
+  temperatures in $K$.
+
+**Maximum principle for one step (so no a priori bound on $\phi$ is needed).**
+Let $U\ge\max(u_r^n,\ 2\|\phi^n\|_\infty,\ 2\sup\phi_L)$. The constant
+$\tfrac12U$ is a classical solution of (T) with inflow $\tfrac12U$ and source
+$\tfrac12fc\sigma U\ge q$. Then $\tfrac12U-\phi$ has nonnegative census,
+inflow and source $\tfrac12fc\sigma(U-u_r^n)$. By Lemma A and Lemma B(1),
+$0\le\phi\le\tfrac12U$ throughout the step.
+
+Inductively, under (H3), all scheme solutions satisfy
+$\phi\le\Phi_{\max}:=\tfrac12\max(2\|\phi(0)\|_\infty,\,aT_{D,\max}^4,\,aT_{\rm hi}^4)$.
+Enlarge $\Phi_{\max}$ in (H2) to this value if necessary.
+
+### 8.2 Lemma E (local error)
+
+Start one scheme step from the exact state at $t^n$. Then
+
+$$
+\|\tilde\phi(t^{n+1})-\phi(t^{n+1})\|_{L^1}+\|\tilde u_m^{n+1}-u_m(t^{n+1})\|_{L^1}\le C_{\rm loc}\,\Delta t^2 .
+$$
+
+*Proof.*
+
+**Residual.** Write $\sigma(t)=\sigma(T(x,t))$ and $u_r(t)=u_r(T(x,t))$ along
+the exact solution. In $\phi$-form, the exact transport equation is
+$\partial_t\phi+c\mu\partial_x\phi+c\sigma(t)\phi=\tfrac12c\sigma(t)u_r(t)$,
+since (1.1a) has no scattering. Rewritten with the frozen scheme coefficients,
+it reads
+
+$$
+\partial_t\phi+c\mu\partial_x\phi+c\sigma^n\phi-(1-f^n)c\sigma^n\tfrac12\!\int\phi\,d\mu'-q^n=r,
+$$
+$$
+r=c(\sigma^n-\sigma(t))\phi+\tfrac12c\big[\sigma(t)u_r(t)-\sigma^nu_r^n\big]+\tfrac12(1-f^n)c\sigma^n\Big[u_r^n-\int\phi\,d\mu'\Big].
+$$
+
+**Bound on the residual.** Use $|\sigma^n-\sigma(t)|\le\mathcal LM_T\Delta t$,
+$|\sigma u_r(t)-\sigma^nu_r^n|\le\mathcal LM_T\Delta t$, and
+$1-f^n=\frac{\beta c\sigma\Delta t}{1+\beta c\sigma\Delta t}\le\beta_{\max}c\sigma_{\max}\Delta t$.
+This gives
+
+$$
+|r|\le C_r\Delta t,\qquad C_r=c\mathcal LM_T\big(\Phi_{\max}+\tfrac12\big)+\tfrac12c^2\beta_{\max}\sigma_{\max}^2\,(u_{\max}+2\Phi_{\max}).
+$$
+
+**Transport error.** By Lemma A (with a source, Section 3.3), $\phi$ solves
+(Mild-$\Pi$) with the scheme coefficients, the same census and inflow, and the
+additional source $r\,dx\,d\mu\,du$. The scheme solution $\tilde\phi$ solves
+it without $r$. By uniqueness and Lemma B(2),
+
+$$
+\|\phi_t-\tilde\phi_t\|_{L^1}\le\int_{t^n}^t\|r_u\|_{L^1(D)}\,du\le2L\,C_r\,\Delta t\,(t-t^n).
+$$
+
+**Material error.** Pointwise in $x$, the exact update is
+$u_m(t^{n+1})-u_m(t^n)=\int c\sigma(t)\big(\int\phi\,d\mu-u_r(t)\big)\,dt$. The
+difference from the scheme's update is at most
+
+$$
+\int\!|c\sigma(t)-f^nc\sigma^n|\!\int\!|\phi|\,d\mu\,dt+f^nc\sigma^n\!\int\!\Big|\!\int(\phi-\tilde\phi)\,d\mu\Big|dt+\int\!|c\sigma(t)u_r(t)-f^nc\sigma^nu_r^n|\,dt .
+$$
+
+Here $|c\sigma(t)-f^nc\sigma^n|\le C_\sigma\Delta t$ with
+$C_\sigma=c\mathcal LM_T+c^2\beta_{\max}\sigma_{\max}^2$, and
+$|c\sigma(t)u_r(t)-f^nc\sigma^nu_r^n|\le(c\mathcal LM_T+c^2\beta_{\max}\sigma_{\max}^2u_{\max})\Delta t$.
+Integrating over $x\in(0,L)$:
+
+$$
+\|\tilde u_m^{n+1}-u_m(t^{n+1})\|_{L^1}\le2L\Phi_{\max}C_\sigma\Delta t^2+c\sigma_{\max}LC_r\Delta t^3+L\big(c\mathcal LM_T+c^2\beta_{\max}\sigma_{\max}^2u_{\max}\big)\Delta t^2 .
+$$
+
+Adding the two errors gives $C_{\rm loc}=2LC_r+2L\Phi_{\max}C_\sigma+L(c\mathcal LM_T+c^2\beta_{\max}\sigma_{\max}^2u_{\max})+c\sigma_{\max}LC_r\Delta t_0$. $\square$
+
+### 8.3 Lemma F (one step is Lipschitz with constant $1+L_s\Delta t$)
+
+Let $x=(\phi^0,u_m)$ and $x'=(\phi'^0,u'_m)$ be states whose scheme steps
+satisfy (H3). Then
+
+$$
+\|\mathfrak D_{\Delta t}x-\mathfrak D_{\Delta t}x'\|\le(1+L_s\Delta t)\,\|x-x'\|,\qquad L_s=c\sigma_{\max}+\frac{C_\rho+(2\Phi_{\max}+1)c\mathcal L+c\sigma_{\max}\Delta t_0C_\rho}{\kappa},
+$$
+
+with $C_\rho=(6\Phi_{\max}+1)c\mathcal L$.
+
+*Proof.* By (H1), $|T-T'|\le|u_m-u'_m|/\kappa$ pointwise.
+
+**Transport.** Let $\psi,\psi'$ be the transport solutions with the
+coefficients from $T$ and $T'$. By Lemma P and its consequence (P), $\psi'$
+solves the equation with the coefficients of $T$ plus the source $\rho$. With
+$0\le\psi'\le\Phi_{\max}$:
+
+* $\|c(\sigma-\sigma')\psi'\|\le2c\Phi_{\max}\mathcal L\|T-T'\|_{L^1}$;
+* $\|(R'-R)\psi'\|\le2c\Phi_{\max}\cdot2\mathcal L\|T-T'\|_{L^1}$, since
+  $(1-f)\sigma=\sigma-f\sigma$;
+* $\|Q'-Q\|\le c\mathcal L\|T-T'\|_{L^1}$.
+
+So $\|\rho_u\|\le C_\rho\|T-T'\|_{L^1}\le(C_\rho/\kappa)\|u_m-u'_m\|_{L^1}$.
+The difference $\psi-\psi'$ solves (Mild-$\Pi$) with census $\phi^0-\phi'^0$
+and source $-\rho$. By Lemma B(2), for $u$ in the step,
+
+$$
+\|\psi_u-\psi'_u\|\le\|\phi^0-\phi'^0\|+(u-t^n)\,(C_\rho/\kappa)\,\|u_m-u'_m\| .
+$$
+
+**Material.** Pointwise,
+
+$$
+|u_m^{\rm new}-u'^{\rm new}_m|\le|u_m-u'_m|+|fc\sigma-f'c\sigma'|\iint|\psi'|+fc\sigma\iint|\psi-\psi'|+\Delta t\,|fc\sigma u_r-f'c\sigma'u'_r| .
+$$
+
+Integrating over $x$, and using $\iint|\psi'|\,d\mu\,dt\le2\Phi_{\max}\Delta t$
+at each $x$, gives
+
+$$
+\|u_m^{\rm new}-u'^{\rm new}_m\|\le\|u_m-u'_m\|\big(1+\Delta t\,[(2\Phi_{\max}+1)c\mathcal L+c\sigma_{\max}\Delta tC_\rho]/\kappa\big)+c\sigma_{\max}\Delta t\,\|\phi^0-\phi'^0\| .
+$$
+
+Adding the transport bound at $u=t^{n+1}$ gives the claim. $\square$
+
+### 8.4 Theorem 4 (conditional convergence in $\Delta t$)
+
+> **Theorem 4.** Under (H1)–(H3), for $\Delta t\le\Delta t_0$,
+> $$\max_{t^n\le t_{\rm end}}e^n\le C_{\rm loc}\,t_{\rm end}\,e^{L_st_{\rm end}}\,\Delta t .$$
+> The F&C semi-discrete scheme, (2.1) with (1.18), therefore converges to the
+> solution of (1.1) at first order in $\Delta t$.
+
+*Proof.* Split the error into a propagated part and a local part:
+
+$$
+e^{n+1}\le\|\mathfrak Dx^n-\mathfrak Dx(t^n)\|+\|\mathfrak Dx(t^n)-x(t^{n+1})\|\le(1+L_s\Delta t)\,e^n+C_{\rm loc}\Delta t^2,
+$$
+
+by Lemmas F and E. Since $e^0=0$,
+$e^n\le C_{\rm loc}\Delta t^2\sum_{k<n}(1+L_s\Delta t)^k\le C_{\rm loc}\,t^n\,e^{L_st^n}\,\Delta t$. $\square$
+
+### 8.5 Why this does not settle the question for the SiO₂ problem, and why it is open
+
+Theorem 4 is a correct statement, but it is **vacuous for the problem the code
+solves**. Closing the gap is a research problem, for the following reasons.
+
+1. **The constants depend on the opacity, which is enormous.** $K$ must
+   contain the cold foam at 300 K, where $\sigma=2.2\times10^{14}\,$cm⁻¹.
+   * $L_s\ge c\sigma_{\max}$ gives $e^{L_st_{\rm end}}\ge e^{2\times10^{16}}$
+     for $t_{\rm end}=3\,$ns.
+   * $C_{\rm loc}$ contains $c^2\beta_{\max}\sigma_{\max}^2$.
+   * The bound is meaningful only for $\Delta t\ll1/(c\sigma_{\max})\approx1.5\times10^{-16}\,$ns.
+     That is exactly the regime that implicit Monte Carlo exists to avoid.
+
+   What is needed is an error bound that does not depend on $\sigma$
+   ("uniform in stiffness", or asymptotic-preserving). Such a bound would have
+   to use the diffusion-limit structure of optically thick transport. The
+   available analyses of IMC in this limit (e.g. Densmore & Larsen 2004) are
+   formal asymptotics. I do not know of a rigorous uniform estimate.
+2. **The solution is not smooth.** The Marshak front raises $T$ from 300 K to
+   about 100 eV across a thin layer, so $M_T$ in (H2) is huge. Also,
+   $\sigma\propto\theta^{-3.53}$ has Lipschitz constant growing like
+   $\theta^{-4.53}$ as $T\to0$. The hypotheses are not violated, since
+   $T_{\rm lo}=300\,$K$>0$, but the constants are useless. A
+   convergence proof that survives fronts cannot rely on Lipschitz-in-time
+   bounds.
+3. **No monotonicity.** For degenerate nonlinear problems, the usual
+   rigorous route to convergence without smoothness is a monotone scheme
+   combined with a comparison principle. IMC is not monotone for large
+   $\Delta t$: it can overheat (Larsen & Mercier 1987; the $g<0$ regime in
+   Section 1.10). So that route is closed.
+4. **Well-posedness of (1.1) is assumed.** (H2) assumes existence and bounds
+   for the exact nonlinear system with these degenerate coefficients; they
+   are not proved here.
+5. **Spatial discretization is not covered.** Theorem 4 is continuous in $x$,
+   while the code uses cells with constant temperature and uniform emission
+   inside each cell. In the cold foam a cell is
+   $\sigma\Delta x\approx2\times10^{11}$ mean free paths thick. Emitting
+   uniformly across such a cell moves energy unphysically far (the "teleportation"
+   error described in the IMC literature; see Wollaber 2016). An analysis
+   uniform in $\sigma\Delta x$ would be needed, and none is known to me. In
+   the hot region $\sigma\Delta x\approx0.007$, and this problem does not
+   arise.
+6. **The limits must be taken jointly.** Theorem 3 (N → ∞) holds for a fixed
+   number of steps and gives no rate. Theorem 4 holds without noise.
+   Combining them as $\Delta t\to0$ and $N\to\infty$ together would need
+   Monte Carlo error rates that do not degrade with the number of steps.
+   Those are not available.
+
+In short, a theorem of the form "the simulation converges to the true $I$
+for this problem" would need opacity-independent error bounds for the IMC
+time and space discretization of a degenerate nonlinear transport system,
+together with Monte Carlo rates uniform in the number of steps. To my
+knowledge, none of these exists in rigorous form.
+
+---
+
+## 9. Status of each link
 
 | Item | Status |
 |---|---|
-| Link B for the idealized process (one step) | **Proved**: Theorems 1–2, Section 5. The statistical error of a tally is $O(N^{-1/2})$ by the law of large numbers for the i.i.d.-sourced, independent packet histories. |
-| Census resampling (`merge_census`) | **Unbiased.** A comb of spacing $W/M$ with a uniform offset hits an input packet of weight $w_j$ on average $Mw_j/W$ times, each copy with weight $W/M$. Its expected measure is therefore preserved, and energy is conserved exactly. Applied after transport, it preserves the conditional mean. |
-| Drive averaged over the step | The code solves (T) with $\bar\phi_L$ instead of $\phi_L(t)$. This is an $O(\Delta t)$ timing error inside the step. |
-| 20000-event cap | A deviation from the process. A capped history goes to census before $t^{n+1}$, which is a bias. Its size is not quantified, but it should be rarely triggered. |
-| Face nudge ($10^{-10}\Delta x$) | A geometric perturbation, not analyzed. |
-| Many steps with a finite number of packets | **Not proved.** $\sigma^{n+1},f^{n+1},u_r^{n+1}$ depend on the random $U^{n+1}$ through nonlinear maps, so the multi-step run is *not* an unbiased estimator of the deterministic semi-discrete scheme. One expects the bias to vanish as $N\to\infty$, heuristically $O(1/N)$, but no proof is given. |
-| Link A: (2.1)+(1.18) vs. (1.1) | **Not proved** (Section 1.11). The error is formally first order in $\Delta t$. Overheating occurs for large $\Delta t$ (Section 1.10; Larsen & Mercier 1987). |
-| Spatial discretization | Temperature is constant per cell and emission is uniform per cell (F&C (4.19)). Convergence as $\Delta x\to0$ is expected but not proved here. |
-| Convergence of the full scheme to the solution of (1.1) | **Not proved.** As far as I know, no complete proof exists. The literature provides consistency, asymptotic-diffusion and stability analyses. |
+| One step of the idealized random walk vs. (T) | **Proved**: Theorems 1–2, Section 5. |
+| Stability of (T) with respect to data | **Proved** with constant 1: Lemma B. |
+| Material energy positivity; the code never aborts | **Proved**: Proposition 1. |
+| 20000-event cap | **Bounded**: Proposition 2. Negligible ($10^{-1567}$) if no cell is colder than 300 K. That condition is checkable at runtime but not proved. |
+| Drive averaged over each step | **Bounded**: Proposition 3, at most $\sigma_{SB}\mathrm{Lip}(T_D^4)\Delta t^2/3$ per step and per tally. |
+| Face nudge ($10^{-10}\Delta x$) | Accounted for in the counting of Proposition 2. Its effect on tallies is not analyzed. |
+| Census resampling (`merge_census`) | **Unbiased.** A comb of spacing $W/M$ with a uniform offset hits an input packet of weight $w_j$ on average $Mw_j/W$ times, each copy with weight $W/M$, and energy is conserved exactly. Its variance is not controlled in general; Theorem 3 needs (R0) or (R1). Default runs: never triggered. |
+| Many steps, $N\to\infty$, with $\Delta t$ and $\Delta x$ fixed | **Proved**: Theorem 3. Convergence in probability, and the bias tends to 0. No rate. |
+| $\Delta t\to0$ for the F&C scheme, continuous in space | **Proved conditionally**: Theorem 4, first order. Vacuous constants for the cold foam (Section 8.5). |
+| Spatial discretization, $\Delta x\to0$ | **Open** (Section 8.5, item 5). |
+| Simulation → true $I$ for this problem | **Open** (Section 8.5). |
 
 ---
 
@@ -745,7 +1393,7 @@ Line numbers refer to `src/sio2_1mm_gray_imc_check_og.py`.
 | Collision sampling | (4.25b) $d_{COL}=\lvert\ln r\rvert/((1-f)\sigma)$, continuous absorption (4.26c) | $d=\lvert\ln r\rvert/\sigma$, absorb w.p. $f$ else scatter (lines 271, 313). Same mean (Section 5.3) |
 | 1 % weight cutoff | p. 329 | not needed with analog absorption; `cutoff` computed but unused (line 397) |
 | Census | (4.26), $d=d_{CEN}$ | packets frozen at $t^{n+1}$; carried to next step |
-| Census population control | (4.9)–(4.11) limit $N_S$ | systematic resampling `merge_census` (not in F&C; unbiased, Section 6) |
+| Census population control | (4.9)–(4.11) limit $N_S$ | systematic resampling `merge_census` (not in F&C; unbiased; see Sections 7.5 and 9) |
 | Material update | (1.18), (4.28) | `U_new = U + (deposited − emission)/DX`, line 409; exact EOS inversion |
 | Energy check | (4.29) | `energy_error`; about $10^{-14}$ |
 
@@ -780,5 +1428,21 @@ Line numbers refer to `src/sio2_1mm_gray_imc_check_og.py`.
    variation) shows that form has a unique solution. So for one step, the
    idealized algorithm is unbiased for (2.1) and for F&C's (2.2) and (1.18),
    and it conserves energy exactly in every run.
-3. **Open (Section 6).** It is not proved that (2.1)+(1.18) approximates (1.1),
-   nor that the coupled multi-step simulation converges to the true $I$.
+3. **The code as written (Section 6).** The material energy stays positive in
+   every run, so the code's abort branch is unreachable (Proposition 1). The
+   20000-event cap has negligible bias provided no cell drops below 300 K
+   (Proposition 2). Averaging the drive over a step costs
+   $O(\Delta t^2)$ per step and per tally (Proposition 3). These rest on
+   Lemma B: stability of (2.1) with constant 1, independent of the opacity.
+4. **Many steps (Section 7).** With $\Delta t$ and $\Delta x$ fixed, the
+   coupled multi-step simulation converges in probability, as $N\to\infty$,
+   to the deterministic IMC scheme, and its bias tends to 0 (Theorem 3). No
+   rate is proved, and the code's systematic resampling is covered only
+   while it is not triggered.
+5. **$\Delta t\to0$ (Section 8).** Under smoothness and positivity hypotheses,
+   the continuous-in-space F&C scheme converges to Eq. (1.1) at first order
+   (Theorem 4). Its constants grow like $e^{c\sigma_{\max}t}$, so it says
+   nothing for the cold foam. A convergence proof for this problem would
+   need opacity-independent bounds, robustness to the Marshak front, a
+   treatment of the spatial cells, and Monte Carlo rates uniform in the
+   number of steps. None of these is available, so the question is open.

@@ -58,6 +58,13 @@
 
 ## Phase A: foundations
 
+> **Status (2026-10-18): Phase A code milestones done** (M0, M1, M2, M2a). The Learn exercises are still yours (the A1–A4 ↔ Wollaber map, etc.).
+> - **Code:** `src/imc/{material,mesh,particles,sources,transport,population,tallies,stepper}.py`; drivers `src/imc/problems/{sio2,linear_step,zero_d}.py`; tests `tests/imc/` (27 tests, 1 marked slow; `uv run pytest tests/imc`).
+> - **M0:** the packaged SiO₂ run gives breakout 1.47 ns, peak 0.957 ± 0.013 (frozen: 1.47, 0.954), energy error 1.4×10⁻¹³, and per-cell ledger 1.1×10⁻¹². Against S_N: mean bias −0.04%, rms 0.3% after 1.5 ns. The "known issue" below was a stale file: re-running the frozen script gives 5.3×10⁻¹⁴. The energy error of 80 came from `sio2_1mm_gray_imc_check.npz`, written before the `np.full(1, THETA0)` fix.
+> - **M1:** census energy agrees with S_N cell by cell for σΔx ∈ {0.1, 1, 10}. Deposition is compared on sums over adjacent cell pairs, because S_N's diamond difference oscillates odd–even when σΔx ≳ 1. At σΔx = 10 the comparison is limited to cells 5–89: the boundary layers are 0.1 cell thick, and S_N's spatial error there isn't estimable on its fixed grid.
+> - **M2:** every step matches Wollaber Eq. 120 within noise (p = 3, 5). Fig. 2 is reproduced (0.90 → 1.034 → 0.990 → 1.003 → 0.999), and so is ρ = −0.2868.
+> - **M2a, correction to the A2 gate below:** the explicit scheme is unstable only when β = du_r/du_m > 1 (ρ → −β, i.e. −4q in Wollaber's variables), not merely when βcσΔt ≳ 1. In 0-D at q = 0.5 the deviation doubles every step and the material energy goes negative by step 6. SiO₂ at Δt = 1 ps runs stably with the explicit scheme, because β ≲ 0.05 there.
+
 ### M0. Package the SiO₂ IMC (keep the script frozen as a regression baseline)
 
 - **Learn:** `md/imc_mc_derivation.md` §§1–5. Wollaber §2.2 (his approximations 16, 19, 23 correspond to the md's A1, A2/A3, A4), §2.5–3.5 (energy-weights, Eqs. 61–67 and 94; tallies 87–93; local energy balance 93). *Exercise:* add the A1–A4 ↔ Wollaber map to the md.

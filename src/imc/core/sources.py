@@ -19,7 +19,7 @@ from pathlib import Path
 import numpy as np
 from numba import njit
 
-from imc.particles import Particles
+from imc.core.particles import Particles
 
 _GL_NODES, _GL_WEIGHTS = np.polynomial.legendre.leggauss(8)
 

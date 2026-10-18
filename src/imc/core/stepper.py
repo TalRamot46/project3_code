@@ -13,11 +13,11 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from imc import population, sources, transport
-from imc.material import PowerLawMaterial
-from imc.mesh import Mesh
-from imc.particles import Particles
-from imc.tallies import EnergyLedger, StepTallies
+from imc.core import population, sources, transport
+from imc.core.material import PowerLawMaterial
+from imc.core.mesh import Mesh
+from imc.core.particles import Particles
+from imc.core.tallies import EnergyLedger, StepTallies
 
 BC = {"vacuum": transport.VACUUM, "reflecting": transport.REFLECTING}
 

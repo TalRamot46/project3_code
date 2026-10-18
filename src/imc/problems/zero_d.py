@@ -26,9 +26,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from imc import sources, stepper
-from imc.material import PowerLawMaterial
-from imc.mesh import Mesh
+from imc.core import sources, stepper
+from imc.core.material import PowerLawMaterial
+from imc.core.mesh import Mesh
 
 MESH = Mesh.uniform(1000.0, 1)       # wide, so histories rarely reach the walls
 RHO = 1.0

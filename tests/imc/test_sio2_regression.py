@@ -8,8 +8,8 @@ energy error 5.3e-14.
 import numpy as np
 import pytest
 
-from imc import stepper
-from imc.problems import sio2
+from imc.core import stepper
+from imc.sio2 import problem as sio2
 from sn import sn
 
 

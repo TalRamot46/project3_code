@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from imc.particles import Particles
+from imc.core.particles import Particles
 
 
 def comb(census: Particles, max_packets: int) -> Particles:

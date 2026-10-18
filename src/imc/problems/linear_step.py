@@ -23,8 +23,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from imc import sources, transport
-from imc.particles import Particles
+from imc.core import sources, transport
+from imc.core.particles import Particles
 from sn import sn
 
 C = sn.C

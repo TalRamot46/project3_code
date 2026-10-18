@@ -97,6 +97,12 @@ class RadHydroCase(ABC):
     # the only option for omega >= omega_c where the origin temperature diverges.
     Q_point_source: float | None = None
 
+    # Optional tabulated bath for bc_type="Marshak" (Phase B): a two-column
+    # file of t [ns] and T_bath [eV].  When set, the bath temperature comes
+    # from this table instead of the subsonic self-similar Marshak relation
+    # (SubsonicHeatWave.Tbath), e.g. for the SiO2 benchmark of the IMC plan.
+    bath_table: str | None = None
+
 
     @property
     def has_ablation_surface(self) -> bool:

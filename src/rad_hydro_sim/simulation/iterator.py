@@ -15,12 +15,15 @@ from hydro_sim.core.integrator import compute_acceleration_nodes
 from hydro_sim.core.state import RadHydroState
 from hydro_sim.core.timestep import compute_dt_cfl, update_dt_relchange
 from rad_hydro_sim.simulation.integrator import step_rad_hydro
+from rad_hydro_sim.simulation.hydro_steps import kinetic_energy
 from rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 from rad_hydro_sim.plotting.RadHydroHistory import RadHydroHistory
 from rad_hydro_sim.simulation.radiation_step import (
     calculate_temperature_from_specific_energy,
     a_Kelvin,
     c as radiation_c,
+    eV_to_erg,
+    k_B,
 )
 from rad_hydro_sim.output_paths import get_rad_hydro_results_dir, sanitize_filename
 from hydro_sim.problems.simulation_config import SimulationConfig
@@ -74,6 +77,9 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
         assert case.rho0 is not None
         T_material = np.full_like(x_cells, case.T_initial_Kelvin)
         e = case.f_Kelvin * T_material**case.beta_Rosen * rho**(-case.mu)
+        if getattr(config, "subtract_radiation_energy", False):
+            # Manuscript Eq. um_def: Rosen's e is matter + equilibrium radiation.
+            e = e - a_Kelvin * T_material**4 / rho
         p = (case.r + 1) * rho * e  # Ideal gas EOS
         T_rad = T_material.copy()
         E_rad = a_Kelvin * T_rad**4
@@ -114,6 +120,9 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
         T_material = calculate_temperature_from_specific_energy(e, rho, case.f_Kelvin, case.beta_Rosen, case.mu)
         T_rad = T_material.copy()
         E_rad = a_Kelvin * T_rad**4
+
+    if getattr(config, "subtract_radiation_energy", False) and case.initial_condition != "temperature, density":
+        raise NotImplementedError("subtract_radiation_energy needs initial_condition='temperature, density'.")
 
     q = np.zeros_like(x_cells)
 
@@ -304,6 +313,7 @@ def compute_adaptive_dt(
     gamma: float,
     E_rad_last: np.ndarray,
     T_rad_last: np.ndarray,
+    dt_ramp_max: Optional[float] = None,
 ) -> float:
     """Compute adaptive timestep for hydro, radiation, or coupled rad-hydro simulation steps.
 
@@ -334,6 +344,16 @@ def compute_adaptive_dt(
             dt0 = min(dt0, 1e-3 * t)
         return min(dt0, t_end - t)
 
+    if dt_ramp_max is not None and scenario != "hydro_only":
+        # Phase B: a dt sequence that does not depend on E_rad / T_rad, so the
+        # diffusion and IMC solvers step identically (IMC's E_rad is noisy).
+        dt = min(dt_prev * 1.1, dt_ramp_max, t_end - t)
+        if scenario == "full_rad_hydro":
+            dt_cfl = compute_dt_cfl(state, gamma, CFL)
+            if not np.isnan(dt_cfl):
+                dt = min(dt, dt_cfl)
+        return dt
+
     if scenario == "hydro_only":
         dt_cfl = compute_dt_cfl(state, gamma, CFL)
         if np.isnan(dt_cfl):
@@ -358,6 +378,25 @@ def compute_adaptive_dt(
     return dt
 
 
+@lru_cache(maxsize=None)
+def _bath_table(path: str) -> Tuple[np.ndarray, np.ndarray]:
+    """(t [s], T [K]) of a two-column bath table in ns and eV, padded to t = 0."""
+    data = np.loadtxt(path)
+    order = np.argsort(data[:, 0])
+    t = data[order, 0] * 1e-9
+    T = data[order, 1] * (eV_to_erg / k_B)
+    if t[0] > 0.0:
+        t = np.insert(t, 0, 0.0)
+        T = np.insert(T, 0, T[0])
+    return t, T
+
+
+def tabulated_bath_temperature(path: str, t):
+    """Bath temperature [K] at time t [s], linearly interpolated (Phase B)."""
+    t_tab, T_tab = _bath_table(str(path))
+    return np.interp(t, t_tab, T_tab)
+
+
 def compute_boundary_temperatures(
     state: RadHydroState,
     rad_hydro_case: RadHydroCase,
@@ -369,7 +408,14 @@ def compute_boundary_temperatures(
     """
     T_bath = 0.0
 
-    if rad_hydro_case.scenario != "hydro_only" and rad_hydro_case.bc_type in ["Marshak", "Marshak_Menahem"]:
+    if (rad_hydro_case.scenario != "hydro_only" and rad_hydro_case.bc_type in ["Marshak", "Marshak_Menahem"]
+            and getattr(rad_hydro_case, "bath_table", None)):
+        # Phase B: tabulated bath (t [ns], T [eV]) instead of the self-similar relation.
+        T_bath = float(tabulated_bath_temperature(rad_hydro_case.bath_table, state.t))
+        T_surface = (state.E_rad[0] / a_Kelvin) ** 0.25
+        T_left = T_bath
+        updated_case = replace(rad_hydro_case, T_left=T_left)
+    elif rad_hydro_case.scenario != "hydro_only" and rad_hydro_case.bc_type in ["Marshak", "Marshak_Menahem"]:
         assert solver is not None, "SubsonicHeatWave solver required for Marshak BC"
         T_bath = solver.Tbath(time=state.t + 1e-20)
         T_surface = (state.E_rad[0] / a_Kelvin) ** 0.25
@@ -423,10 +469,30 @@ def simulate_rad_hydro(
 
     solver = None
     dimensionless_boundary_flux = 0.0
-    if rad_hydro_case.scenario != "hydro_only" and rad_hydro_case.bc_type in ["Marshak", "Marshak_Menahem"]:
+    if (rad_hydro_case.scenario != "hydro_only" and rad_hydro_case.bc_type in ["Marshak", "Marshak_Menahem"]
+            and not getattr(rad_hydro_case, "bath_table", None)):
         solver, dimensionless_boundary_flux = get_dimensionless_boundary_flux(rad_hydro_case)
 
     case_name = rad_hydro_case.title or rad_hydro_case.scenario or "rad_hydro_run"
+
+    # Phase B: optional IMC radiation solver and energy budget.
+    imc_solver = None
+    if getattr(simulation_config, "radiation_solver", "diffusion") == "imc":
+        from imc.coupling.rad_hydro import IMCSolver
+        imc_solver = IMCSolver(rad_hydro_case, simulation_config, state, bath_solver=solver)
+    track_energy = getattr(simulation_config, "energy_diagnostics", False)
+    imc_E_rad_track = []          # IMC track-length E_rad at each stored frame
+    budget = {k: [] for k in ("t", "E_material", "E_kinetic", "E_radiation",
+                              "rad_in_left", "rad_out_right", "work_boundary")}
+    cumulative = {"rad_in_left": 0.0, "rad_out_right": 0.0, "work_boundary": 0.0}
+
+    def record_budget():
+        budget["t"].append(state.t)
+        budget["E_material"].append(float(np.sum(state.m_cells * state.e_material)))
+        budget["E_kinetic"].append(kinetic_energy(state.u, state.m_cells))
+        budget["E_radiation"].append(float(np.sum(state.E_rad * state.V)))
+        for key, value in cumulative.items():
+            budget[key].append(value)
 
     # ---- history buffers ----
     times = []
@@ -448,8 +514,12 @@ def simulate_rad_hydro(
         T_material_history.append(state.T_material.copy() if state.T_material is not None else np.zeros_like(state.rho))
         T_rad_history.append(state.T_rad.copy() if state.T_rad is not None else np.zeros_like(state.rho))
         E_rad_history.append(state.E_rad.copy() if state.E_rad is not None else np.zeros_like(state.rho))
+        if imc_solver is not None:
+            imc_E_rad_track.append(imc_solver.E_rad_track.copy())
 
     store_frame()
+    if track_energy:
+        record_budget()
     dt_prev = np.inf
     step = 0
     prev_E_rad, prev_T_rad = state.E_rad, state.T_rad
@@ -480,6 +550,7 @@ def simulate_rad_hydro(
                 gamma=rad_hydro_case.r + 1.0,
                 E_rad_last=prev_E_rad,
                 T_rad_last=prev_T_rad,
+                dt_ramp_max=getattr(simulation_config, "dt_ramp_max", None),
             )
             dt_prev = dt
 
@@ -487,7 +558,9 @@ def simulate_rad_hydro(
                 state=state, rad_hydro_case=rad_hydro_case, solver=solver
             )
 
-            new_state, LHS = step_rad_hydro(state, dt, current_case, simulation_config, T_left)
+            step_diag = {} if track_energy else None
+            new_state, LHS = step_rad_hydro(state, dt, current_case, simulation_config, T_left,
+                                            imc_solver=imc_solver, diagnostics=step_diag)
 
             monitor.record(
                 t=state.t,
@@ -502,6 +575,11 @@ def simulate_rad_hydro(
             pbar.update(new_state.t - state.t)
             prev_E_rad, prev_T_rad = state.E_rad, state.T_rad
             state = new_state
+            if track_energy:
+                cumulative["rad_in_left"] += dt * step_diag["F_left"]
+                cumulative["rad_out_right"] += dt * step_diag["F_right"]
+                cumulative["work_boundary"] += step_diag["W_boundary"]
+                record_budget()
             if use_mp_progress:
                 mp_progress[prog_slot] = min(1.0, float(state.t) / float(t_end))
 
@@ -530,6 +608,28 @@ def simulate_rad_hydro(
 
     x_cells = 0.5 * (state.x[:-1] + state.x[1:])
     meta = dict(case=rad_hydro_case, sim_type=simulation_config, geometry=rad_hydro_case.geom)
+    if track_energy:
+        meta["energy_budget"] = energy_budget_summary(budget)
+    if imc_solver is not None:
+        meta["imc"] = imc_solver.summary()
+        meta["imc_E_rad_track"] = np.stack(imc_E_rad_track, axis=0)   # same frames as history
 
     return x_cells, state, meta, history
 
+
+
+def energy_budget_summary(budget: dict) -> dict:
+    """Arrays of the per-step energy budget and its relative error (Phase B, M3e).
+
+    total(t) = material + kinetic + radiation energy (per unit area);
+    expected(t) = total(0) + radiation in at the left - radiation out at the
+    right + work done by the boundary pressures; the error is relative to the
+    largest of total(0) and the energy that crossed the boundaries.
+    """
+    out = {k: np.asarray(v, dtype=float) for k, v in budget.items()}
+    out["total"] = out["E_material"] + out["E_kinetic"] + out["E_radiation"]
+    out["expected"] = out["total"][0] + out["rad_in_left"] - out["rad_out_right"] + out["work_boundary"]
+    scale = np.maximum.accumulate(np.maximum(np.abs(out["total"]), np.abs(out["rad_in_left"])
+                                             + np.abs(out["rad_out_right"]) + np.abs(out["work_boundary"])))
+    out["relative_error"] = (out["total"] - out["expected"]) / np.maximum(scale, 1e-300)
+    return out

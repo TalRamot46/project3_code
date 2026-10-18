@@ -98,6 +98,17 @@
 
 ## Phase B: make diffusion and IMC solve the same problem
 
+> **Status (2026-10-18): Phase B done** (M3 incl. A1, M4). Details in `md/phase_b_diffusion_changes.md` (every diffusion-code change), `md/imc_coupling.md` (the IMC adapter) and `md/phase_b_results.md` (comparisons).
+> - **M3:** every change is opt-in through new `SimulationConfig` fields. With the defaults the code is bit-identical to the original (golden file from the original code, 4 slow tests).
+>   - Maximum energy error, original → with flags: radiation-only 52% → 7×10⁻¹²; hydro-only 3×10⁻⁴ → 4×10⁻¹⁵ (A1 `compatible`); full rad-hydro 4.3% → 7×10⁻¹⁵.
+>   - Paper Test 1 (full, N = 200): the flags move the heat front ≤ 0.02% (gate recorded).
+> - **M4:** `src/imc/coupling/rad_hydro.py`, selected with `radiation_solver="imc"`; radiation-only; Marshak bath integrated exactly.
+>   - T1 SiO₂ via rad_hydro_sim matches standalone IMC and S_N (+0.04%). Diffusion breaks out 0.05 ns early and peaks 5% high.
+>   - Gold Test 1/2, radiation-only: diffusion and IMC agree to ≤ 1% in front position and temperature.
+>   - Opacity ÷100: diffusion's front is 4% deep.
+> - **Not changed, recorded for you:** the left node mass is m₀; the hydro-only retry mixes dt; the Marshak flux uses the cell-center E₀; `calculate_flux`'s boundary flux differs from the matrix's (`md/phase_b_diffusion_changes.md` §5).
+> - **Changed paths vs. the text below:** the adapter is `src/imc/coupling/rad_hydro.py` (not `src/imc/step.py`). T3 uses the new radiation-only Test 1/2 presets, on a 10⁻² g/cm² domain with 400 cells.
+
 ### M3. Bring the diffusion code to the paper's conventions (all behind flags; defaults unchanged)
 
 - **Learn (P3, the key derivation):**

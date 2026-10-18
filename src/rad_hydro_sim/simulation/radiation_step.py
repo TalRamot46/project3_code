@@ -48,6 +48,47 @@ def calculate_A(beta: np.ndarray, sigma: np.ndarray, dt: float) -> np.ndarray:
     return chi * beta * sigma * dt * c
 
 
+# --- Phase B helpers (md/phase_b_diffusion_changes.md). With
+# subtract_radiation=False they reduce to the original closed forms. ---
+
+def material_energy_density(T: np.ndarray, rho: np.ndarray, subtract_radiation: bool) -> np.ndarray:
+    """u_m = f T^beta rho^(1-mu), minus a T^4 in the manuscript's convention."""
+    u = f_Kelvin * T**beta_Rosen * rho**(1.0 - mu)
+    return u - a_Kelvin * T**4 if subtract_radiation else u
+
+
+def material_temperature(u: np.ndarray, rho: np.ndarray, subtract_radiation: bool) -> np.ndarray:
+    """Invert material_energy_density; Newton iteration when a T^4 is subtracted."""
+    T = calculate_temperature_from_specific_energy(np.maximum(u, 0.0) / rho, rho, f_Kelvin, beta_Rosen, mu)
+    if not subtract_radiation:
+        return T
+    for _ in range(60):
+        slope = f_Kelvin * beta_Rosen * T**(beta_Rosen - 1.0) * rho**(1.0 - mu) - 4.0 * a_Kelvin * T**3
+        if np.any(slope <= 0.0):
+            raise ValueError("du_m/dT <= 0: u_m = f T^beta rho^(1-mu) - a T^4 is not invertible here.")
+        step = (material_energy_density(T, rho, True) - u) / slope
+        T = np.maximum(T - step, 0.5 * T)
+        if np.all(np.abs(step) <= 1e-13 * T):
+            return T
+    raise RuntimeError("Newton inversion of u_m(T) did not converge.")
+
+
+def fleck_beta(T: np.ndarray, rho: np.ndarray, subtract_radiation: bool) -> np.ndarray:
+    """F&C beta = du_r/du_m for either material-energy convention."""
+    if not subtract_radiation:
+        return calculate_beta_from_temperature_and_density(T, rho)
+    du_dT = f_Kelvin * beta_Rosen * T**(beta_Rosen - 1.0) * rho**(1.0 - mu) - 4.0 * a_Kelvin * T**3
+    return 4.0 * a_Kelvin * T**3 / du_dT
+
+
+def face_flux_coefficients(D: np.ndarray, m_cells: np.ndarray, rho: np.ndarray) -> np.ndarray:
+    """D_face / dx_face at faces 0..N, edge-padded exactly as in calculate_abcd."""
+    D_face = harmonic_mean(D[:-1], D[1:]) if HARMONIC_MEAN else arithmetic_mean(D[:-1], D[1:])
+    dx_cells = m_cells / rho
+    flux_coeff = D_face / arithmetic_mean(dx_cells[:-1], dx_cells[1:])
+    return np.concatenate(([flux_coeff[0]], flux_coeff, [flux_coeff[-1]]))
+
+
 def calculate_black_abcd(
     D: np.ndarray,
     m_cells: np.ndarray,
@@ -305,12 +346,17 @@ def calculate_abcd(
     dt: float,
     bc_type: str,
     T_left: float,
+    right_rad_bc: str = "ghost",
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Face-weighted coefficient builder (only supported scheme).
 
     Produces full-length a,b,c,d arrays (length N = len(rho)). Applies
-    Marshak vacuum leakage on the right boundary and either a Marshak left
-    modification or a Dirichlet subtraction depending on `bc_type`.
+    either a Marshak left modification or a Dirichlet subtraction depending
+    on `bc_type`.
+
+    Right face: "ghost" (original) keeps the edge-padded face coefficient,
+    i.e. E = 0 in a ghost cell one face-spacing away; "marshak_vacuum"
+    replaces it with the vacuum Marshak leak c E_{N-1} / 2 (Phase B).
     """
     # Face-weighted implementation only
     if HARMONIC_MEAN:
@@ -374,6 +420,12 @@ def calculate_abcd(
     elif bc_type == "Dirichlet":
         E_left = a_Kelvin * (T_left ** 4)
         d[0] -= a[0] * E_left
+
+    if right_rad_bc == "marshak_vacuum":
+        # Remove the ghost-cell leak and impose the vacuum Marshak flux c E / 2.
+        b[-1] += -lagrangian_coeff[-1] * flux_coeff[-1] + c / (2.0 * dx_cells[-1])
+    elif right_rad_bc != "ghost":
+        raise ValueError(f"right_rad_bc must be 'ghost' or 'marshak_vacuum', got {right_rad_bc!r}")
     return a, b, c_coeff, d
 
 
@@ -546,6 +598,11 @@ def radiation_step(
 
     rad_hydro_case: RadHydroCase,
     T_left: float | None = None,
+    *,
+    material_update: str = "u_r",
+    subtract_radiation_energy: bool = False,
+    right_rad_bc: str = "ghost",
+    diagnostics: dict | None = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Updates the material specific energy & radiation energy density based on the coupling between matter and radiation.
@@ -554,6 +611,13 @@ def radiation_step(
         state_star: Post-hydro state with e_material, rho, T_rad, E_rad
         dt: Time step in seconds
         rad_hydro_case: Problem configuration
+        material_update, subtract_radiation_energy, right_rad_bc: Phase B
+            options (see SimulationConfig); the defaults are the original
+            scheme.  Only the time-dependent gray mode (force_black=None)
+            accepts non-default values.
+        diagnostics: if a dict is given, it is filled with the boundary
+            fluxes actually used by the solve and the radiation-matter
+            exchange, for the energy budget (force_black=None only).
         
     Returns:
         new_T_material: Updated material temperature in K
@@ -578,6 +642,15 @@ def radiation_step(
     if mode not in valid_modes:
         raise ValueError(f"Invalid force_black mode '{mode}'. Expected one of {valid_modes}.")
 
+    phase_b = (material_update, subtract_radiation_energy, right_rad_bc) != ("u_r", False, "ghost")
+    if phase_b and mode is not None:
+        raise ValueError(
+            "material_update / subtract_radiation_energy / right_rad_bc are only "
+            f"implemented for the time-dependent gray mode (force_black=None), not {mode!r}."
+        )
+    if material_update not in ("u_r", "conservative"):
+        raise ValueError(f"material_update must be 'u_r' or 'conservative', got {material_update!r}")
+
     if mode == "black":
         new_e, new_T = black_radiation_step(state_star, dt, rad_hydro_case)
         return new_T, new_e, new_T, new_e, np.zeros_like(new_e), 0.0
@@ -588,8 +661,12 @@ def radiation_step(
         return new_T, new_e_material, new_T, new_E, np.zeros_like(new_E), 0.0
 
     # Material temperature from e_star (match working: use T_material for beta and sigma)
-    T_material_star = calculate_temperature_from_specific_energy(e_star, rho, f_Kelvin, beta_Rosen, mu)
-    beta = calculate_beta_from_temperature_and_density(T_material_star, rho)
+    if subtract_radiation_energy:
+        T_material_star = material_temperature(rho * e_star, rho, True)
+        beta = fleck_beta(T_material_star, rho, True)
+    else:
+        T_material_star = calculate_temperature_from_specific_energy(e_star, rho, f_Kelvin, beta_Rosen, mu)
+        beta = calculate_beta_from_temperature_and_density(T_material_star, rho)
     sigma = calculate_sigma_from_temperature_and_density(T_material_star, rho)
     D = calculate_D_from_sigma(sigma)
     A = calculate_A(beta, sigma, dt)
@@ -606,7 +683,8 @@ def radiation_step(
         )
     else:
         a, b, c_coeff, d = calculate_abcd(
-            sigma, D, A, m_cells, rho, E_rad, T_material_star, dt, bc_type=bc_type, T_left=T_left
+            sigma, D, A, m_cells, rho, E_rad, T_material_star, dt, bc_type=bc_type, T_left=T_left,
+            right_rad_bc=right_rad_bc,
         )
 
     # Solve for radiation energy density and temperature
@@ -615,9 +693,41 @@ def radiation_step(
 
     # Solve for material energy density and temperature
     UR_star = a_Kelvin * T_material_star**4
-    new_UR = (A / (1 + A)) * new_E_rad + (1 / (1 + A)) * UR_star
-    new_T_material = (new_UR / a_Kelvin) ** (1 / 4)
-    new_e_material = f_Kelvin * new_T_material**beta_Rosen * rho**(-mu)
+    if material_update == "conservative":
+        # F&C (1.18): the material gains exactly what the radiation lost,
+        # B dt (E^{n+1} - aT*^4) per volume with B = chi c sigma / (1 + A).
+        exchange = chi * c * sigma / (1 + A) * dt * (new_E_rad - UR_star)
+        new_u = rho * e_star + exchange
+        new_T_material = material_temperature(new_u, rho, subtract_radiation_energy)
+        new_e_material = new_u / rho
+    else:
+        new_UR = (A / (1 + A)) * new_E_rad + (1 / (1 + A)) * UR_star
+        new_T_material = (new_UR / a_Kelvin) ** (1 / 4)
+        if subtract_radiation_energy:
+            new_e_material = material_energy_density(new_T_material, rho, True) / rho
+        else:
+            new_e_material = f_Kelvin * new_T_material**beta_Rosen * rho**(-mu)
+
+    if diagnostics is not None and mode is None:
+        # Boundary fluxes exactly as the matrix imposed them (positive = into
+        # the slab at the left, out of it at the right), and the radiation
+        # energy density gained from the matter this step, per cell.
+        dx_cells = m_cells / rho
+        fc = face_flux_coefficients(D, m_cells, rho)
+        if bc_type == "Marshak":
+            F_left = 0.5 * c * (a_Kelvin * T_left**4 - new_E_rad[0])
+        elif bc_type == "Dirichlet":
+            F_left = fc[0] * (a_Kelvin * T_left**4 - new_E_rad[0])
+        else:
+            F_left = 0.0
+        if right_rad_bc == "marshak_vacuum":
+            F_right = 0.5 * c * new_E_rad[-1]
+        else:
+            F_right = fc[-1] * new_E_rad[-1]
+        diagnostics.update(
+            F_left=float(F_left), F_right=float(F_right), dx=dx_cells,
+            rad_gain=chi * c * sigma / (1 + A) * dt * (UR_star - new_E_rad),
+        )
 
     new_F = calculate_flux(D, m_cells, rho, new_E_rad, E_bath=a_Kelvin * (T_left ** 4) if T_left is not None else 0.0)
     # important! The flux here is in i=0,...,N-1 convention, where the first entry is the flux at the left boundary, and we don't include the flux at the right boundary (we don't have a ghost cell on the right in this case).

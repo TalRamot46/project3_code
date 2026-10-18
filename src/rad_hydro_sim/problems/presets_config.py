@@ -9,6 +9,7 @@ Simulation config is a general setting; use get_default_config() and override
 N, store_every, png_time_frac manually when running a test.
 """
 from dataclasses import replace
+from pathlib import Path
 from typing import Dict, Tuple
 
 import numpy as np
@@ -35,6 +36,10 @@ PRESET_MATLAB = "matlab_comparison"
 PRESET_MALKA_HEIZLER = "malka_heizler_comparison"
 PRESET_MENAHEM_ABLATION_COMPARISON = "menahem_ablation_comparison"
 PRESET_SUPERSONIC_INSTANTANEOUS_ANALYTIC = "supersonic_instantaneous_analytic"
+# Phase B of the IMC plan (md/full_plan_imc_comparison.md, M4 test ladder)
+PRESET_SIO2_FOAM_RADIATION_ONLY = "sio2_foam_1mm_radiation_only"
+PRESET_PAPER_TEST1_RADIATION_ONLY = "paper_test1_radiation_only"
+PRESET_PAPER_TEST2_RADIATION_ONLY = "paper_test2_radiation_only"
 from rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 from hydro_sim.problems.simulation_config import (
     SIMULATION_CONFIGS,
@@ -808,6 +813,52 @@ PRESET_TEST_CASES = {
         force_black="conduction",
     )
 }
+
+# ---------------------------------------------------------------------------
+# Phase B presets of the IMC plan (M4 test ladder).
+# ---------------------------------------------------------------------------
+_T100_K = KELVIN_PER_HEV           # 100 eV in kelvin (rad_hydro_sim's conversion)
+
+# T1: the Back SiO2 foam problem of src/imc/sio2/ (optically intermediate).
+# The frozen IMC script works in theta = T/100 eV with
+#   u = 8.78e13 rho^0.91 theta^1.10 erg/cm^3,  k = 9175 rho^1.75 theta^-3.53 1/cm,
+# i.e. f = 8.78e13 / T100^1.10, g = 1 / (9175 T100^3.53) in rad_hydro's
+# e = f T^beta rho^-mu, 1/k = g T^alpha rho^-(1+lambda).  The bath is the
+# synthetic drive table of the script.  L, rho and the drive are still to be
+# confirmed against a typical experiment (plan Addendum A3).
+PRESET_TEST_CASES[PRESET_SIO2_FOAM_RADIATION_ONLY] = RadHydroCase(
+    g_Kelvin=1.0 / (9175.0 * _T100_K**3.53), alpha=3.53, lambda_=0.75,
+    f_Kelvin=8.78e13 / _T100_K**1.10, beta_Rosen=1.10, mu=0.09,
+    chi=1.0,
+    T0_Kelvin=None, P0_Barye=None, tau=0.0,
+    rho0=0.05, p0=None, u0=None, T_initial_Kelvin=300.0,
+    r=0.25,
+    x_min=0.0, x_max=0.1, t_sec_end=3e-9,
+    initial_condition="temperature, density",
+    scenario="radiation_only",
+    title=r"SiO$_2$ foam, 1 mm, 0.05 g/cc, tabulated bath (radiation only)",
+    geom=planar(),
+    times_for_png=np.array([1.0e-9, 2.0e-9, 3.0e-9]),
+    bc_type="Marshak",
+    omega=0.0,
+    bath_table=str(Path(__file__).resolve().parents[2] / "imc" / "sio2" / "back_pulse.txt"),
+)
+
+# T3: radiation-only versions of the manuscript's Test 1 and Test 2 (gold,
+# Marshak bath from the subsonic self-similar relation).  Same material,
+# grid and drive as the full problems; the mesh stays fixed.
+PRESET_TEST_CASES[PRESET_PAPER_TEST1_RADIATION_ONLY] = replace(
+    PRESET_TEST_CASES[PRESET_FIG_8_CONSTANT_TEMPERATURE_MARSHAK],
+    scenario="radiation_only",
+    title=r"Paper Test 1 ($\tau=0$), radiation only",
+)
+PRESET_TEST_CASES[PRESET_PAPER_TEST2_RADIATION_ONLY] = replace(
+    PRESET_TEST_CASES[PRESET_FIG_8_CONSTANT_TEMPERATURE_MARSHAK],
+    tau=158.0 / 1285.0,
+    scenario="radiation_only",
+    title=r"Paper Test 2 ($\tau=158/1285$), radiation only",
+)
+
 
 # ---------------------------------------------------------------------------
 # Default simulation config (slider + PNG at png_time_frac * t_end).

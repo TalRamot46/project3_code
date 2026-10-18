@@ -126,3 +126,108 @@ def update_nodes_from_pressure(
     )
 
     return new_state
+
+
+# ---------------------------------------------------------------------------
+# Phase B, plan item A1 (md/phase_b_diffusion_changes.md): an energy-
+# conserving ("compatible") alternative to update_nodes_from_pressure, and the
+# energy bookkeeping both schemes are measured with.  Nothing above changes.
+# ---------------------------------------------------------------------------
+
+def node_masses(m_cells: np.ndarray) -> np.ndarray:
+    """Node masses implied by compute_acceleration_nodes (planar).
+
+    Interior nodes carry half of each neighbour; the right node half of its
+    cell.  The left node is accelerated by (p_left - P_0) / m_0, i.e. it
+    carries the full first cell (not half), so it gets m_0 here.  Energy
+    conservation holds for any node masses as long as the kinetic energy uses
+    the same ones as the momentum update.
+    """
+    M = np.empty(m_cells.size + 1)
+    M[0] = m_cells[0]
+    M[1:-1] = 0.5 * (m_cells[:-1] + m_cells[1:])
+    M[-1] = 0.5 * m_cells[-1]
+    return M
+
+
+def kinetic_energy(u_nodes: np.ndarray, m_cells: np.ndarray) -> float:
+    return float(0.5 * np.sum(node_masses(m_cells) * u_nodes**2))
+
+
+def boundary_forces(a: np.ndarray, p: np.ndarray, q: np.ndarray, m_cells: np.ndarray):
+    """External boundary pressures implied by the node accelerations.
+
+    Left node: M_0 a_0 = p_L - P_0;  right node: M_N a_N = P_{N-1} - p_R,
+    with P = p + q.  Recovering p_L, p_R from the accelerations makes the work
+    consistent with whatever the momentum update actually used (including the
+    initial state, whose accelerations use p_left = p[0]).
+    """
+    M = node_masses(m_cells)
+    P = p + q
+    return M[0] * a[0] + P[0], P[-1] - M[-1] * a[-1]
+
+
+def boundary_work(state_old: RadHydroState, state_new: RadHydroState, dt: float) -> float:
+    """Work done on the slab by the boundary pressures during the step."""
+    FL0, FR0 = boundary_forces(state_old.a, state_old.p, state_old.q, state_old.m_cells)
+    FL1, FR1 = boundary_forces(state_new.a, state_new.p, state_new.q, state_new.m_cells)
+    u_bar = 0.5 * (state_old.u + state_new.u)
+    return float(dt * (u_bar[0] * 0.5 * (FL0 + FL1) - u_bar[-1] * 0.5 * (FR0 + FR1)))
+
+
+def update_nodes_compatible(
+    state_old: RadHydroState,
+    state_star: RadHydroState,
+    case: RadHydroCase,
+    de_radiation: np.ndarray,
+    dt: float,
+    bc_left: str | float = "outflow",
+    bc_right: str | float = "outflow",
+    t_old: float = 0.0,
+    tol: float = 1e-13,
+    max_iter: int = 100,
+) -> RadHydroState:
+    """Close the step so that total energy is conserved to round-off.
+
+    The leapfrog momentum update is the original one,
+        u^{n+1} = u^{n+1/2} + dt/2 a^{n+1},   a^{n+1} from p^{n+1} = r rho e^{n+1},
+    so M (u^{n+1} - u^n) = dt (F^n + F^{n+1}) / 2.  The internal energy is then
+    updated with the same time-centred pressure and velocity,
+        m_j (e^{n+1} - e^n) = -dt Pbar_j (ubar_{j+1} - ubar_j) + m_j de_radiation_j,
+        Pbar = (P^n + P^{n+1}) / 2,  ubar = (u^n + u^{n+1}) / 2,
+    which makes the cells' work equal the nodes' kinetic-energy change (summation
+    by parts).  e^{n+1} enters p^{n+1}, so it is found by fixed-point iteration
+    (contraction ~ (c_s dt / dx)^2).  de_radiation is the radiation-matter
+    exchange computed from e* (as in the original scheme).
+    """
+    if case.geom.alpha != 0:
+        raise NotImplementedError("hydro_energy='compatible' is implemented for planar geometry only.")
+    m = state_star.m_cells
+    P_old = state_old.p + state_old.q
+    e_new = state_star.e_material + de_radiation           # the standard scheme's value
+    for _ in range(max_iter):
+        p_new = pressure_ideal_gas(state_star.rho, e_new, gamma=case.r + 1)
+        p_left_bc, p_right_bc = _get_boundary_pressures(bc_left, bc_right, p_new, t_old + dt)
+        a_new = compute_acceleration_nodes(state_star.x, p_new, state_star.q, m, planar(),
+                                           p_left=p_left_bc, p_right=p_right_bc)
+        u_new = state_star.u + 0.5 * dt * a_new
+        u_bar = 0.5 * (state_old.u + u_new)
+        P_bar = 0.5 * (P_old + p_new + state_star.q)
+        e_next = state_old.e_material - dt * P_bar * (u_bar[1:] - u_bar[:-1]) / m + de_radiation
+        change = np.max(np.abs(e_next - e_new)) / max(np.max(np.abs(e_next)), 1e-300)
+        e_new = e_next
+        if change <= tol:
+            break
+    else:
+        raise RuntimeError("Compatible energy update did not converge; reduce dt.")
+
+    # Final state, consistent with the converged energy.
+    p_new = pressure_ideal_gas(state_star.rho, e_new, gamma=case.r + 1)
+    p_left_bc, p_right_bc = _get_boundary_pressures(bc_left, bc_right, p_new, t_old + dt)
+    a_new = compute_acceleration_nodes(state_star.x, p_new, state_star.q, m, planar(),
+                                       p_left=p_left_bc, p_right=p_right_bc)
+    return RadHydroState(
+        t=state_star.t, x=state_star.x, u=state_star.u + 0.5 * dt * a_new, a=a_new,
+        V=state_star.V, rho=state_star.rho, e_material=e_new, p=p_new, q=state_star.q,
+        m_cells=m, T_material=state_star.T_material, T_rad=state_star.T_rad, E_rad=state_star.E_rad,
+    )

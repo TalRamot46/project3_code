@@ -126,5 +126,50 @@ def main():
                   f"max|z|={np.max(np.abs(z)):.2f}")
 
 
+def figure(path, replicas=32):
+    """Census energy and pair-summed net deposition, IMC (mean +- 2 s.e.) vs S_N."""
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(3, 2, figsize=(10.5, 9.0), sharex=True)
+    for row, sigma_dx in enumerate((0.1, 1.0, 10.0)):
+        r = compare(sigma_dx, replicas=replicas)
+        ax = axes[row, 0]
+        q = r["E"]
+        ax.fill_between(X, q["imc"] - 2 * q["se"], q["imc"] + 2 * q["se"], alpha=0.3,
+                        color="tab:blue", label=r"IMC mean $\pm$2 s.e.")
+        ax.plot(X, q["sn"], "k-", lw=1.0, label="S$_N$ (128 sub-steps, 32 ordinates)")
+        ax.set_ylabel(r"$E_r(t_1)$ [MJ/cm$^3$]")
+        ax.set_title(fr"census energy, $\sigma\Delta x$ = {sigma_dx:g}", fontsize=10)
+        ax = axes[row, 1]
+        q = r["net_dep"]
+        xp = X.reshape(-1, 2).mean(axis=1)
+        ax.plot(X, q["sn"], color="0.6", lw=0.8, label="S$_N$ per cell (odd-even mode)")
+        ax.errorbar(xp, q["imc"].reshape(-1, 2).mean(axis=1),
+                    yerr=2 * np.sqrt((q["se"].reshape(-1, 2) ** 2).sum(axis=1)) / 2,
+                    fmt=".", color="tab:blue", ms=3, label="IMC, cell pairs")
+        ax.plot(xp, q["sn"].reshape(-1, 2).mean(axis=1), "k-", lw=1.0, label="S$_N$, cell pairs")
+        ax.set_ylabel(r"absorbed $-$ emitted [MJ/cm$^3$]")
+        ax.set_title(fr"net deposition, $\sigma\Delta x$ = {sigma_dx:g}", fontsize=10)
+        if row == 0:
+            axes[row, 0].legend(fontsize=7)
+            axes[row, 1].legend(fontsize=7)
+    for ax in axes[-1]:
+        ax.set_xlabel("x [cm]")
+    fig.suptitle("M1: one frozen-coefficient step, IMC vs S$_N$", fontsize=11)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
 if __name__ == "__main__":
+    import argparse
+    from pathlib import Path
+
+    parser = argparse.ArgumentParser(description="M1: one linear IMC step vs S_N")
+    parser.add_argument("--figure", type=Path, default=None, help="PNG to write")
+    args = parser.parse_args()
     main()
+    if args.figure is not None:
+        args.figure.parent.mkdir(parents=True, exist_ok=True)
+        figure(args.figure)
+        print(f"Figure written to {args.figure}")

@@ -1,6 +1,6 @@
 # `src/imc/core/`: the generic gray IMC solver
 
-This folder holds the solver that came out of the SiO₂ script (`src/imc/sio2/`), stripped of everything specific to that problem. It solves the gray, 1-D slab Fleck & Cummings (F&C) equations on any nonuniform mesh, in any consistent units, for any power-law material. The math behind each step is in `md/imc_mc_derivation.md`; this file explains the code.
+This folder holds the solver that came out of the SiO₂ script (`src/imc/sio2/`), stripped of everything specific to that problem. It solves the gray, 1-D slab Fleck & Cummings (F&C) equations on any nonuniform mesh, in any consistent units, for any power-law material. The math behind each step is in `md/theory/imc_mc_derivation.md`; this file explains the code.
 
 ## 1. Layout
 

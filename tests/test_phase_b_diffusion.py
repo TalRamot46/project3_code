@@ -1,6 +1,6 @@
 """Phase B (M3 + A1) changes to the diffusion rad-hydro code.
 
-See md/phase_b_diffusion_changes.md.  Every option defaults to the original
+See md/phase_b/phase_b_diffusion_changes.md.  Every option defaults to the original
 behaviour; the golden file holds final states produced by the code *before*
 the Phase B edits, so the first test proves the defaults are bit-identical.
 """

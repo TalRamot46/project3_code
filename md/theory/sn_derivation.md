@@ -1,6 +1,6 @@
 # Discrete ordinates ($S_N$) for the gray Marshak-wave problem: from the transport equation to `src/sn/sn.py`, with proofs
 
-This document is the $S_N$ companion of `md/imc_mc_derivation.md`. It covers
+This document is the $S_N$ companion of `md/theory/imc_mc_derivation.md`. It covers
 five things:
 
 1. **Where the method comes from** (Section 1): the foundational papers, and
@@ -20,7 +20,7 @@ five things:
    iteration, exact discrete energy conservation, positivity of the material
    energy, and the thick (diffusion) limit.
 5. **What `sn.py` does not do yet** (Section 10), which is the bridge to
-   `md/full_plan_sn_comparison.md`.
+   `md/plans/full_plan_sn_comparison.md`.
 
 `sn.py` is the deterministic twin of the SiO₂ IMC script
 (`src/imc/sio2/sio2_1mm_gray_imc_check_og.py`): the same problem, constants, drive

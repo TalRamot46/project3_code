@@ -5,7 +5,7 @@ Solves, in expectation, the Fleck-Cummings equation with physical scattering
     (1/c) dI/dt + mu dI/dx + (k_a + k_s) I
         = (1/2) [(1 - f) k_a + k_s] int I dmu' + (1/2) f k_a c u_r^n
 
-for one step (md/imc_mc_derivation.md, Theorem 2).  Each packet flies
+for one step (md/theory/imc_mc_derivation.md, Theorem 2).  Each packet flies
 straight; the distance to its next collision is exponential with the total
 opacity k_t = k_a + k_s.  At a collision it is absorbed with probability
 f k_a / k_t (its weight is deposited in the cell) and otherwise scatters

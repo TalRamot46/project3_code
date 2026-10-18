@@ -9,7 +9,7 @@ Energy and opacity, in whatever units the caller chooses for T, rho and energy:
 The default u_m is the material energy density of the SiO2 script and of
 rad_hydro_sim.  With subtract_radiation=True it is the manuscript's
 u_m = u - a T^4, which treats f T^beta rho^(1-mu) as matter plus equilibrium
-radiation (md/full_plan_imc_comparison.md, Context item 3).
+radiation (md/plans/full_plan_imc_comparison.md, Context item 3).
 
 The Fleck factor (alpha = 1) uses the absorption opacity:
 

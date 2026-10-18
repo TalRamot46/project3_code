@@ -36,7 +36,7 @@ PRESET_MATLAB = "matlab_comparison"
 PRESET_MALKA_HEIZLER = "malka_heizler_comparison"
 PRESET_MENAHEM_ABLATION_COMPARISON = "menahem_ablation_comparison"
 PRESET_SUPERSONIC_INSTANTANEOUS_ANALYTIC = "supersonic_instantaneous_analytic"
-# Phase B of the IMC plan (md/full_plan_imc_comparison.md, M4 test ladder)
+# Phase B of the IMC plan (md/plans/full_plan_imc_comparison.md, M4 test ladder)
 PRESET_SIO2_FOAM_RADIATION_ONLY = "sio2_foam_1mm_radiation_only"
 PRESET_PAPER_TEST1_RADIATION_ONLY = "paper_test1_radiation_only"
 PRESET_PAPER_TEST2_RADIATION_ONLY = "paper_test2_radiation_only"

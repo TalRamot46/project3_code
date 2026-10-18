@@ -4,7 +4,7 @@ This driver runs the IMC solver (`src/imc/core/`) on the simplest nonlinear prob
 
 ```bash
 uv run python -m imc.problems.zero_d                                   # numbers only
-uv run python -m imc.problems.zero_d --figures md/figures/imc_problems  # + the three figures
+uv run python -m imc.problems.zero_d --figures md/imc_code/figures  # + the three figures
 ```
 
 ## 1. The physics
@@ -54,7 +54,7 @@ $$
 M_{n+1} = q + 1 - qM_n^4 + \left(M_n - q - 1 + qM_n^4\right)\exp\!\left(-\frac{f_n\Delta_\tau}{q M_n^p}\right).
 $$
 
-This is the *exact* solution of one IMC step, in the sense of the expected value of the random walk (Theorem 2 of `md/imc_mc_derivation.md`). Any difference between the Monte Carlo M_{n+1} and Eq. (120) evaluated at the Monte Carlo Mₙ must therefore be pure noise. That is a sharp test of the whole solver.
+This is the *exact* solution of one IMC step, in the sense of the expected value of the random walk (Theorem 2 of `md/theory/imc_mc_derivation.md`). Any difference between the Monte Carlo M_{n+1} and Eq. (120) evaluated at the Monte Carlo Mₙ must therefore be pure noise. That is a sharp test of the whole solver.
 
 ### 1.3 Stability: Eq. (122)
 
@@ -117,7 +117,7 @@ The cell is made wide so that histories rarely reach the walls. The walls reflec
 - it equals the finite-difference derivative of Eq. (120) at equilibrium, for p = 3 and p = 5;
 - |ρ| < 1 over Δτ ∈ [10⁻³, 10⁶] for several q.
 
-![Fig. 1](figures/imc_problems/wollaber_fig1_amplification.png)
+![Fig. 1](figures/wollaber_fig1_amplification.png)
 
 ### Fig. 2: damped oscillation, p = 5, q = 0.14, Δτ = 10, M₀ = 0.9
 
@@ -128,7 +128,7 @@ The cell is made wide so that histories rarely reach the walls. The walls reflec
 
 The IMC and the exact map coincide: 0.900 → 1.035 → 0.991 → 1.003 → 0.999 → 1.000. The linear prediction is slightly low on the first overshoot (1.029). That is Wollaber's remark that linear analysis "underpredicts the observed damped oscillations by a factor that is O(ε²)" for ε = 0.1. His figure shows the same 1.03 overshoot.
 
-![Fig. 2](figures/imc_problems/wollaber_fig2_damped_oscillation.png)
+![Fig. 2](figures/wollaber_fig2_damped_oscillation.png)
 
 ### M2a: explicit vs. implicit at q = 0.5, Δτ = 10
 
@@ -138,7 +138,7 @@ The IMC and the exact map coincide: 0.900 → 1.035 → 0.991 → 1.003 → 0.99
 
 Explicit steps are **about 11× noisier**: a per-step spread of 0.0095 vs. 0.00085 at 20 000 packets. Each explicit step emits and reabsorbs cσΔt = Δτ/q = 20 times the material energy, which is the advisor's "explicit is very noisy". The figure therefore uses 64 explicit replicas. With 96 replicas the explicit step is unbiased: the mean of M₁ is 1.0206 vs. Eq. (120)'s 1.0197, z = +0.57. Run longer, the explicit scheme ends with the emission exceeding the material energy, and the stepper raises `RuntimeError` (non-positive u_m). That is where Proposition 1's positivity guarantee, which needs f < 1, fails.
 
-![M2a](figures/imc_problems/m2a_explicit_vs_implicit.png)
+![M2a](figures/m2a_explicit_vs_implicit.png)
 
 ## 5. What the tests check (`tests/imc/test_zero_d.py`)
 

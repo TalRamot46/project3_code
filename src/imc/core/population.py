@@ -6,7 +6,7 @@ tooth moved by its own uniform offset inside its stratum.  Every survivor gets
 weight W/M, so energy is conserved exactly, and an input of weight w_j is
 copied M w_j / W times on average, so the census is unbiased.  Unlike the
 single-offset (systematic) comb of the frozen script, stratified resampling
-also satisfies the variance condition (R1) of md/imc_mc_derivation.md, Sec. 7.
+also satisfies the variance condition (R1) of md/theory/imc_mc_derivation.md, Sec. 7.
 
 The advisor's per-cell allocation and per-cell comb are milestone M7.
 """

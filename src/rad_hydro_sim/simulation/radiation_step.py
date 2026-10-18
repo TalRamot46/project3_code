@@ -48,7 +48,7 @@ def calculate_A(beta: np.ndarray, sigma: np.ndarray, dt: float) -> np.ndarray:
     return chi * beta * sigma * dt * c
 
 
-# --- Phase B helpers (md/phase_b_diffusion_changes.md). With
+# --- Phase B helpers (md/phase_b/phase_b_diffusion_changes.md). With
 # subtract_radiation=False they reduce to the original closed forms. ---
 
 def material_energy_density(T: np.ndarray, rho: np.ndarray, subtract_radiation: bool) -> np.ndarray:

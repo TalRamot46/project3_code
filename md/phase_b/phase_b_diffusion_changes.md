@@ -1,10 +1,10 @@
 # Phase B: every change to the diffusion rad-hydro code
 
-This is the complete list of what Phase B of the IMC plan (`md/full_plan_imc_comparison.md`, milestones M3 and M4 plus Addendum A1) changed in `src/rad_hydro_sim` and `src/hydro_sim`, why, and how each change was checked.
+This is the complete list of what Phase B of the IMC plan (`md/plans/full_plan_imc_comparison.md`, milestones M3 and M4 plus Addendum A1) changed in `src/rad_hydro_sim` and `src/hydro_sim`, why, and how each change was checked.
 
 **The rule followed throughout:** every change is opt-in. With the default `SimulationConfig` the code is bit-identical to the code before Phase B. That was checked on five cases by comparing final states with `np.array_equal`, and it is frozen into `tests/data/phase_b_original_code_golden.npz`, which was produced by the *original* code (test `test_defaults_are_bit_identical_to_the_original_code`).
 
-The IMC side (`src/imc/coupling/`) is described in `md/imc_coupling.md`; the comparisons are in `md/phase_b_results.md`.
+The IMC side (`src/imc/coupling/`) is described in `md/imc_code/imc_coupling.md`; the comparisons are in `md/phase_b/phase_b_results.md`.
 
 ---
 
@@ -48,7 +48,7 @@ This is the plan's Learn exercise P3. It explains why each switch exists.
 
 ### 2.1 `calculate_abcd` is backward-Euler diffusion of F&C Eq. (2.1)
 
-Take the IMC transport equation (2.1) with physical scattering, as in `md/imc_mc_derivation.md` §1.7. Integrate over angle, using ∫I dμ = cE and ∫μI dμ = F:
+Take the IMC transport equation (2.1) with physical scattering, as in `md/theory/imc_mc_derivation.md` §1.7. Integrate over angle, using ∫I dμ = cE and ∫μI dμ = F:
 
 $$
 \frac{\partial E}{\partial t} + \frac{\partial F}{\partial x} = f\,\chi c\sigma\,(aT_n^4 - E),\qquad f = \frac{1}{1 + \chi\beta c\sigma\Delta t}.

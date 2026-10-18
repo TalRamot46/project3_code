@@ -10,7 +10,7 @@ Bath (F&C (4.12)): an isotropic blackbody at the left face delivers
 E_b = int sigma_SB T_bath^4 dt over the step, entering with density 2 mu on
 (0, 1] (F&C (4.21)).  Birth times are sampled with density proportional to the
 incident flux, not uniformly, so a drive that varies inside the step is
-followed in time (md/imc_mc_derivation.md, Proposition 3).
+followed in time (md/theory/imc_mc_derivation.md, Proposition 3).
 """
 from __future__ import annotations
 

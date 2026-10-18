@@ -4,11 +4,11 @@
 
 **Goal.** Produce deterministic transport ($S_N$) results for the paper's
 benchmarks, alongside the gray diffusion rad-hydro code (`src/rad_hydro_sim`),
-the semi-analytic solution, and the IMC of `md/full_plan_imc_comparison.md`.
+the semi-analytic solution, and the IMC of `md/plans/full_plan_imc_comparison.md`.
 The starting point is `src/sn/sn.py`, the deterministic twin of the SiO₂
 IMC script: the same problem, drive and Fleck linearization, with cell-wise
 coefficients, a bath boundary with exact discrete inflow, and exact energy
-bookkeeping. The theory is in `md/sn_derivation.md`
+bookkeeping. The theory is in `md/theory/sn_derivation.md`
 (cited below as "derivation §x"). Each milestone has a **Learn** part, a
 **Build** part and a **Gate**, as in the IMC plan.
 
@@ -408,7 +408,7 @@ optional, as in IMC A7.
   - `src/rad_hydro_sim/problems/presets_config.py` (Test 2 with χ = 1; Tests
     3–6 checked)
   - `src/rad_hydro_sim/verification/verification_config.py`
-  - `md/sn_derivation.md` (exercises)
+  - `md/theory/sn_derivation.md` (exercises)
 - **Frozen:** `src/sn/sn.py` as the SiO₂ $S_N$ baseline (S0 gate), next to
   the frozen IMC script it mirrors.
 

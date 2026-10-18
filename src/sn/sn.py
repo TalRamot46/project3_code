@@ -6,7 +6,7 @@ the same problem, material model, drive and Fleck-Cummings linearization.
 Only the solution of each step's linear transport equation differs: here it
 is deterministic (ordinates, diamond difference, source iteration) instead of
 a random walk, so S_N minus IMC is IMC noise plus S_N discretization error.
-Derivation and proofs: md/sn_derivation.md.
+Derivation and proofs: md/theory/sn_derivation.md.
 
 Each step freezes sigma, the Fleck factor f and B = a T^4 at T^n and solves
 

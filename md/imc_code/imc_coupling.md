@@ -1,6 +1,6 @@
 # `src/imc/coupling/rad_hydro.py`: IMC inside rad_hydro_sim
 
-This module makes the IMC core (`src/imc/core/`, see `md/imc_core.md`) a drop-in replacement for rad_hydro_sim's gray diffusion solver. It is milestone M4 of `md/full_plan_imc_comparison.md`. The diffusion-side changes it relies on are in `md/phase_b_diffusion_changes.md`; the results are in `md/phase_b_results.md`.
+This module makes the IMC core (`src/imc/core/`, see `md/imc_code/imc_core.md`) a drop-in replacement for rad_hydro_sim's gray diffusion solver. It is milestone M4 of `md/plans/full_plan_imc_comparison.md`. The diffusion-side changes it relies on are in `md/phase_b/phase_b_diffusion_changes.md`; the results are in `md/phase_b/phase_b_results.md`.
 
 ```python
 from hydro_sim.problems.simulation_config import SimulationConfig

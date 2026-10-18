@@ -9,7 +9,7 @@ Per-cell ledger (Wollaber 2016, Eq. 93): for every cell j and every step,
                                 - (face_plus[j+1] - face_minus[j+1])   # out at the right face
 
 Every packet's weight ends in exactly one place, so both ledgers close to
-round-off in every realization (md/imc_mc_derivation.md, Sec. 5.2).
+round-off in every realization (md/theory/imc_mc_derivation.md, Sec. 5.2).
 """
 from __future__ import annotations
 

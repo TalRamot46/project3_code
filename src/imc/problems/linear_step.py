@@ -2,7 +2,7 @@
 """Milestone M1: one linear IMC step against the S_N twin (Theorem 2 in numbers).
 
 With sigma, f and B = a T^4 frozen, a time step solves the linear equation (T)
-of md/imc_mc_derivation.md:
+of md/theory/imc_mc_derivation.md:
 
     (1/c) dpsi/dt + mu dpsi/dx + sigma psi = (1-f) sigma phi + f sigma c B,
 

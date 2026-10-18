@@ -49,7 +49,7 @@
    - `verification/radiation_data.py`, `compare_radiation_plots.py`;
    - in `run_comparison.py`: `_build_front_markers`, `_report_front_agreement`, `_mass_xlim`, `run_full_rad_hydro_comparison`;
    - `iterator.check_marshak`;
-   - `src/sn/sn.py`, the deterministic S_N twin of the SiO₂ script (same problem, drive and Fleck linearization; `transport_step` for the linear-step check). Theory and plan: `md/sn_derivation.md`, `md/full_plan_sn_comparison.md`;
+   - `src/sn/sn.py`, the deterministic S_N twin of the SiO₂ script (same problem, drive and Fleck linearization; `transport_step` for the linear-step check). Theory and plan: `md/theory/sn_derivation.md`, `md/plans/full_plan_sn_comparison.md`;
    - Wollaber's 0-D exact IMC solution (Eq. 120) and amplification factor (Eq. 122, which equals the md's §1.10 g with β ↔ 4q).
 
 **Decision:** planar geometry only.
@@ -59,7 +59,7 @@
 ## Phase A: foundations
 
 > **Status (2026-10-18): Phase A code milestones done** (M0, M1, M2, M2a). The Learn exercises are still yours (the A1–A4 ↔ Wollaber map, etc.).
-> - **Code:** `src/imc/core/{material,mesh,particles,sources,transport,population,tallies,stepper}.py` (see `md/imc_core.md`); SiO₂ in `src/imc/sio2/` (see `md/imc_sio2.md`); drivers `src/imc/problems/{linear_step,zero_d}.py`; tests `tests/imc/` (27 tests, 1 marked slow; `uv run pytest tests/imc`).
+> - **Code:** `src/imc/core/{material,mesh,particles,sources,transport,population,tallies,stepper}.py` (see `md/imc_code/imc_core.md`); SiO₂ in `src/imc/sio2/` (see `md/imc_code/imc_sio2.md`); drivers `src/imc/problems/{linear_step,zero_d}.py`; tests `tests/imc/` (27 tests, 1 marked slow; `uv run pytest tests/imc`).
 > - **M0:** the packaged SiO₂ run gives breakout 1.47 ns, peak 0.957 ± 0.013 (frozen: 1.47, 0.954), energy error 1.4×10⁻¹³, and per-cell ledger 1.1×10⁻¹². Against S_N: mean bias −0.04%, rms 0.3% after 1.5 ns. The "known issue" below was a stale file: re-running the frozen script gives 5.3×10⁻¹⁴. The energy error of 80 came from `sio2_1mm_gray_imc_check.npz`, written before the `np.full(1, THETA0)` fix.
 > - **M1:** census energy agrees with S_N cell by cell for σΔx ∈ {0.1, 1, 10}. Deposition is compared on sums over adjacent cell pairs, because S_N's diamond difference oscillates odd–even when σΔx ≳ 1. At σΔx = 10 the comparison is limited to cells 5–89: the boundary layers are 0.1 cell thick, and S_N's spatial error there isn't estimable on its fixed grid.
 > - **M2:** every step matches Wollaber Eq. 120 within noise (p = 3, 5). Fig. 2 is reproduced (0.90 → 1.034 → 0.990 → 1.003 → 0.999), and so is ρ = −0.2868.
@@ -67,7 +67,7 @@
 
 ### M0. Package the SiO₂ IMC (keep the script frozen as a regression baseline)
 
-- **Learn:** `md/imc_mc_derivation.md` §§1–5. Wollaber §2.2 (his approximations 16, 19, 23 correspond to the md's A1, A2/A3, A4), §2.5–3.5 (energy-weights, Eqs. 61–67 and 94; tallies 87–93; local energy balance 93). *Exercise:* add the A1–A4 ↔ Wollaber map to the md.
+- **Learn:** `md/theory/imc_mc_derivation.md` §§1–5. Wollaber §2.2 (his approximations 16, 19, 23 correspond to the md's A1, A2/A3, A4), §2.5–3.5 (energy-weights, Eqs. 61–67 and 94; tallies 87–93; local energy balance 93). *Exercise:* add the A1–A4 ↔ Wollaber map to the md.
 - **Build:** new modules under `src/imc/`:
   - `material.py`: built from a `RadHydroCase` (k_t = ρκ_R, k_a = χk_t, k_s = (1−χ)k_t, rejecting χ > 1); u_m with an optional −aT⁴; β = ∂u_r/∂u_m; T(u_m) by Newton iteration when −aT⁴ is used. CGS units, with `c` and `a_Kelvin` taken from `radiation_step.py`.
   - `mesh.py`: nonuniform edges and cell masses.
@@ -84,7 +84,7 @@
 
 ### M1. The linear step (the md's Theorem 2 in numbers)
 
-- **Learn:** md §§2–4; `md/sn_derivation.md` §§0, 3–7 and the `src/sn/sn.py` header.
+- **Learn:** md §§2–4; `md/theory/sn_derivation.md` §§0, 3–7 and the `src/sn/sn.py` header.
 - **Build:** `tests/imc/test_linear_vs_sn.py`. Freeze σ, f, q, k_s and solve (T) by IMC and by `sn.transport_step` (σ_t = σ, σ_s = (1−f)σ), with S_n sub-stepping. `transport_step` has no physical scattering k_s yet; adding it is part of S_N plan S0. This milestone is S_N plan S4.
 - **Gate:** census E_r, deposition and leakage agree within 3 s.e. plus S_n error, for σΔx ∈ {0.1, 1, 10}.
 
@@ -98,7 +98,7 @@
 
 ## Phase B: make diffusion and IMC solve the same problem
 
-> **Status (2026-10-18): Phase B done** (M3 incl. A1, M4). Details in `md/phase_b_diffusion_changes.md` (every diffusion-code change), `md/imc_coupling.md` (the IMC adapter) and `md/phase_b_results.md` (comparisons).
+> **Status (2026-10-18): Phase B done** (M3 incl. A1, M4). Details in `md/phase_b/phase_b_diffusion_changes.md` (every diffusion-code change), `md/imc_code/imc_coupling.md` (the IMC adapter) and `md/phase_b/phase_b_results.md` (comparisons).
 > - **M3:** every change is opt-in through new `SimulationConfig` fields. With the defaults the code is bit-identical to the original (golden file from the original code, 4 slow tests).
 >   - Maximum energy error, original → with flags: radiation-only 52% → 7×10⁻¹²; hydro-only 3×10⁻⁴ → 4×10⁻¹⁵ (A1 `compatible`); full rad-hydro 4.3% → 7×10⁻¹⁵.
 >   - Paper Test 1 (full, N = 200): the flags move the heat front ≤ 0.02% (gate recorded).
@@ -106,7 +106,7 @@
 >   - T1 SiO₂ via rad_hydro_sim matches standalone IMC and S_N (+0.04%). Diffusion breaks out 0.05 ns early and peaks 5% high.
 >   - Gold Test 1/2, radiation-only: diffusion and IMC agree to ≤ 1% in front position and temperature.
 >   - Opacity ÷100: diffusion's front is 4% deep.
-> - **Not changed, recorded for you:** the left node mass is m₀; the hydro-only retry mixes dt; the Marshak flux uses the cell-center E₀; `calculate_flux`'s boundary flux differs from the matrix's (`md/phase_b_diffusion_changes.md` §5).
+> - **Not changed, recorded for you:** the left node mass is m₀; the hydro-only retry mixes dt; the Marshak flux uses the cell-center E₀; `calculate_flux`'s boundary flux differs from the matrix's (`md/phase_b/phase_b_diffusion_changes.md` §5).
 > - **Changed paths vs. the text below:** the adapter is `src/imc/coupling/rad_hydro.py` (not `src/imc/step.py`). T3 uses the new radiation-only Test 1/2 presets, on a 10⁻² g/cm² domain with 400 cells.
 
 ### M3. Bring the diffusion code to the paper's conventions (all behind flags; defaults unchanged)
@@ -245,12 +245,12 @@
   - `hydro_sim/problems/simulation_config.py`;
   - `src/rad_hydro_sim/problems/presets_config.py` (Test 2 preset, SiO₂ preset);
   - `src/rad_hydro_sim/verification/verification_config.py`;
-  - `md/imc_mc_derivation.md` (P1/P3/P9 derivations).
+  - `md/theory/imc_mc_derivation.md` (P1/P3/P9 derivations).
 - **Frozen:** `src/imc/sio2/sio2_1mm_gray_imc_check_og.py` (with its drive `src/imc/sio2/back_pulse.txt`), and its S_N twin `src/sn/sn.py`.
 
 ## Step 0 (done)
 
-This plan is versioned as `md/full_plan_imc_comparison.md`, next to `md/imc_mc_derivation.md` and the S_N pair `md/sn_derivation.md` and `md/full_plan_sn_comparison.md`.
+This plan is versioned as `md/plans/full_plan_imc_comparison.md`, next to `md/theory/imc_mc_derivation.md` and the S_N pair `md/theory/sn_derivation.md` and `md/plans/full_plan_sn_comparison.md`.
 
 ## Verification
 

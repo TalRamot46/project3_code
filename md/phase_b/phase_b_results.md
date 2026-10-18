@@ -1,6 +1,6 @@
 # Phase B results: diffusion vs. IMC on the M4 test ladder
 
-These are the comparisons that close Phase B of `md/full_plan_imc_comparison.md`. The diffusion-code changes are in `md/phase_b_diffusion_changes.md`; the IMC coupling is in `md/imc_coupling.md`.
+These are the comparisons that close Phase B of `md/plans/full_plan_imc_comparison.md`. The diffusion-code changes are in `md/phase_b/phase_b_diffusion_changes.md`; the IMC coupling is in `md/imc_code/imc_coupling.md`.
 
 **Setup, common to every comparison:**
 - Both solvers ran in rad_hydro_sim on the same mesh, with the same dt sequence (`dt_ramp_max`: ramp by ×1.1 to 1 ps for SiO₂, 2 ps for gold) and the same Marshak bath.
@@ -23,7 +23,7 @@ The pattern is the expected one. Where the medium is optically thick (gold), gra
 
 `PRESET_SIO2_FOAM_RADIATION_ONLY`: 100 cells, tabulated synthetic drive, 3 ns. The plot shows the outgoing flux at the far face, in 0.05 ns blocks.
 
-![T1 outgoing flux](figures/phase_b/t1_sio2_outgoing_flux.png)
+![T1 outgoing flux](figures/t1_sio2_outgoing_flux.png)
 
 | Solver | Breakout (flux ≥ 0.01) | Peak |
 |---|---|---|
@@ -33,17 +33,17 @@ The pattern is the expected one. Where the medium is optically thick (gold), gra
 | diffusion, Phase B flags | 1.425 ns | 1.006 at 1.875 ns |
 | diffusion, original | 1.525 ns | 1.184 at 1.775 ns |
 
-- **The three transport solutions coincide.** IMC through rad_hydro_sim vs. standalone gives χ²/dof = 1.39 and a mean difference of +0.09%. IMC vs. S_N differs by +0.04% on average, rms 0.35%. This validates the coupling (`md/imc_coupling.md` §5).
+- **The three transport solutions coincide.** IMC through rad_hydro_sim vs. standalone gives χ²/dof = 1.39 and a mean difference of +0.09%. IMC vs. S_N differs by +0.04% on average, rms 0.35%. This validates the coupling (`md/imc_code/imc_coupling.md` §5).
 - **Diffusion with the Phase B flags** breaks out about 0.05 ns early and peaks 5% high. This is the diffusion approximation itself. The foam is only moderately thick, so the diffusion flux (unlimited) overestimates transport ahead of the front.
-- **The original diffusion** is 24% high at the peak. Most of that is its energy leak (14% maximum energy error); see `md/phase_b_diffusion_changes.md` §2.2.
+- **The original diffusion** is 24% high at the peak. Most of that is its energy leak (14% maximum energy error); see `md/phase_b/phase_b_diffusion_changes.md` §2.2.
 
 ## 3. T3: the paper's gold tests, radiation-only
 
 `PRESET_PAPER_TEST1_RADIATION_ONLY` and `PRESET_PAPER_TEST2_RADIATION_ONLY` use the manuscript's material and Marshak bath with the mesh held fixed. The domain is cut to 10⁻² g/cm² with 400 cells (2.5×10⁻⁵ g/cm² per cell), so the heated layer spans 30–65 cells. With the presets' 2.5×10⁻² g/cm² and 100 cells only 3 cells were heated, too coarse to compare.
 
-![Test 1 profiles](figures/phase_b/test1_profiles.png)
+![Test 1 profiles](figures/test1_profiles.png)
 
-![Test 2 profiles](figures/phase_b/test2_profiles.png)
+![Test 2 profiles](figures/test2_profiles.png)
 
 | | t [ns] | Heat front (T = 0.5 HeV), diffusion → IMC | T in the heated region, median / max difference | IMC s.e. |
 |---|---|---|---|---|
@@ -56,14 +56,14 @@ The pattern is the expected one. Where the medium is optically thick (gold), gra
 
 How to read these:
 - **The material temperatures agree** at the level of about two IMC standard errors over most of the heated layer. The maximum differences are in the one or two cells at the steep front, where a cell is many mean free paths thick.
-- **The radiation temperature** (right panels) uses the IMC's track-length estimate; see `md/imc_coupling.md` §4 for why not the census.
-- **The surface temperature** (first cell) agrees to better than 1% after 0.5 ns. Early on, the diffusion code's Marshak flux uses the cell-center E₀ (`md/phase_b_diffusion_changes.md` §5.3), and the bath exceeds the surface temperature most early (T_bath⁴ ∝ 1 + 0.169 t_ns^−0.41).
+- **The radiation temperature** (right panels) uses the IMC's track-length estimate; see `md/imc_code/imc_coupling.md` §4 for why not the census.
+- **The surface temperature** (first cell) agrees to better than 1% after 0.5 ns. Early on, the diffusion code's Marshak flux uses the cell-center E₀ (`md/phase_b/phase_b_diffusion_changes.md` §5.3), and the bath exceeds the surface temperature most early (T_bath⁴ ∝ 1 + 0.169 t_ns^−0.41).
 
 ## 4. T2: thinner gold (opacity ÷100)
 
 The Test 1 setup with g ×100 (opacity ÷100), on the presets' full domain with 400 cells. The bath is that case's own self-similar Marshak bath.
 
-![thin gold profiles](figures/phase_b/thin100_profiles.png)
+![thin gold profiles](figures/thin100_profiles.png)
 
 | t [ns] | Heat front, diffusion → IMC | T median / max difference | IMC s.e. |
 |---|---|---|---|

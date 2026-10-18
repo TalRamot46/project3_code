@@ -1,4 +1,4 @@
-"""Generic gray 1D slab IMC solver; see md/imc_core.md.
+"""Generic gray 1D slab IMC solver; see md/imc_code/imc_core.md.
 
   material.py   power-law (Hammer-Rosen) opacity and EOS, Fleck factor
   mesh.py       nonuniform slab cells

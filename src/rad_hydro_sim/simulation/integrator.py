@@ -58,7 +58,7 @@ def step_rad_hydro(
     radiation_solver, material_update, subtract_radiation_energy,
     right_rad_bc, rad_energy_per_mass, hydro_energy.  If `diagnostics` is a
     dict it receives the step's boundary fluxes and boundary work for the
-    energy budget (md/phase_b_diffusion_changes.md).
+    energy budget (md/phase_b/phase_b_diffusion_changes.md).
     """
     hydro_energy = getattr(config, "hydro_energy", "standard")
     if hydro_energy not in ("standard", "compatible"):

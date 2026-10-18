@@ -92,7 +92,7 @@ class SimulationConfig:
     # Fraction of t_end at which to take the PNG snapshot (0.0..1.0)
     png_time_frac: float = 0.5
 
-    # --- IMC plan, Phase B (md/phase_b_diffusion_changes.md). Every default
+    # --- IMC plan, Phase B (md/phase_b/phase_b_diffusion_changes.md). Every default
     # reproduces the original behaviour; rad_hydro_sim reads these. ---
     # Material update after the gray diffusion solve: "u_r" sets
     # aT^4 = (A E + aT*^4)/(1+A) (original); "conservative" adds exactly the

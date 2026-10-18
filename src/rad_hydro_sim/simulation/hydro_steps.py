@@ -129,7 +129,7 @@ def update_nodes_from_pressure(
 
 
 # ---------------------------------------------------------------------------
-# Phase B, plan item A1 (md/phase_b_diffusion_changes.md): an energy-
+# Phase B, plan item A1 (md/phase_b/phase_b_diffusion_changes.md): an energy-
 # conserving ("compatible") alternative to update_nodes_from_pressure, and the
 # energy bookkeeping both schemes are measured with.  Nothing above changes.
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 # `src/imc/sio2/`: the Back SiO₂ problem
 
-Everything specific to the SiO₂ foam problem is in this folder: the original standalone IMC script, the drive table it reads, and the same problem rebuilt on the generic solver in `src/imc/core/` (see `md/imc_core.md`).
+Everything specific to the SiO₂ foam problem is in this folder: the original standalone IMC script, the drive table it reads, and the same problem rebuilt on the generic solver in `src/imc/core/` (see `md/imc_code/imc_core.md`).
 
 ## 1. The problem
 
@@ -26,7 +26,7 @@ A heat wave driven into a low-density silica foam by a hohlraum-like radiation b
 The standalone script this project started from. **Do not edit it.** It is the regression baseline that everything else is checked against.
 - One fix was applied before it was frozen: the initial temperature array `np.full(1, THETA0)` became `np.full(N_CELLS, THETA0)`. Before the fix, the energy check read about 80 and only cell 0 emitted on the first step.
 - Its docstring was also corrected (analog absorption, synthetic drive).
-- `md/imc_mc_derivation.md` Appendix A maps each of its lines to F&C's equations.
+- `md/theory/imc_mc_derivation.md` Appendix A maps each of its lines to F&C's equations.
 
 Run it with:
 

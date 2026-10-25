@@ -89,13 +89,19 @@ So for the paper's gold Test 1 the conservation fixes change nothing visible: th
 
 ## 6. Reproducing these numbers
 
-The runs used throwaway driver scripts in the session's scratchpad. Every one is a short loop over `simulate_rad_hydro` with the configurations stated above. For example, T1 with IMC:
+All runs, tables and figures come from one module, `src/rad_hydro_sim/verification/imc_vs_diffusion.py`:
 
-```python
-case = P.PRESET_TEST_CASES[P.PRESET_SIO2_FOAM_RADIATION_ONLY]
-cfg = SimulationConfig(N=100, store_every=10**9, show_plot=False, energy_diagnostics=True,
-                       dt_ramp_max=1e-12, radiation_solver="imc", imc_seed=1,
-                       imc_n_emission=2500, imc_n_bath=4000, imc_max_census=120000)
+```bash
+uv run python -m rad_hydro_sim.verification.imc_vs_diffusion                                  # everything
+uv run python -m rad_hydro_sim.verification.imc_vs_diffusion --figures-dir md/phase_b/figures  # and refresh this doc's figures
+uv run python -m rad_hydro_sim.verification.imc_vs_diffusion --cases test1 --no-runs           # redo one table/figure from the cache
 ```
 
-For the diffusion runs, replace the last line with `material_update="conservative", right_rad_bc="marshak_vacuum"`. Turning this into a single command that regenerates every figure is milestone M10 (`verification/imc_vs_diffusion.py`).
+What it does:
+
+- **Runs.** Each case is a loop over `simulate_rad_hydro` with the configurations stated above. The diffusion runs use `material_update="conservative", right_rad_bc="marshak_vacuum"`; the IMC runs use `radiation_solver="imc"` with seeds 1, 2, 3. For T1 it also runs the standalone IMC (`imc.sio2.problem.run_one`, seeds 1729, 2718, 3141) and the S_N twin (`sn.run_one`, 16 double-Gauss ordinates, dt = 1 ps).
+- **Cache.** Every run is saved as an `.npz` in `results/imc_vs_diffusion/` (not tracked by git) and reused unless `--rerun` is given.
+- **Outputs.** It writes the PNGs and `report.md`, which contains the breakout/peak table of §2 and the front/temperature tables of §§3–4.
+- **T1 blocks.** The flux blocks are exact energy averages: the cumulative outflow, interpolated at the 0.05 ns block edges, divided by the block width.
+
+The figures and tables in this document were first made with throwaway scratchpad scripts that this module replaces.

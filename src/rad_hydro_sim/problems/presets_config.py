@@ -819,7 +819,7 @@ PRESET_TEST_CASES = {
 # ---------------------------------------------------------------------------
 _T100_K = KELVIN_PER_HEV           # 100 eV in kelvin (rad_hydro_sim's conversion)
 
-# T1: the Back SiO2 foam problem of src/imc/sio2/ (optically intermediate).
+# T1: the Back SiO2 foam problem of src/imc/problems/sio2.py (optically intermediate).
 # The frozen IMC script works in theta = T/100 eV with
 #   u = 8.78e13 rho^0.91 theta^1.10 erg/cm^3,  k = 9175 rho^1.75 theta^-3.53 1/cm,
 # i.e. f = 8.78e13 / T100^1.10, g = 1 / (9175 T100^3.53) in rad_hydro's
@@ -841,7 +841,7 @@ PRESET_TEST_CASES[PRESET_SIO2_FOAM_RADIATION_ONLY] = RadHydroCase(
     times_for_png=np.array([1.0e-9, 2.0e-9, 3.0e-9]),
     bc_type="Marshak",
     omega=0.0,
-    bath_table=str(Path(__file__).resolve().parents[2] / "imc" / "sio2" / "back_pulse.txt"),
+    bath_table=str(Path(__file__).resolve().parents[2] / "imc" / "data" / "back_pulse.txt"),
 )
 
 # T3: radiation-only versions of the manuscript's Test 1 and Test 2 (gold,

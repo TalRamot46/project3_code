@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """The Back SiO2 problem on the imc package (milestone M0).
 
-Same problem, constants and outputs as the frozen sio2_1mm_gray_imc_check_og.py next to this file:
+Same problem, constants and outputs as the archived original script,
+src/imc/archive/sio2_original/sio2_1mm_gray_imc_check_og.py:
   * 1D slab, L = 1 mm, 100 cells, unit transverse area
   * rho = 0.05 g/cm^3 SiO2, gray pure absorption, Hammer-Rosen opacity and EOS
   * initial T_m = 300 K, no radiation
@@ -17,7 +18,7 @@ Differences from the frozen script, none of which changes the solved equation:
   * face crossings move the packet onto the face and change its cell index,
     instead of nudging it by 1e-10 dx.
 
-    uv run python -m imc.sio2.problem --prefix results/sio2_pkg
+    uv run python -m imc.problems.sio2 --prefix results/sio2_pkg
 """
 from __future__ import annotations
 
@@ -43,7 +44,7 @@ N_CELLS = 100
 RHO = 0.05
 T0_K = 300.0
 THETA0 = T0_K / EV_TO_K / 100.0
-DRIVE_PATH = Path(__file__).resolve().parent / "back_pulse.txt"
+DRIVE_PATH = Path(__file__).resolve().parents[1] / "data" / "back_pulse.txt"
 
 MATERIAL = PowerLawMaterial(
     f=8.78, beta=1.10, mu=0.09,        # u_m = f theta^beta rho^(1-mu)  [MJ/cm^3]

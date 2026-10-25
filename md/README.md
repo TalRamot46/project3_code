@@ -16,7 +16,7 @@
 | File | Code it explains |
 |---|---|
 | [imc_core.md](imc_code/imc_core.md) | `src/imc/core/`: the generic solver, module by module, and the flow of one step |
-| [imc_sio2.md](imc_code/imc_sio2.md) | `src/imc/sio2/`: the Back SiO₂ problem, the frozen original script, reference results |
+| [imc_problem_sio2.md](imc_code/imc_problem_sio2.md) | `src/imc/problems/sio2.py`: the Back SiO₂ problem, its drive (`src/imc/data/`), the archived original script (`src/imc/archive/`), reference results |
 | [imc_coupling.md](imc_code/imc_coupling.md) | `src/imc/coupling/`: IMC as rad_hydro_sim's radiation solver |
 | [imc_problem_zero_d.md](imc_code/imc_problem_zero_d.md) | `src/imc/problems/zero_d.py`: the 0-D problem; Wollaber Figs. 1–2 reproduced |
 | [imc_problem_linear_step.md](imc_code/imc_problem_linear_step.md) | `src/imc/problems/linear_step.py`: one linear step vs. S_N |

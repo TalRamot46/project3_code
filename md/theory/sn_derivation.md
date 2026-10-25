@@ -23,7 +23,7 @@ five things:
    `md/plans/full_plan_sn_comparison.md`.
 
 `sn.py` is the deterministic twin of the SiO₂ IMC script
-(`src/imc/sio2/sio2_1mm_gray_imc_check_og.py`): the same problem, constants, drive
+(`src/imc/archive/sio2_original/sio2_1mm_gray_imc_check_og.py`): the same problem, constants, drive
 and Fleck linearization, with the random walk replaced by an $S_N$ solve.
 On that problem the two agree within IMC's error bars (Section 11).
 

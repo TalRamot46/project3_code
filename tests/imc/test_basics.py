@@ -8,11 +8,11 @@ import numpy as np
 import pytest
 
 from imc.core import population, sources, stepper, transport
-from imc.sio2 import sio2_1mm_gray_imc_check_og as frozen
+from imc.archive.sio2_original import sio2_1mm_gray_imc_check_og as frozen
 from imc.core.material import PowerLawMaterial
 from imc.core.mesh import Mesh
 from imc.core.particles import Particles
-from imc.sio2 import problem as sio2
+from imc.problems import sio2
 
 
 def _run_kernel(p, edges, k_a, k_s, fleck, c, t1, left="vacuum", right="vacuum", seed=7):

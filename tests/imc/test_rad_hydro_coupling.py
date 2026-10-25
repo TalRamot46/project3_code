@@ -10,7 +10,7 @@ os.environ.setdefault("TQDM_DISABLE", "1")
 
 from hydro_sim.problems.simulation_config import SimulationConfig  # noqa: E402
 from imc.coupling.rad_hydro import power_law_bath, tabulated_bath  # noqa: E402
-from imc.sio2.problem import DRIVE_PATH, block_average  # noqa: E402
+from imc.problems.sio2 import DRIVE_PATH, block_average  # noqa: E402
 from rad_hydro_sim.problems import presets_config as P  # noqa: E402
 from rad_hydro_sim.simulation.iterator import simulate_rad_hydro, tabulated_bath_temperature  # noqa: E402
 from rad_hydro_sim.simulation.radiation_step import a_Kelvin, c, eV_to_erg, k_B  # noqa: E402

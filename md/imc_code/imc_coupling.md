@@ -76,7 +76,7 @@ The **track-length estimate**, Σ (weight × time spent in the cell) / (Δt·Δx
 | Check | Result |
 |---|---|
 | Energy ledgers (`tests/imc/test_rad_hydro_coupling.py::test_adapter_closes_both_energy_ledgers`) | rad_hydro budget < 10⁻¹⁰ (measured 1×10⁻¹²); IMC ledger and per-cell ledger ~10⁻¹²; no capped histories |
-| T1 SiO₂ through rad_hydro_sim vs. standalone `imc.sio2.problem` (3 seeds each) | χ²/dof = 1.39, mean difference +0.09% after 1.5 ns |
+| T1 SiO₂ through rad_hydro_sim vs. standalone `imc.problems.sio2` (3 seeds each) | χ²/dof = 1.39, mean difference +0.09% after 1.5 ns |
 | T1 vs. the S_N twin (slow test) | mean difference +0.04%, rms 0.35% |
 | Bath energy closed form vs. adaptive quadrature, across the t = 0 singularity | 10⁻⁹ |
 | Refusals: hydro scenario, Dirichlet bath, χ > 1 | raise with an explanation |

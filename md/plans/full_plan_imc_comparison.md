@@ -2,7 +2,7 @@
 
 ## Context
 
-**Goal.** Produce transport (IMC) results that verify your gray diffusion rad-hydro code (`src/rad_hydro_sim`) and the semi-analytic solution of the paper `subsonic_self_similar_paper/manuscript.tex` ("Generalized self-similar solutions to the subsonic Marshak wave problem"). The transport solver is the IMC in `src/imc/sio2/sio2_1mm_gray_imc_check_og.py`, grown step by step into a Lagrangian rad-hydro solver. Continuous absorption, comb population control and DDMC are added at the end. Each milestone has a **Learn** part (reading plus a derivation exercise), a **Build** part (code) and a **Gate** (a check that must pass before moving on).
+**Goal.** Produce transport (IMC) results that verify your gray diffusion rad-hydro code (`src/rad_hydro_sim`) and the semi-analytic solution of the paper `subsonic_self_similar_paper/manuscript.tex` ("Generalized self-similar solutions to the subsonic Marshak wave problem"). The transport solver is the IMC in `src/imc/archive/sio2_original/sio2_1mm_gray_imc_check_og.py`, grown step by step into a Lagrangian rad-hydro solver. Continuous absorption, comb population control and DDMC are added at the end. Each milestone has a **Learn** part (reading plus a derivation exercise), a **Build** part (code) and a **Gate** (a check that must pass before moving on).
 
 ### What the paper requires (manuscript §§2–4)
 
@@ -59,7 +59,7 @@
 ## Phase A: foundations
 
 > **Status (2026-10-18): Phase A code milestones done** (M0, M1, M2, M2a). The Learn exercises are still yours (the A1–A4 ↔ Wollaber map, etc.).
-> - **Code:** `src/imc/core/{material,mesh,particles,sources,transport,population,tallies,stepper}.py` (see `md/imc_code/imc_core.md`); SiO₂ in `src/imc/sio2/` (see `md/imc_code/imc_sio2.md`); drivers `src/imc/problems/{linear_step,zero_d}.py`; tests `tests/imc/` (27 tests, 1 marked slow; `uv run pytest tests/imc`).
+> - **Code:** `src/imc/core/{material,mesh,particles,sources,transport,population,tallies,stepper}.py` (see `md/imc_code/imc_core.md`); drivers `src/imc/problems/{sio2,linear_step,zero_d}.py` (see `md/imc_code/imc_problem_*.md`); tests `tests/imc/` (27 tests, 1 marked slow; `uv run pytest tests/imc`).
 > - **M0:** the packaged SiO₂ run gives breakout 1.47 ns, peak 0.957 ± 0.013 (frozen: 1.47, 0.954), energy error 1.4×10⁻¹³, and per-cell ledger 1.1×10⁻¹². Against S_N: mean bias −0.04%, rms 0.3% after 1.5 ns. The "known issue" below was a stale file: re-running the frozen script gives 5.3×10⁻¹⁴. The energy error of 80 came from `sio2_1mm_gray_imc_check.npz`, written before the `np.full(1, THETA0)` fix.
 > - **M1:** census energy agrees with S_N cell by cell for σΔx ∈ {0.1, 1, 10}. Deposition is compared on sums over adjacent cell pairs, because S_N's diamond difference oscillates odd–even when σΔx ≳ 1. At σΔx = 10 the comparison is limited to cells 5–89: the boundary layers are 0.1 cell thick, and S_N's spatial error there isn't estimable on its fixed grid.
 > - **M2:** every step matches Wollaber Eq. 120 within noise (p = 3, 5). Fig. 2 is reproduced (0.90 → 1.034 → 0.990 → 1.003 → 0.999), and so is ρ = −0.2868.
@@ -239,14 +239,14 @@
 
 ## Critical files
 
-- **New:** `src/imc/core/{material,mesh,particles,sources,transport,tallies,population,ddmc,step}.py`, `src/imc/sio2/problem.py`, `src/imc/problems/zero_d.py`, `tests/imc/*.py`, `src/rad_hydro_sim/verification/imc_vs_diffusion.py`.
+- **New:** `src/imc/core/{material,mesh,particles,sources,transport,tallies,population,ddmc,step}.py`, `src/imc/problems/sio2.py`, `src/imc/problems/zero_d.py`, `tests/imc/*.py`, `src/rad_hydro_sim/verification/imc_vs_diffusion.py`.
 - **Modified:**
   - `src/rad_hydro_sim/simulation/{radiation_step,integrator,iterator,hydro_steps}.py`;
   - `hydro_sim/problems/simulation_config.py`;
   - `src/rad_hydro_sim/problems/presets_config.py` (Test 2 preset, SiO₂ preset);
   - `src/rad_hydro_sim/verification/verification_config.py`;
   - `md/theory/imc_mc_derivation.md` (P1/P3/P9 derivations).
-- **Frozen:** `src/imc/sio2/sio2_1mm_gray_imc_check_og.py` (with its drive `src/imc/sio2/back_pulse.txt`), and its S_N twin `src/sn/sn.py`.
+- **Frozen:** `src/imc/archive/sio2_original/sio2_1mm_gray_imc_check_og.py` (with its drive `src/imc/data/back_pulse.txt`), and its S_N twin `src/sn/sn.py`.
 
 ## Step 0 (done)
 

@@ -7,7 +7,7 @@ This document is a self-contained account of five things:
    random walk can solve** (their Eq. 2.1). Each step is marked as exact
    algebra or as an approximation (Section 1).
 2. **A theorem with proof** that the random walk implemented in
-   `src/imc/sio2/sio2_1mm_gray_imc_check_og.py` produces, in expectation, the unique
+   `src/imc/archive/sio2_original/sio2_1mm_gray_imc_check_og.py` produces, in expectation, the unique
    solution of that linear equation, and that its tallies are unbiased
    (Sections 2–5).
 3. **Guarantees for the code as written** (Section 6): the material energy
@@ -1375,7 +1375,7 @@ knowledge, none of these exists in rigorous form.
 
 ## Appendix A — Code ↔ Fleck & Cummings correspondence
 
-Line numbers refer to `src/imc/sio2/sio2_1mm_gray_imc_check_og.py`.
+Line numbers refer to `src/imc/archive/sio2_original/sio2_1mm_gray_imc_check_og.py`.
 
 | Algorithm element | F&C | Code |
 |---|---|---|

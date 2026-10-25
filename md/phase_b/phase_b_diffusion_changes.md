@@ -156,7 +156,7 @@ The original branches are textually unchanged inside their `else` paths.
 ### 3.6 `RadHydroCase` and presets
 
 - `RadHydroCase.bath_table: str | None = None`.
-- `PRESET_SIO2_FOAM_RADIATION_ONLY`: the SiO₂ problem of `src/imc/sio2/` in rad_hydro units, f = 8.78×10¹³/T₁₀₀^1.10 and g = 1/(9175·T₁₀₀^3.53), with T₁₀₀ = 100 eV in K. It uses the tabulated bath, 1 mm, ρ = 0.05 g/cm³, 3 ns.
+- `PRESET_SIO2_FOAM_RADIATION_ONLY`: the SiO₂ problem of `src/imc/problems/sio2.py` in rad_hydro units, f = 8.78×10¹³/T₁₀₀^1.10 and g = 1/(9175·T₁₀₀^3.53), with T₁₀₀ = 100 eV in K. It uses the tabulated bath, 1 mm, ρ = 0.05 g/cm³, 3 ns.
 - `PRESET_PAPER_TEST1_RADIATION_ONLY` and `PRESET_PAPER_TEST2_RADIATION_ONLY` (τ = 158/1285): the Fig. 8 Marshak gold case (the manuscript's material) with `scenario="radiation_only"`.
 
 ---

@@ -8,7 +8,7 @@ One command regenerates the Phase B results of md/phase_b/phase_b_results.md:
 Cases (all radiation-only, static mesh):
   t1       SiO2 foam (PRESET_SIO2_FOAM_RADIATION_ONLY), 100 cells, 3 ns. Outgoing flux of
            diffusion (original and Phase B flags), IMC through rad_hydro_sim, the standalone
-           IMC (imc.sio2.problem) and the S_N twin (src/sn/sn.py).
+           IMC (imc.problems.sio2) and the S_N twin (src/sn/sn.py).
   test1    paper Test 1 (PRESET_PAPER_TEST1_RADIATION_ONLY), domain cut to 1e-2 g/cm^2, 400 cells.
   test2    paper Test 2 (PRESET_PAPER_TEST2_RADIATION_ONLY), same mesh.
   thin100  Test 1 with opacity / 100 (g x 100), full preset domain, 400 cells.
@@ -112,7 +112,7 @@ def run_t1(out: Path, seeds, rerun=False, standalone=True, sn_twin=True, end_ns=
 
     if standalone:
         from imc.core import stepper
-        from imc.sio2 import problem
+        from imc.problems import sio2 as problem
 
         settings = stepper.IMCSettings(n_emission=2500, n_bath=4000, max_census=120000)
         bath = problem.make_bath()
@@ -134,7 +134,7 @@ def run_t1(out: Path, seeds, rerun=False, standalone=True, sn_twin=True, end_ns=
         path = out / "t1_sn.npz"
         if not _cached(path, rerun):
             t0 = time.time()
-            drive = sn.Drive(Path(sn.__file__).resolve().parent.parent / "imc" / "sio2" / "back_pulse.txt")
+            drive = sn.Drive(Path(sn.__file__).resolve().parent.parent / "imc" / "data" / "back_pulse.txt")
             r = sn.run_one(drive, 0.001, end_ns, 16, "double-gauss", "current", 1e-10, 1000)
             edges = _edges_from_midpoints(r["time_ns"], end_ns)
             norm_n = sn.SIGMA_SB * (165.0 * sn.EV_TO_K) ** 4
@@ -199,7 +199,7 @@ def plot_t1(res, path: Path, end_ns=T1_END_NS):
     ax.plot(tc, m, color="tab:blue", lw=1.8, label=r"IMC via rad_hydro_sim (mean of seeds, $\pm$2 s.e.)")
     styles = {"standalone IMC": ("--", "tab:cyan", 1.2), "S_N twin": (":", "black", 1.5),
               "diffusion, Phase B flags": ("-", "tab:red", 1.5), "diffusion, original": ("-", "tab:orange", 1.2)}
-    labels = {"standalone IMC": "standalone IMC (imc.sio2.problem)", "S_N twin": r"S$_N$ twin (src/sn/sn.py)"}
+    labels = {"standalone IMC": "standalone IMC (imc.problems.sio2)", "S_N twin": r"S$_N$ twin (src/sn/sn.py)"}
     for key, (ls, col, lw) in styles.items():
         if key in res:
             ax.plot(tc, res[key], ls, color=col, lw=lw, label=labels.get(key, key))

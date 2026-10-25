@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Deterministic gray 1D S_N check for the Back SiO2 problem.
 
-This is the discrete-ordinates twin of src/imc/sio2/sio2_1mm_gray_imc_check_og.py:
+This is the discrete-ordinates twin of src/imc/archive/sio2_original/sio2_1mm_gray_imc_check_og.py:
 the same problem, material model, drive and Fleck-Cummings linearization.
 Only the solution of each step's linear transport equation differs: here it
 is deterministic (ordinates, diamond difference, source iteration) instead of
@@ -301,7 +301,7 @@ def run_one(drive, dt, end_time, n_mu, quadrature, bath_norm, tol, max_iters, pr
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--drive", type=Path,
-                        default=Path(__file__).resolve().parent.parent / "imc" / "sio2" / "back_pulse.txt")
+                        default=Path(__file__).resolve().parent.parent / "imc" / "data" / "back_pulse.txt")
     parser.add_argument("--dt", type=float, default=0.001, help="time step [ns]")
     parser.add_argument("--end", type=float, default=3.0, help="end time [ns]")
     parser.add_argument("--n-mu", type=int, default=16, help="number of ordinates (even)")

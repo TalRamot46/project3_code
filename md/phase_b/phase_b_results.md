@@ -28,7 +28,7 @@ The pattern is the expected one. Where the medium is optically thick (gold), gra
 | Solver | Breakout (flux ≥ 0.01) | Peak |
 |---|---|---|
 | IMC via rad_hydro_sim | 1.475 ns | 0.955 at 1.975 ns |
-| standalone IMC (`imc.sio2.problem`) | 1.475 ns | 0.953 at 1.975 ns |
+| standalone IMC (`imc.problems.sio2`) | 1.475 ns | 0.953 at 1.975 ns |
 | S_N twin | 1.475 ns | 0.950 at 1.925 ns |
 | diffusion, Phase B flags | 1.425 ns | 1.006 at 1.875 ns |
 | diffusion, original | 1.525 ns | 1.184 at 1.775 ns |
@@ -99,7 +99,7 @@ uv run python -m rad_hydro_sim.verification.imc_vs_diffusion --cases test1 --no-
 
 What it does:
 
-- **Runs.** Each case is a loop over `simulate_rad_hydro` with the configurations stated above. The diffusion runs use `material_update="conservative", right_rad_bc="marshak_vacuum"`; the IMC runs use `radiation_solver="imc"` with seeds 1, 2, 3. For T1 it also runs the standalone IMC (`imc.sio2.problem.run_one`, seeds 1729, 2718, 3141) and the S_N twin (`sn.run_one`, 16 double-Gauss ordinates, dt = 1 ps).
+- **Runs.** Each case is a loop over `simulate_rad_hydro` with the configurations stated above. The diffusion runs use `material_update="conservative", right_rad_bc="marshak_vacuum"`; the IMC runs use `radiation_solver="imc"` with seeds 1, 2, 3. For T1 it also runs the standalone IMC (`imc.problems.sio2.run_one`, seeds 1729, 2718, 3141) and the S_N twin (`sn.run_one`, 16 double-Gauss ordinates, dt = 1 ps).
 - **Cache.** Every run is saved as an `.npz` in `results/imc_vs_diffusion/` (not tracked by git) and reused unless `--rerun` is given.
 - **Outputs.** It writes the PNGs and `report.md`, which contains the breakout/peak table of §2 and the front/temperature tables of §§3–4.
 - **T1 blocks.** The flux blocks are exact energy averages: the cumulative outflow, interpolated at the 0.05 ns block edges, divided by the block width.

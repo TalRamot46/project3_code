@@ -1,6 +1,6 @@
 # `src/imc/core/`: the generic gray IMC solver
 
-This folder holds the solver that came out of the SiO₂ script (`src/imc/sio2/`), stripped of everything specific to that problem. It solves the gray, 1-D slab Fleck & Cummings (F&C) equations on any nonuniform mesh, in any consistent units, for any power-law material. The math behind each step is in `md/theory/imc_mc_derivation.md`; this file explains the code.
+This folder holds the solver that came out of the original SiO₂ script (archived in `src/imc/archive/sio2_original/`), stripped of everything specific to that problem. It solves the gray, 1-D slab Fleck & Cummings (F&C) equations on any nonuniform mesh, in any consistent units, for any power-law material. The math behind each step is in `md/theory/imc_mc_derivation.md`; this file explains the code.
 
 ## 1. Layout
 
@@ -15,7 +15,7 @@ This folder holds the solver that came out of the SiO₂ script (`src/imc/sio2/`
 | `tallies.py` | `StepTallies` and `EnergyLedger`: what a step measured, and the energy checks |
 | `stepper.py` | `imc_step`: one complete time step, built from all of the above |
 
-Problem drivers live outside this folder: `src/imc/sio2/problem.py` (the SiO₂ slab) and `src/imc/problems/{linear_step,zero_d}.py` (verification problems).
+Problem drivers live outside this folder, in `src/imc/problems/`: `sio2.py` (the SiO₂ slab), `linear_step.py` and `zero_d.py` (verification problems). Input tables are in `src/imc/data/`.
 
 ## 2. Conventions used everywhere
 
@@ -24,7 +24,7 @@ Problem drivers live outside this folder: `src/imc/sio2/problem.py` (the SiO₂ 
   - `PowerLawMaterial.from_case` uses CGS with the same `c` and `a` as `rad_hydro_sim`.
   - The 0-D problem uses Wollaber's scaled units with a = c = 1.
 - **Energies are per unit transverse area** (slab geometry). A packet's weight `w` is energy per area. Energy *densities* (per volume) are weights divided by cell width.
-- **Every packet carries the index of its cell.** The kernel never searches for a packet's cell, and a face crossing places the packet exactly on the face. The frozen script instead nudged packets by 10⁻¹⁰ Δx.
+- **Every packet carries the index of its cell.** The kernel never searches for a packet's cell, and a face crossing places the packet exactly on the face. The original script instead nudged packets by 10⁻¹⁰ Δx.
 - **Random numbers come from two generators:** numpy's (bath times, initial radiation, combing) and numba's (emission positions, the random walk). They are seeded separately, so always seed both with `stepper.seed_all(seed)`.
 - **The left face is where the bath enters.** Each face is either vacuum (packets leave) or reflecting (μ → −μ).
 
@@ -87,11 +87,11 @@ Helpers: `energy()`, `energy_per_cell(n)`, `concatenate([...])`, `empty()`.
 
 ### `sources.py`
 
-- `allocate_emission(E, target)` gives each emitting cell at least one packet and shares out the rest by largest remainder. It is the frozen script's scheme, kept for the regression test; the advisor's smarter allocation is milestone M7a.
+- `allocate_emission(E, target)` gives each emitting cell at least one packet and shares out the rest by largest remainder. It is the original script's scheme, kept for the regression test; the advisor's smarter allocation is milestone M7a.
 - `emission_particles(edges, E, counts, t0, dt)` creates the emission packets. Position, μ and time are uniform; the weight is E_j / count_j (F&C 4.13, 4.16b, 4.19, 4.20, 4.23).
 - `BathSource(flux, energy_integral=None, n_sub=16)` describes the bath.
   - `step_energy(t0, t1)` integrates the incident flux over the step with 8-point Gauss–Legendre quadrature. Pass `energy_integral` instead when the flux is singular at t = 0, as in the paper's Test 1.
-  - `sample_times(t0, t1, n)` draws birth times with density proportional to the flux, averaged over `n_sub` sub-intervals. The frozen script drew them uniformly.
+  - `sample_times(t0, t1, n)` draws birth times with density proportional to the flux, averaged over `n_sub` sub-intervals. The original script drew them uniformly.
 - `bath_particles(edges, E_b, n, times)` creates the bath packets at the left face, with μ = √(1−r), which has density 2μ (F&C 4.21).
 - `uniform_radiation_particles(edges, E, per_cell, t0)` creates isotropic radiation, uniform in each cell. It is used as an initial condition.
 - `TabulatedDrive(path, time_scale, temperature_scale, T_pad)` reads a T_bath(t) table and interpolates it linearly.
@@ -154,7 +154,7 @@ print(state.T.max(), state.ledger.relative_error(stepper.total_energy(state, mes
 `uv run pytest tests/imc` runs 27 tests, one of them marked slow. Those that check the core directly:
 
 - `tests/imc/test_basics.py` checks:
-  - material, allocation and bath energy identical to the frozen script;
+  - material, allocation and bath energy identical to the archived original script;
   - EOS inversion with and without −aT⁴;
   - `from_case` against the rad_hydro formulas;
   - exponential attenuation, exact free streaming, a reflecting box;

@@ -167,10 +167,16 @@ def boundary_forces(a: np.ndarray, p: np.ndarray, q: np.ndarray, m_cells: np.nda
     return M[0] * a[0] + P[0], P[-1] - M[-1] * a[-1]
 
 
+def _momentum_pressure(state: RadHydroState) -> np.ndarray:
+    """The pressure the momentum update used: p, plus P_rad if it was coupled (M5b)."""
+    P_rad = getattr(state, "P_rad", None)
+    return state.p if P_rad is None else state.p + P_rad
+
+
 def boundary_work(state_old: RadHydroState, state_new: RadHydroState, dt: float) -> float:
     """Work done on the slab by the boundary pressures during the step."""
-    FL0, FR0 = boundary_forces(state_old.a, state_old.p, state_old.q, state_old.m_cells)
-    FL1, FR1 = boundary_forces(state_new.a, state_new.p, state_new.q, state_new.m_cells)
+    FL0, FR0 = boundary_forces(state_old.a, _momentum_pressure(state_old), state_old.q, state_old.m_cells)
+    FL1, FR1 = boundary_forces(state_new.a, _momentum_pressure(state_new), state_new.q, state_new.m_cells)
     u_bar = 0.5 * (state_old.u + state_new.u)
     return float(dt * (u_bar[0] * 0.5 * (FL0 + FL1) - u_bar[-1] * 0.5 * (FR0 + FR1)))
 
@@ -186,6 +192,7 @@ def update_nodes_compatible(
     t_old: float = 0.0,
     tol: float = 1e-13,
     max_iter: int = 100,
+    P_rad_new: np.ndarray | None = None,
 ) -> RadHydroState:
     """Close the step so that total energy is conserved to round-off.
 
@@ -199,16 +206,24 @@ def update_nodes_compatible(
     by parts).  e^{n+1} enters p^{n+1}, so it is found by fixed-point iteration
     (contraction ~ (c_s dt / dx)^2).  de_radiation is the radiation-matter
     exchange computed from e* (as in the original scheme).
+
+    P_rad_new (IMC plan M5b, rad_coupling="physical"): the radiation pressure
+    at t^{n+1}.  It is added to p in the momentum update only; the matter's
+    work uses p + q alone, and the caller charges the radiation's own work,
+    -dt Pbar_rad (ubar_{j+1} - ubar_j), to the radiation energy, so that total
+    energy is still conserved to round-off.  state_old.P_rad is the t^n value
+    (None means zero).  None (the default) is the original scheme.
     """
     if case.geom.alpha != 0:
         raise NotImplementedError("hydro_energy='compatible' is implemented for planar geometry only.")
     m = state_star.m_cells
     P_old = state_old.p + state_old.q
+    P_rad = 0.0 if P_rad_new is None else P_rad_new
     e_new = state_star.e_material + de_radiation           # the standard scheme's value
     for _ in range(max_iter):
         p_new = pressure_ideal_gas(state_star.rho, e_new, gamma=case.r + 1)
-        p_left_bc, p_right_bc = _get_boundary_pressures(bc_left, bc_right, p_new, t_old + dt)
-        a_new = compute_acceleration_nodes(state_star.x, p_new, state_star.q, m, planar(),
+        p_left_bc, p_right_bc = _get_boundary_pressures(bc_left, bc_right, p_new + P_rad, t_old + dt)
+        a_new = compute_acceleration_nodes(state_star.x, p_new + P_rad, state_star.q, m, planar(),
                                            p_left=p_left_bc, p_right=p_right_bc)
         u_new = state_star.u + 0.5 * dt * a_new
         u_bar = 0.5 * (state_old.u + u_new)
@@ -223,11 +238,26 @@ def update_nodes_compatible(
 
     # Final state, consistent with the converged energy.
     p_new = pressure_ideal_gas(state_star.rho, e_new, gamma=case.r + 1)
-    p_left_bc, p_right_bc = _get_boundary_pressures(bc_left, bc_right, p_new, t_old + dt)
-    a_new = compute_acceleration_nodes(state_star.x, p_new, state_star.q, m, planar(),
+    p_left_bc, p_right_bc = _get_boundary_pressures(bc_left, bc_right, p_new + P_rad, t_old + dt)
+    a_new = compute_acceleration_nodes(state_star.x, p_new + P_rad, state_star.q, m, planar(),
                                        p_left=p_left_bc, p_right=p_right_bc)
     return RadHydroState(
         t=state_star.t, x=state_star.x, u=state_star.u + 0.5 * dt * a_new, a=a_new,
         V=state_star.V, rho=state_star.rho, e_material=e_new, p=p_new, q=state_star.q,
         m_cells=m, T_material=state_star.T_material, T_rad=state_star.T_rad, E_rad=state_star.E_rad,
+        P_rad=P_rad_new,
     )
+
+
+def radiation_work(state_old: RadHydroState, state_new: RadHydroState, dt: float) -> np.ndarray:
+    """-dt Pbar_rad,j (ubar_{j+1} - ubar_j): the radiation's p dV work per cell (M5b).
+
+    The compatible close moved the nodes with P_rad in the momentum update;
+    this is the energy that work took from (or, in compression, gave to) the
+    radiation of each cell, per unit area.  It is the discrete form of
+    d(E_r V) = -P_rad dV, i.e. of E_r V^(4/3) conserved for a gamma = 4/3 gas.
+    """
+    P_old = 0.0 if state_old.P_rad is None else state_old.P_rad
+    P_new = 0.0 if state_new.P_rad is None else state_new.P_rad
+    u_bar = 0.5 * (state_old.u + state_new.u)
+    return -dt * 0.5 * (P_old + P_new) * (u_bar[1:] - u_bar[:-1])

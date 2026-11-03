@@ -1,6 +1,6 @@
 # `src/imc/coupling/rad_hydro.py`: IMC inside rad_hydro_sim
 
-This module makes the IMC core (`src/imc/core/`, see `md/imc_code/imc_core.md`) a drop-in replacement for rad_hydro_sim's gray diffusion solver. It is milestone M4 of `md/plans/full_plan_imc_comparison.md`. The diffusion-side changes it relies on are in `md/phase_b/phase_b_diffusion_changes.md`; the results are in `md/phase_b/phase_b_results.md`.
+This module makes the IMC core (`src/imc/core/`, see `md/imc_code/imc_core.md`) a drop-in replacement for rad_hydro_sim's gray diffusion solver. It is milestone M4 of `md/plans/full_plan_imc_comparison.md` (radiation-only) and, since Phase C, M5/M5b (Lagrangian rad-hydro, §3). The diffusion-side changes it relies on are in `md/phase_b/phase_b_diffusion_changes.md` and `md/phase_c/phase_c_changes.md`; the results are in `md/phase_b/phase_b_results.md` and `md/phase_c/phase_c_results.md`.
 
 ```python
 from hydro_sim.problems.simulation_config import SimulationConfig
@@ -25,8 +25,8 @@ rad_hydro_sim calls the radiation solver once per step as `radiation_step(state,
 The solver object holds what diffusion doesn't need between steps: the census (the radiation packets alive at the end of a step), the energy ledger, and statistics.
 
 One step:
-1. Build the mesh from the state's node positions (`Mesh(state.x)`, planar).
-2. Get T from the state's material energy with `PowerLawMaterial.temperature`. This respects `subtract_radiation_energy`.
+1. Build the mesh from the state's node positions (`Mesh(state.x)`, planar). If the hydro moved it since the last step, carry the census with it (§3).
+2. Get T from the state's material energy with `PowerLawMaterial.temperature`. This respects `subtract_radiation_energy`. Open the step's energy ledger: matter + census now.
 3. Run `imc.core.stepper.imc_step`: emission from Tⁿ with the Fleck factor, the bath packets, the census, the random walk to t+Δt, and the material update u_m^{n+1} = u_m^n + (deposited − emitted)/Δx.
 4. Return:
    - T and e = u_m/ρ;
@@ -59,10 +59,25 @@ $$
 
 **Why a ramped dt.** rad_hydro_sim's default radiation dt control reacts to relative changes of E_rad and T_rad. IMC's E_rad is noisy, so the step size would follow the noise. With `dt_ramp_max` both solvers take exactly the same steps. That also makes the comparison like-for-like in its time discretization, since both use the same Fleck factor per step.
 
-## 3. What the IMC does not do (yet)
+## 3. Lagrangian rad-hydro (Phase C)
 
-- **Radiation-only, static mesh.** The full rad-hydro branch refuses `radiation_solver="imc"`. The Lagrangian coupling (census positions carried with the mesh, the energy convention under compression, radiation pressure) is Phase C, milestones M5 and M5b.
+With `scenario="full_rad_hydro"` the integrator calls the solver once per step on the mesh the hydro predictor has just moved (`md/phase_c/phase_c_changes.md` §2.1). Three things are added to the radiation-only step.
+
+- **The census moves with the mass.** `Mesh.carry` keeps each packet's cell, its relative position ξ in the cell, and its weight, so each cell's radiation energy E_rad·V rides through the hydro step unchanged. That is the manuscript's ∂(vE_r)/∂t, and the diffusion code's `rad_energy_per_mass=True`. The solver therefore refuses full rad-hydro without that flag, so the diffusion runs it is compared with follow the same convention.
+- **Per-step ledger.** Between radiation steps the matter also gains or loses p dV work, so the standalone IMC's run-long ledger does not apply. Each step is checked on its own: matter + census after = before + bath − leakage. The rad-hydro budget (`energy_diagnostics`) checks the whole step.
+- **Radiation pressure, optional.** With `rad_coupling="physical"` (M5b) the integrator adds P_rad = E_rad/3 to the momentum update, using the solver's track-length E_rad, and hands the resulting p dV work back to `IMCSolver.add_radiation_work`. That method scales each cell's census by 1 + W_j/C_j. Where the census of a cell is too small to carry the work (a factor beyond 1 ± 0.5, or no packets: thick cells), the work goes to that cell's matter instead, which conserves energy exactly either way. `meta["imc"]` reports the total work and the part rerouted.
+
+```python
+case = P.PRESET_TEST_CASES[P.PRESET_PAPER_TEST1]
+cfg = SimulationConfig(N=400, radiation_solver="imc", dt_ramp_max=2e-12, energy_diagnostics=True,
+                       material_update="conservative", right_rad_bc="marshak_vacuum",
+                       rad_energy_per_mass=True, hydro_energy="compatible")   # + rad_coupling="physical"
+```
+
+### What the IMC does not do (yet)
+
 - **Planar geometry only.**
+- **No radiation momentum beyond P_rad = E/3.** The Eddington factor 1/3, a bath with no momentum flux at the surface, and no O(v/c) mixed-frame terms; the A9 diagnostic shows Στv/c ≤ 3×10⁻² on the paper's tests, so the last are not needed (`md/phase_c/phase_c_changes.md` §2.5).
 - **A Marshak bath is required.** A Dirichlet surface temperature has no transport counterpart, so the solver refuses `bc_type="Dirichlet"`. The paper's transport setup uses the bath.
 
 ## 4. Census vs. track-length radiation energy
@@ -79,7 +94,8 @@ The **track-length estimate**, Σ (weight × time spent in the cell) / (Δt·Δx
 | T1 SiO₂ through rad_hydro_sim vs. standalone `imc.problems.sio2` (3 seeds each) | χ²/dof = 1.39, mean difference +0.09% after 1.5 ns |
 | T1 vs. the S_N twin (slow test) | mean difference +0.04%, rms 0.35% |
 | Bath energy closed form vs. adaptive quadrature, across the t = 0 singularity | 10⁻⁹ |
-| Refusals: hydro scenario, Dirichlet bath, χ > 1 | raise with an explanation |
+| Refusals: full rad-hydro without `rad_energy_per_mass`, Dirichlet bath, χ > 1 | raise with an explanation |
+| Phase C: `Mesh.carry`; hydro-only bit-identical with IMC selected; full rad-hydro budget, matched and physical (`tests/imc/test_rad_hydro_lagrangian.py`) | exact; exact; < 10⁻¹¹ (measured ~10⁻¹²) |
 
 Agreeing with the standalone SiO₂ IMC checks the whole chain at once: the CGS conversion of the material (the preset vs. the θ-unit script), the tabulated bath, the dt ramp, the coupling and the diagnostics.
 

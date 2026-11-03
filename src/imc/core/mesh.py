@@ -40,3 +40,15 @@ class Mesh:
 
     def masses(self, rho) -> np.ndarray:
         return np.asarray(rho, dtype=float) * self.widths
+
+    def carry(self, x, cell, new: "Mesh") -> np.ndarray:
+        """Positions moved with their cells onto `new` (Lagrangian mesh motion).
+
+        A packet keeps its cell j and its relative position xi = (x - x_j) / dx_j,
+        so x_new = x_j^new + xi dx_j^new.  Its weight is not touched: radiation
+        energy per unit mass is unchanged by the motion (manuscript d(vE_r)/dt).
+        """
+        if new.n_cells != self.n_cells:
+            raise ValueError("carry needs meshes with the same cells.")
+        xi = np.clip((x - self.edges[cell]) / self.widths[cell], 0.0, 1.0)
+        return new.edges[cell] + xi * new.widths[cell]

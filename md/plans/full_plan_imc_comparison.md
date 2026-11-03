@@ -150,6 +150,20 @@
 
 ## Phase C: hydro coupling, the critical path to the paper
 
+> **Status (2026-11-03): Phase C done** (M5, M5b, A9). Details in `md/phase_c/phase_c_changes.md` (every code change and decision) and `md/phase_c/phase_c_results.md` (comparisons).
+> - **M5:**
+>   - IMC runs in full rad-hydro. The census rides with the mesh (`Mesh.carry`: same cell, same ξ, same weight; this is the transport form of `rad_energy_per_mass`, which IMC therefore requires).
+>   - Per-step energy ledger. Hydro-only runs are bit-identical with IMC selected. New presets `PRESET_PAPER_TEST1`/`PRESET_PAPER_TEST2`, checked against the manuscript's constants.
+>   - `subtract_radiation_energy` is allowed with hydro; pressure p = rρe_m, a decision recorded in changes §2.3.
+> - **Gate (Tests 1–2, N = 1000):**
+>   - IMC vs. diffusion: heat front ≤ 0.9%, ablation pressure ≤ 1.2%.
+>   - Both vs. semi-analytic: heat front 0.8–2.6%, shock 0–4%.
+>   - A ~2% transport effect at the ablation surface remains (IMC delivers ~2% less energy; shock 1.5–2% behind).
+>   - Energy error: 10⁻¹³ (diffusion), 2–3×10⁻¹¹ (IMC). At N = 400 the same comparison holds to 1–4% (resolution-limited).
+> - **M5b:** `rad_coupling="physical"` (P_rad = E/3 plus its exactly conserved p dV work, in both solvers). It moves fronts and pressure by ≤ 0.1% on Tests 1–2, and energy stays conserved.
+> - **A9:** max v/c ≤ 8×10⁻⁴, Στv/c ≤ 1.3×10⁻²; mixed-frame terms are not needed.
+> - **Changed vs. the text below:** the census is not stored as (j, ξ); `x`, `cell` and the previous mesh determine ξ. The momentum part of A7 (P_rad) is implemented only with `hydro_energy="compatible"`.
+
 ### M5. Lagrangian rad-hydro with IMC (energy coupling, matching the paper's equations)
 
 - **Learn:**
@@ -280,3 +294,16 @@ Each item says which existing milestone it amends. Read this section together wi
 **Order of the additions.** M2a goes with Phase A. A3 goes with M4. A1 goes with M3. M5b goes with M5. M7a comes before the comb. MP runs alongside, from M4 on.
 
 **Not changed.** The scope (planar, gray), the milestone gates above, and the final comparison machine (M10). M10 gains one flag: `rad_coupling ∈ {"matched","physical"}`.
+
+---
+
+## Addendum B (2026-11-03): Phase C½, IMC vs. diffusion vs. Menahem on the paper's Tests 3–6 (new; everything above is unchanged)
+
+You asked for this after Phase C and before Phase D, as the most important step for the paper. The manuscript will have six tests: gold with ω = 0 and τ = 0 or 158/1285 (Tests 1–2, done in Phase C); gold with ω = +0.5 and ω = −0.5 (Tests 3–4); copper and aluminum (Tests 5–6).
+
+- **Build:** cases `test3_full` … `test6_full` in `verification/imc_vs_diffusion.py`, the same analysis as Tests 1–2 (profiles at 1, 1.5, 2 ns; m_f(t), m_s(t), p_f(t) and the energy delivered vs. Menahem's `AblationSolver`), plus the per-cell optical depth of the ablated layer, which says *why* diffusion does or does not agree.
+- **Gate:** for each test, IMC vs. diffusion vs. semi-analytic agree within statistics plus resolution, or the disagreement is explained (optical depth, resolution, boundary layer) with what could be done about it.
+- **Known costs before starting:**
+  - ω = +0.5 puts ρ ~ 10⁶ g/cm³ in a first cell 10⁻¹⁰ cm thick. The acoustic CFL forces dt ~ 10⁻¹⁵ s, about 2×10⁶ steps to 2 ns, for diffusion too. IMC needs reduced packet counts there.
+  - Copper has only 4 ablated cells at N = 100 on its 0.1 g/cm² domain, so it needs N ~ 1000.
+  - Aluminum's ablated layer contains cells with τ ≈ 0.05 (N = 100 diffusion), the first case where diffusion is expected to differ from transport.

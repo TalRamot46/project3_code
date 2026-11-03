@@ -40,6 +40,9 @@ PRESET_SUPERSONIC_INSTANTANEOUS_ANALYTIC = "supersonic_instantaneous_analytic"
 PRESET_SIO2_FOAM_RADIATION_ONLY = "sio2_foam_1mm_radiation_only"
 PRESET_PAPER_TEST1_RADIATION_ONLY = "paper_test1_radiation_only"
 PRESET_PAPER_TEST2_RADIATION_ONLY = "paper_test2_radiation_only"
+# Phase C (M5): the manuscript's Test 1 and Test 2 with full rad-hydro
+PRESET_PAPER_TEST1 = "paper_test1"
+PRESET_PAPER_TEST2 = "paper_test2"
 from rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 from hydro_sim.problems.simulation_config import (
     SIMULATION_CONFIGS,
@@ -857,6 +860,24 @@ PRESET_TEST_CASES[PRESET_PAPER_TEST2_RADIATION_ONLY] = replace(
     tau=158.0 / 1285.0,
     scenario="radiation_only",
     title=r"Paper Test 2 ($\tau=158/1285$), radiation only",
+)
+
+# M5: the manuscript's Test 1 and Test 2 (full rad-hydro, Marshak bath, chi = 1,
+# 2 ns).  Test 1 is PRESET_FIG_8_CONSTANT_TEMPERATURE_MARSHAK under the paper's
+# name; its material, drive and EOS were checked against the manuscript's
+# "Test cases" section (md/phase_c/phase_c_changes.md Sec. 3.4).  The cell count
+# is SimulationConfig.N (the paper uses 1000).  The domain, 2.5e-2 g/cm^2,
+# holds the shock at 2 ns: the analytic shock is at 2.08e-2 (Test 1) and
+# 1.74e-2 g/cm^2 (Test 2).
+PRESET_TEST_CASES[PRESET_PAPER_TEST1] = replace(
+    PRESET_TEST_CASES[PRESET_FIG_8_CONSTANT_TEMPERATURE_MARSHAK],
+    title=r"Paper Test 1 ($\tau=0$)",
+    times_for_png=np.array([1.0e-9, 1.5e-9, 2.0e-9]),
+)
+PRESET_TEST_CASES[PRESET_PAPER_TEST2] = replace(
+    PRESET_TEST_CASES[PRESET_PAPER_TEST1],
+    tau=158.0 / 1285.0,
+    title=r"Paper Test 2 ($\tau=158/1285$)",
 )
 
 

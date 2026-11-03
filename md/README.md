@@ -31,9 +31,17 @@ Figures: `imc_code/figures/`.
 
 Figures: `phase_b/figures/`.
 
+## `phase_c/`: Phase C of the plan (IMC in Lagrangian rad-hydro)
+| File | Contents |
+|---|---|
+| [phase_c_changes.md](phase_c/phase_c_changes.md) | **Every Phase C code change** (census carried with the mesh, per-step ledger, radiation pressure M5b, the A9 v/c diagnostic, the paper presets), the decisions taken, and findings left unchanged |
+| [phase_c_results.md](phase_c/phase_c_results.md) | IMC vs. diffusion vs. the semi-analytic solution on the paper's full rad-hydro Tests 1 and 2 |
+
+Figures: `phase_c/figures/`.
+
 ## Where to start
 - **New to the IMC:** `theory/imc_mc_derivation.md` §1, then `imc_code/imc_core.md`.
-- **Reviewing the diffusion code changes:** `phase_b/phase_b_diffusion_changes.md`.
+- **Reviewing the diffusion code changes:** `phase_b/phase_b_diffusion_changes.md`, then `phase_c/phase_c_changes.md`.
 - **What's next:** the latest status block in `plans/full_plan_imc_comparison.md`.
 
 When a later phase is added, give it its own folder (e.g. `phase_c/`), with a `figures/` subfolder next to its md files.

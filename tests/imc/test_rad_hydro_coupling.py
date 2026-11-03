@@ -58,7 +58,8 @@ def test_adapter_closes_both_energy_ledgers():
 
 
 def test_imc_refuses_what_it_does_not_model():
-    with pytest.raises(NotImplementedError):
+    # Full rad-hydro works since Phase C, but only with E_rad carried per unit mass.
+    with pytest.raises(ValueError, match="rad_energy_per_mass"):
         simulate_rad_hydro(replace(P.PRESET_TEST_CASES[P.PRESET_FIG_8_CONSTANT_TEMPERATURE_MARSHAK],
                                    t_sec_end=1e-12), _imc_config(N=20))
     with pytest.raises(NotImplementedError, match="incident bath"):

@@ -477,13 +477,15 @@ def simulate_rad_hydro(
 
     # Phase B: optional IMC radiation solver and energy budget.
     imc_solver = None
-    if getattr(simulation_config, "radiation_solver", "diffusion") == "imc":
+    if (getattr(simulation_config, "radiation_solver", "diffusion") == "imc"
+            and rad_hydro_case.scenario != "hydro_only"):    # hydro_only has no radiation to solve
         from imc.coupling.rad_hydro import IMCSolver
         imc_solver = IMCSolver(rad_hydro_case, simulation_config, state, bath_solver=solver)
     track_energy = getattr(simulation_config, "energy_diagnostics", False)
     imc_E_rad_track = []          # IMC track-length E_rad at each stored frame
     budget = {k: [] for k in ("t", "E_material", "E_kinetic", "E_radiation",
-                              "rad_in_left", "rad_out_right", "work_boundary")}
+                              "rad_in_left", "rad_out_right", "work_boundary",
+                              "max_v_over_c", "tau_v_over_c")}
     cumulative = {"rad_in_left": 0.0, "rad_out_right": 0.0, "work_boundary": 0.0}
 
     def record_budget():
@@ -493,6 +495,9 @@ def simulate_rad_hydro(
         budget["E_radiation"].append(float(np.sum(state.E_rad * state.V)))
         for key, value in cumulative.items():
             budget[key].append(value)
+        v_over_c, tau_v_over_c = relativistic_diagnostic(state, rad_hydro_case)
+        budget["max_v_over_c"].append(v_over_c)
+        budget["tau_v_over_c"].append(tau_v_over_c)
 
     # ---- history buffers ----
     times = []
@@ -616,6 +621,26 @@ def simulate_rad_hydro(
 
     return x_cells, state, meta, history
 
+
+
+def relativistic_diagnostic(state: RadHydroState, case: RadHydroCase, hot_fraction: float = 0.1):
+    """(max |u|/c, sum of tau_j |u_j|/c over the heated cells): plan item A9.
+
+    The O(v/c) terms that neither the manuscript nor the codes include matter
+    only in the dynamic-diffusion regime, tau v/c >~ 1 (Mihalas & Mihalas).
+    tau_j = rho kappa_R dx_j; the heated cells are those with T > hot_fraction
+    T_max (the ablated region and its front).  u_j is the cell-averaged node
+    velocity.
+    """
+    u_cell = 0.5 * np.abs(state.u[:-1] + state.u[1:])
+    v_over_c = float(np.max(np.abs(state.u))) / radiation_c
+    T = state.T_material
+    if T is None or not np.any(T > 0.0):
+        return v_over_c, 0.0
+    T_safe = np.maximum(T, 1.0)
+    tau = state.rho ** (1.0 + case.lambda_) / (case.g_Kelvin * T_safe**case.alpha) * np.diff(state.x)
+    hot = T > hot_fraction * T.max()
+    return v_over_c, float(np.sum(tau[hot] * u_cell[hot]) / radiation_c)
 
 
 def energy_budget_summary(budget: dict) -> dict:

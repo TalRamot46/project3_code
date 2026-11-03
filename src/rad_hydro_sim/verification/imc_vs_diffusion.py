@@ -1,17 +1,27 @@
-"""IMC vs. diffusion verification: runs, tables and figures (plan milestone M10, radiation-only part).
+"""IMC vs. diffusion verification: runs, tables and figures (plan milestone M10, Phases B and C).
 
-One command regenerates the Phase B results of md/phase_b/phase_b_results.md:
+One command regenerates the results of md/phase_b/phase_b_results.md and
+md/phase_c/phase_c_results.md:
 
     uv run python -m rad_hydro_sim.verification.imc_vs_diffusion
-    uv run python -m rad_hydro_sim.verification.imc_vs_diffusion --figures-dir md/phase_b/figures
+    uv run python -m rad_hydro_sim.verification.imc_vs_diffusion --cases t1 test1 test2 thin100 \
+        --figures-dir md/phase_b/figures
+    uv run python -m rad_hydro_sim.verification.imc_vs_diffusion --cases test1_full test2_full \
+        --figures-dir md/phase_c/figures
 
-Cases (all radiation-only, static mesh):
+Radiation-only cases (Phase B, static mesh):
   t1       SiO2 foam (PRESET_SIO2_FOAM_RADIATION_ONLY), 100 cells, 3 ns. Outgoing flux of
            diffusion (original and Phase B flags), IMC through rad_hydro_sim, the standalone
            IMC (imc.problems.sio2) and the S_N twin (src/sn/sn.py).
   test1    paper Test 1 (PRESET_PAPER_TEST1_RADIATION_ONLY), domain cut to 1e-2 g/cm^2, 400 cells.
   test2    paper Test 2 (PRESET_PAPER_TEST2_RADIATION_ONLY), same mesh.
   thin100  Test 1 with opacity / 100 (g x 100), full preset domain, 400 cells.
+
+Full rad-hydro cases (Phase C, Lagrangian mesh; M5 and M5b):
+  test1_full  paper Test 1 (PRESET_PAPER_TEST1), 400 cells, 2 ns: diffusion and IMC with the
+              matched coupling (the manuscript's equations), each also with rad_coupling=
+              "physical", against the semi-analytic AblationSolver.
+  test2_full  paper Test 2 (PRESET_PAPER_TEST2), same.
 
 Every run is cached as an .npz in --out (default results/imc_vs_diffusion) and reused unless
 --rerun is given, so the tables and figures can be redone without rerunning the physics.
@@ -58,7 +68,25 @@ GOLD_CASES = {
     "thin100": GoldCase("PRESET_PAPER_TEST1_RADIATION_ONLY", r"Test 1 setup, opacity $\div$100, radiation only",
                         g_scale=100.0),
 }
-ALL_CASES = ("t1", *GOLD_CASES)
+
+
+@dataclass(frozen=True)
+class HydroCase:
+    preset: str          # attribute name in presets_config
+    title: str
+    N: int = 400
+    dt_max: float = 2e-12
+    t_end: float = 2e-9
+
+
+HYDRO_CASES = {
+    "test1_full": HydroCase("PRESET_PAPER_TEST1", r"Test 1 ($\tau=0$)"),
+    "test2_full": HydroCase("PRESET_PAPER_TEST2", r"Test 2 ($\tau=158/1285$)"),
+}
+# Phase C configuration: the Phase B flags plus the two that full rad-hydro needs.
+HYDRO_MATCHED = dict(DIFFUSION_PHASE_B, rad_energy_per_mass=True, hydro_energy="compatible")
+HYDRO_SNAP_NS = (0.5, 1.0, 1.5, 2.0)
+ALL_CASES = ("t1", *GOLD_CASES, *HYDRO_CASES)
 
 
 def _cached(path: Path, rerun: bool) -> bool:
@@ -326,9 +354,275 @@ def plot_gold(out: Path, label: str, seeds, path: Path):
     plt.close(fig)
 
 
+# --------------------------------------------------------------------------- full rad-hydro: runs
+def _hydro_case(spec: HydroCase, t_end=None):
+    from rad_hydro_sim.problems import presets_config as P
+
+    return replace(P.PRESET_TEST_CASES[getattr(P, spec.preset)], t_sec_end=t_end or spec.t_end)
+
+
+def _fronts_of_frame(m, rho, p, rho0):
+    """(heat front, shock front, ablation pressure) of one profile, read off the density.
+
+    rho0 is each cell's initial density (an array: rho0 r^-omega for omega != 0).
+
+    The density is smooth in both solvers (IMC noise enters it only through the
+    pressure), unlike T.  Behind the ablation (heat) front the matter has expanded,
+    rho << rho0; ahead of it, between it and the shock, it is compressed, rho > rho0.
+    So the heat front is where rho first climbs back to rho0 from the surface, and
+    the shock is where the compression rho - rho0 falls through half its peak,
+    searching from the cold side.  Both are interpolated between cell centres; the
+    ablation pressure is p at the heat front.  (run_comparison's detect_front, the
+    steepest log-drop of T and p, locks onto the shock on coarse meshes.)
+    """
+    mc = m - 0.5 * np.diff(m, prepend=0.0)                    # cell-centre mass coordinates
+    excess = rho / rho0 - 1.0                                  # relative compression
+    up = np.flatnonzero(excess >= 0.0)
+    if not up.size or up[0] == 0:
+        return np.nan, np.nan, np.nan
+    j = up[0]
+    m_heat = float(np.interp(0.0, [excess[j - 1], excess[j]], [mc[j - 1], mc[j]]))
+    half = 0.5 * excess[j:].max()
+    k = j + int(np.flatnonzero(excess[j:] >= half)[-1])      # last cell above half the peak
+    m_shock = (float(np.interp(half, [excess[k + 1], excess[k]], [mc[k + 1], mc[k]]))
+               if k + 1 < rho.size else float(mc[k]))
+    return m_heat, m_shock, float(np.interp(m_heat, mc, p))
+
+
+def run_hydro(out: Path, label: str, seeds, rerun=False, N=None, t_end=None, imc_only=False,
+              physical=True):
+    """Diffusion and IMC on one full rad-hydro case; matched coupling, optionally also physical.
+
+    Each run stores the profiles at HYDRO_SNAP_NS, the front / ablation-pressure series of
+    every stored frame, the energy budget (with the A9 v/c diagnostic) and the per-cell
+    optical depth at the snapshots.
+    """
+    spec = HYDRO_CASES[label]
+    case = _hydro_case(spec, t_end)
+    snaps = np.array([s for s in HYDRO_SNAP_NS if s * 1e-9 <= case.t_sec_end * (1 + 1e-9)]) * 1e-9
+    common = dict(N=N or spec.N, store_every=20, show_plot=False, energy_diagnostics=True,
+                  dt_ramp_max=spec.dt_max, **HYDRO_MATCHED)
+
+    def run(tag, **opts):
+        path = out / f"{label}_{tag}.npz"
+        if _cached(path, rerun):
+            return
+        _, meta, hist, wall = _simulate(case, **common, **opts)
+        idx = [int(np.argmin(np.abs(hist.t - ts))) for ts in snaps]
+        fronts = np.array([_fronts_of_frame(hist.m[k], hist.rho[k], hist.p[k], hist.rho[0])
+                           for k in range(hist.t.size)])
+        b = meta["energy_budget"]
+        keep = np.unique(np.linspace(0, len(b["t"]) - 1, 2000).astype(int))   # thin the per-step budget
+        E_track = meta["imc_E_rad_track"][idx] if "imc_E_rad_track" in meta else hist.E_rad[idx]
+        k_t = (hist.rho[idx] ** (1.0 + case.lambda_)
+               / (case.g_Kelvin * np.maximum(hist.T_material[idx], 1.0) ** case.alpha))
+        dx = np.diff(hist.m[idx], axis=1, prepend=0.0) / hist.rho[idx]        # cell mass / rho
+        imc = meta.get("imc", {})
+        np.savez(path, t=hist.t[idx], m=hist.m[idx], x=hist.x[idx], rho=hist.rho[idx], p=hist.p[idx],
+                 u=hist.u[idx], T_material=hist.T_material[idx], E_rad=hist.E_rad[idx], E_rad_track=E_track,
+                 tau_cell=k_t * dx,
+                 series_t=hist.t, m_heat=fronts[:, 0], m_shock=fronts[:, 1], p_abl=fronts[:, 2],
+                 **{f"budget_{k}": np.asarray(b[k])[keep] for k in
+                    ("t", "rad_in_left", "rad_out_right", "E_material", "E_kinetic", "E_radiation",
+                     "relative_error", "max_v_over_c", "tau_v_over_c")},
+                 max_energy_error=_max_abs(b["relative_error"]), wall=wall,
+                 radiation_work_total=imc.get("radiation_work_total", np.nan),
+                 radiation_work_to_matter=imc.get("radiation_work_to_matter", np.nan))
+        print(f"  ran     {path.name:32s} wall {wall:7.1f} s  steps {len(b['t']) - 1}  "
+              f"max|energy err| {_max_abs(b['relative_error']):.1e}", flush=True)
+
+    if not imc_only:
+        run("diffusion")
+        if physical:
+            run("diffusion_physical", rad_coupling="physical")
+    for s in seeds:
+        run(f"imc{s}", radiation_solver="imc", imc_seed=s)
+    if physical and seeds:
+        run(f"imc_physical{seeds[0]}", radiation_solver="imc", imc_seed=seeds[0], rad_coupling="physical")
+
+
+def _max_abs(a) -> float:
+    return float(np.max(np.abs(np.asarray(a, dtype=float))))
+
+
+# --------------------------------------------------------------------------- full rad-hydro: analysis
+def hydro_analytic(label: str, times_sec, N: int):
+    """Semi-analytic AblationSolver: profiles at times_sec, plus front / pressure laws and the inflow.
+
+    The total energy of the self-similar solution is the energy that crossed the surface,
+    int_0^t s(0, t') dt' with s = 2 sigma_SB (T_bath^4 - T_s^4) (manuscript Sec. "The energy in
+    the system"); for T_bath^4 = T_s^4 (1 + B t^p) it is 2 sigma_SB T_s^4 B t^(p+1) / (p+1)
+    (tau = 0; for tau != 0 the exponents add 4 tau).
+    """
+    from types import SimpleNamespace
+
+    from menahem_new.ablation_solver_og import AblationSolver
+    from rad_hydro_sim.simulation.radiation_step import a_Kelvin, c
+    from rad_hydro_sim.verification.menahem_comparison import (
+        _ablation_kwargs_from_case, run_menahem_piecewise_reference)
+
+    case = _hydro_case(HYDRO_CASES[label])
+    ref = run_menahem_piecewise_reference(case, SimpleNamespace(N=N), np.asarray(times_sec))
+    solver = AblationSolver(**_ablation_kwargs_from_case(case))
+    hs = solver.heat_solver
+    p0s = hs.Pf * hs.A**hs.a3 * hs.B**hs.b3
+    Tb, tau, B, p = float(hs.Tb), float(hs.tau), float(hs.bath_B), float(hs.bath_power)
+    k = 4.0 * tau + p + 1.0
+    sigma = 0.25 * a_Kelvin * c
+
+    def laws(t):
+        t = np.asarray(t, dtype=float)
+        return dict(m_heat=np.array([float(hs.ablated_mass(time=ti)) for ti in t]),
+                    m_shock=np.array([float(np.ravel(solver.shock_solver.shocked_mass(time=ti))[0]) for ti in t]),
+                    p_abl=p0s * t**hs.c3,
+                    energy_in=2.0 * sigma * Tb**4 * B * t**k / k)
+    return ref, laws
+
+
+def _load_hydro(out: Path, label: str, seeds):
+    runs = {"diffusion": np.load(out / f"{label}_diffusion.npz")}
+    runs["imc"] = [np.load(out / f"{label}_imc{s}.npz") for s in seeds]
+    for tag in ("diffusion_physical", f"imc_physical{seeds[0]}"):
+        if (out / f"{label}_{tag}.npz").exists():
+            runs[tag.rstrip("0123456789")] = np.load(out / f"{label}_{tag}.npz")
+    return runs
+
+
+def _series_at(run, key, t):
+    return np.interp(t, run["series_t"], run[key])
+
+
+def _mean_se(values):
+    v = np.asarray(values, dtype=float)
+    se = v.std(0, ddof=1) / np.sqrt(v.shape[0]) if v.shape[0] > 1 else np.zeros(v.shape[1:])
+    return v.mean(0), se
+
+
+def hydro_table(out: Path, label: str, seeds) -> str:
+    runs = _load_hydro(out, label, seeds)
+    d, imc = runs["diffusion"], runs["imc"]
+    t = np.array([1.0, 1.5, 2.0]) * 1e-9
+    _, laws = hydro_analytic(label, t, 10)
+    ana = laws(t)
+    lines = ["| quantity | t [ns] | analytic | diffusion | IMC (mean +/- s.e.) | IMC vs diffusion |", "|---|---|---|---|---|---|"]
+    names = {"m_heat": "heat front [g/cm^2]", "m_shock": "shock front [g/cm^2]", "p_abl": "ablation pressure [Mbar]"}
+    for key, name in names.items():
+        scale = 1e-12 if key == "p_abl" else 1.0
+        for k, tk in enumerate(t):
+            vd = _series_at(d, key, tk) * scale
+            vi, se = _mean_se([_series_at(r, key, tk) * scale for r in imc])
+            lines.append(f"| {name} | {tk * 1e9:.1f} | {ana[key][k] * scale:.4g} | {vd:.4g} ({vd / (ana[key][k] * scale) - 1:+.1%}) "
+                         f"| {vi:.4g} +/- {se:.2g} ({vi / (ana[key][k] * scale) - 1:+.1%}) | {vi / vd - 1:+.1%} |")
+    # energy that entered, at 2 ns
+    tb = imc[0]["budget_t"]
+    e_ana = laws(np.array([d["budget_t"][-1]]))["energy_in"][0]
+    e_d = d["budget_rad_in_left"][-1]
+    e_i, se = _mean_se([[r["budget_rad_in_left"][-1]] for r in imc])
+    lines.append(f"| energy in [erg/cm^2] | {tb[-1] * 1e9:.1f} | {e_ana:.4g} | {e_d:.4g} ({e_d / e_ana - 1:+.1%}) "
+                 f"| {e_i[0]:.4g} +/- {se[0]:.2g} ({e_i[0] / e_ana - 1:+.1%}) | {e_i[0] / e_d - 1:+.1%} |")
+    lines.append("")
+    lines.append(f"max |energy error|: diffusion {float(d['max_energy_error']):.1e}, "
+                 f"IMC {max(float(r['max_energy_error']) for r in imc):.1e}")
+    for tag, base in (("diffusion_physical", d), ("imc_physical", imc[0])):
+        if tag in runs:
+            ph = runs[tag]
+            diffs = ", ".join(f"{name.split(' [')[0]} {_series_at(ph, key, t[-1]) / _series_at(base, key, t[-1]) - 1:+.2%}"
+                              for key, name in names.items())
+            extra = ""
+            if np.isfinite(float(ph["radiation_work_total"])):
+                extra = (f"; radiation work charged to the matter: "
+                         f"{float(ph['radiation_work_to_matter']) / max(float(ph['radiation_work_total']), 1e-300):.1%}")
+            lines.append(f"{tag} vs matched at 2 ns: {diffs}; max |energy error| "
+                         f"{float(ph['max_energy_error']):.1e}{extra}")
+    vc = max(_max_abs(r["budget_max_v_over_c"]) for r in [d, *imc])
+    tvc = max(_max_abs(r["budget_tau_v_over_c"]) for r in [d, *imc])
+    lines.append(f"A9: max v/c = {vc:.1e}, max sum(tau v/c) over the heated cells = {tvc:.1e}")
+    return "\n".join(lines)
+
+
+def plot_hydro_profiles(out: Path, label: str, seeds, path: Path):
+    """rho, p, u, T against mass at 1, 1.5, 2 ns: analytic, diffusion and IMC (band = ±2 s.e.)."""
+    import matplotlib.pyplot as plt
+
+    runs = _load_hydro(out, label, seeds)
+    d, imc = runs["diffusion"], runs["imc"]
+    snaps = [k for k, t in enumerate(d["t"]) if t * 1e9 >= 0.99]
+    ref, _ = hydro_analytic(label, d["t"][snaps], d["m"].shape[1])
+    fields = [("rho", r"$\rho$ [g/cm$^3$]", 1.0, "rho"), ("p", "p [Mbar]", 1e-12, "p"),
+              ("u", "u [km/s]", 1e-5, "u"), ("T_material", "T [HeV]", 1.0 / K_PER_HEV, "T")]
+    fig, axes = plt.subplots(2, 2, figsize=(11, 8))
+    colors = ["tab:green", "tab:orange", "tab:purple"]
+    for (key, ylab, scale, ref_key), ax in zip(fields, axes.ravel()):
+        for col, (j, k) in zip(colors, enumerate(snaps)):
+            t_ns = d["t"][k] * 1e9
+            r_scale = 1.0 if ref_key == "T" else scale
+            ax.plot(ref.m[j], np.asarray(getattr(ref, ref_key)[j]) * r_scale, "--", color="0.45", lw=1.0)
+            ax.plot(d["m"][k], d[key][k] * scale, "k-", lw=0.9)
+            mean, se = _mean_se([r[key][k] * scale for r in imc])
+            ax.fill_between(imc[0]["m"][k], mean - 2 * se, mean + 2 * se, color=col, alpha=0.3)
+            ax.plot(imc[0]["m"][k], mean, color=col, lw=1.3, label=f"IMC, t = {t_ns:.1f} ns")
+        ax.plot([], [], "k-", lw=0.9, label="diffusion")
+        ax.plot([], [], "--", color="0.45", lw=1.0, label="semi-analytic")
+        ax.set_xscale("log")
+        ax.set_xlim(1e-5, d["m"][snaps[-1]][-1])
+        if key in ("rho", "p"):
+            ax.set_yscale("log")
+        ax.set_xlabel(r"mass coordinate m [g/cm$^2$]")
+        ax.set_ylabel(ylab)
+        ax.grid(alpha=0.3)
+    axes[0, 0].legend(fontsize=7)
+    fig.suptitle(f"{HYDRO_CASES[label].title}, full rad-hydro: IMC ({len(imc)} seeds) vs diffusion vs semi-analytic",
+                 fontsize=10)
+    fig.tight_layout()
+    fig.savefig(path, dpi=160)
+    plt.close(fig)
+
+
+def plot_hydro_fronts(out: Path, label: str, seeds, path: Path):
+    """Heat and shock fronts, ablation pressure and energy in, against the self-similar laws."""
+    import matplotlib.pyplot as plt
+
+    runs = _load_hydro(out, label, seeds)
+    d, imc = runs["diffusion"], runs["imc"]
+    t = np.geomspace(0.05e-9, d["series_t"][-1], 60)
+    _, laws = hydro_analytic(label, t[:1], 10)
+    ana = laws(t)
+    fig, axes = plt.subplots(2, 2, figsize=(11, 7.5))
+    panels = [("m_heat", r"heat front $m_f$ [g/cm$^2$]", 1.0), ("m_shock", r"shock front $m_s$ [g/cm$^2$]", 1.0),
+              ("p_abl", "ablation pressure [Mbar]", 1e-12), ("energy_in", r"energy in [erg/cm$^2$]", 1.0)]
+    for (key, ylab, scale), ax in zip(panels, axes.ravel()):
+        ax.plot(t * 1e9, ana[key] * scale, "--", color="0.45", lw=1.2, label="semi-analytic")
+        if key == "energy_in":
+            ax.plot(d["budget_t"] * 1e9, d["budget_rad_in_left"], "k-", lw=0.9, label="diffusion")
+            for r, col in zip(imc, ["tab:blue", "tab:cyan", "tab:purple"]):
+                ax.plot(r["budget_t"] * 1e9, r["budget_rad_in_left"], color=col, lw=0.9, alpha=0.8)
+        else:
+            ax.plot(d["series_t"] * 1e9, d[key] * scale, "k-", lw=0.9, label="diffusion")
+            for r, col in zip(imc, ["tab:blue", "tab:cyan", "tab:purple"]):
+                ax.plot(r["series_t"] * 1e9, r[key] * scale, color=col, lw=0.9, alpha=0.8)
+        for tag, ls in (("diffusion_physical", ":"), ("imc_physical", "-.")):
+            if tag in runs and key != "energy_in":
+                ax.plot(runs[tag]["series_t"] * 1e9, runs[tag][key] * scale, ls, color="tab:red", lw=1.0,
+                        label=f"{tag.replace('_', ', ')} coupling")
+        ax.plot([], [], color="tab:blue", lw=0.9, label=f"IMC ({len(imc)} seeds)")
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_xlim(0.05, d["series_t"][-1] * 1e9)
+        ax.set_xlabel("time [ns]")
+        ax.set_ylabel(ylab)
+        ax.grid(alpha=0.3, which="both")
+    axes[0, 0].legend(fontsize=7)
+    fig.suptitle(f"{HYDRO_CASES[label].title}, full rad-hydro: fronts and energy vs the self-similar laws", fontsize=10)
+    fig.tight_layout()
+    fig.savefig(path, dpi=160)
+    plt.close(fig)
+
+
 # --------------------------------------------------------------------------- driver
 FIGURE_NAMES = {"t1": "t1_sio2_outgoing_flux.png", "test1": "test1_profiles.png",
-                "test2": "test2_profiles.png", "thin100": "thin100_profiles.png"}
+                "test2": "test2_profiles.png", "thin100": "thin100_profiles.png",
+                "test1_full": ("test1_full_profiles.png", "test1_full_fronts.png"),
+                "test2_full": ("test2_full_profiles.png", "test2_full_fronts.png")}
 
 
 def main(argv=None):
@@ -344,6 +638,11 @@ def main(argv=None):
     p.add_argument("--t1-end", type=float, default=T1_END_NS, help="T1 end time [ns] (smoke tests)")
     p.add_argument("--gold-n", type=int, default=None, help="override the gold cell count (smoke tests)")
     p.add_argument("--gold-t-end", type=float, default=None, help="override the gold end time [s] (smoke tests)")
+    p.add_argument("--hydro-n", type=int, default=None, help="override the full rad-hydro cell count")
+    p.add_argument("--hydro-t-end", type=float, default=None, help="override the full rad-hydro end time [s]")
+    p.add_argument("--imc-only", action="store_true",
+                   help="full rad-hydro: only the IMC runs (to run seeds in parallel processes)")
+    p.add_argument("--no-physical", action="store_true", help="full rad-hydro: skip rad_coupling='physical'")
     args = p.parse_args(argv)
 
     seeds = [int(s) for s in args.seeds.split(",") if s.strip()]
@@ -361,6 +660,15 @@ def main(argv=None):
             res = t1_blocks(out, seeds, args.t1_end)
             plot_t1(res, fig_dir / FIGURE_NAMES[case], args.t1_end)
             report.append(f"## T1: SiO2 foam\n\n{t1_table(res)}\n")
+        elif case in HYDRO_CASES:
+            if not args.no_runs:
+                run_hydro(out, case, seeds, args.rerun, args.hydro_n, args.hydro_t_end,
+                          imc_only=args.imc_only, physical=not args.no_physical)
+            if args.imc_only:
+                continue
+            plot_hydro_profiles(out, case, seeds, fig_dir / FIGURE_NAMES[case][0])
+            plot_hydro_fronts(out, case, seeds, fig_dir / FIGURE_NAMES[case][1])
+            report.append(f"## {case}\n\n{hydro_table(out, case, seeds)}\n")
         else:
             if not args.no_runs:
                 run_gold(out, case, seeds, args.rerun, args.gold_n, args.gold_t_end)

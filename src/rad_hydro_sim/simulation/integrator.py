@@ -2,11 +2,13 @@ from hydro_sim.core.geometry import Geometry
 from rad_hydro_sim.simulation.hydro_steps import (
     boundary_work,
     get_e_star_from_hydro,
+    radiation_work,
     update_nodes_compatible,
     update_nodes_from_pressure,
 )
 from rad_hydro_sim.problems.RadHydroCase import RadHydroCase
 from rad_hydro_sim.simulation.radiation_step import (
+    a_Kelvin,
     calculate_temperature_from_specific_energy,
     material_temperature,
     radiation_step,
@@ -59,18 +61,25 @@ def step_rad_hydro(
     right_rad_bc, rad_energy_per_mass, hydro_energy.  If `diagnostics` is a
     dict it receives the step's boundary fluxes and boundary work for the
     energy budget (md/phase_b/phase_b_diffusion_changes.md).
+
+    Phase C (md/phase_c/phase_c_changes.md): radiation_solver="imc" also in
+    full_rad_hydro, and rad_coupling="physical" adds the radiation pressure
+    P_rad = E_rad/3 to the momentum update and charges its p dV work to the
+    radiation (needs hydro_energy="compatible" and rad_energy_per_mass).
     """
     hydro_energy = getattr(config, "hydro_energy", "standard")
     if hydro_energy not in ("standard", "compatible"):
         raise ValueError(f"hydro_energy must be 'standard' or 'compatible', got {hydro_energy!r}")
-    if getattr(config, "subtract_radiation_energy", False) and case.scenario != "radiation_only":
-        raise NotImplementedError(
-            "subtract_radiation_energy is implemented for radiation_only; how the hydro "
-            "pressure should treat the subtracted aT^4 is decided in Phase C (M5)."
-        )
-    if getattr(config, "radiation_solver", "diffusion") == "imc" and case.scenario != "radiation_only":
-        raise NotImplementedError("radiation_solver='imc' is implemented for radiation_only (M4); "
-                                  "hydro coupling is Phase C (M5).")
+    subtract = getattr(config, "subtract_radiation_energy", False)
+    if subtract and case.scenario == "hydro_only":
+        raise NotImplementedError("subtract_radiation_energy needs radiation (radiation_only or full_rad_hydro).")
+    rad_coupling = getattr(config, "rad_coupling", "matched")
+    if rad_coupling not in ("matched", "physical"):
+        raise ValueError(f"rad_coupling must be 'matched' or 'physical', got {rad_coupling!r}")
+    physical = rad_coupling == "physical" and case.scenario == "full_rad_hydro"
+    if physical and not (hydro_energy == "compatible" and getattr(config, "rad_energy_per_mass", False)):
+        raise ValueError("rad_coupling='physical' needs hydro_energy='compatible' and rad_energy_per_mass=True: "
+                         "the radiation's p dV work is the compatible scheme's, applied to E_rad per unit mass.")
     rad_diag = {} if diagnostics is not None else None
 
     # Subsonic ablation: p=0 at m=0 (ablated matter expands into vacuum).
@@ -144,11 +153,34 @@ def step_rad_hydro(
         new_T_material, new_e_material, new_T_rad, new_E_rad, new_F_rad, LHS = _radiate(
             state_star, dt, case, config, T_left, imc_solver, rad_diag)
         if hydro_energy == "compatible":
+            P_rad_new = None
+            if physical:
+                # A7: P_rad = E_rad / 3.  IMC uses its track-length (step-averaged)
+                # E_rad, far less noisy than the census snapshot.
+                E_for_P = imc_solver.E_rad_track if imc_solver is not None else new_E_rad
+                P_rad_new = np.maximum(E_for_P, 0.0) / 3.0
             new_state = update_nodes_compatible(
                 state, state_star, case, new_e_material - state_star.e_material, dt,
-                bc_left, bc_right, t_old=state.t)
-            new_T_material = material_temperature(
-                new_state.rho * new_state.e_material, new_state.rho, False)
+                bc_left, bc_right, t_old=state.t, P_rad_new=P_rad_new)
+            if physical:
+                work = radiation_work(state, new_state, dt)
+                if imc_solver is not None:
+                    new_E_rad, to_matter = imc_solver.add_radiation_work(work)
+                    new_state.e_material = new_state.e_material + to_matter / new_state.m_cells
+                else:
+                    new_E_rad = new_E_rad + work / new_state.V
+                    if np.any(new_E_rad < 0.0):
+                        raise RuntimeError("Radiation p dV work made E_rad negative; reduce dt.")
+                new_T_rad = (np.maximum(new_E_rad, 0.0) / a_Kelvin) ** 0.25
+            if imc_solver is not None:
+                # material_temperature reads radiation_step's module-level material
+                # parameters, which only the diffusion solve sets; the IMC's
+                # material is bound to this case.
+                new_T_material = imc_solver.material.temperature(
+                    new_state.rho * new_state.e_material, new_state.rho)
+            else:
+                new_T_material = material_temperature(
+                    new_state.rho * new_state.e_material, new_state.rho, subtract)
         else:
             new_state = update_nodes_from_pressure(state_star, case, new_e_material, dt, bc_left, bc_right, t_old=state.t)
         new_state.T_material = new_T_material

@@ -110,9 +110,10 @@ def test_subtracted_initial_energy_and_budget():
                              subtract_radiation_energy=True) < 1e-10
 
 
-def test_subtract_is_refused_with_hydro():
+def test_subtract_is_refused_without_radiation():
+    # Phase C allows it in full_rad_hydro (tests/imc/test_rad_hydro_lagrangian.py).
     with pytest.raises(NotImplementedError):
-        _run(P.PRESET_FIG_8_CONSTANT_TEMPERATURE_MARSHAK, 1e-12, N=20, subtract_radiation_energy=True)
+        _run(P.CONSTANT_TEMPERATURE_OMEGA_0_5_HYDRO_ONLY, 1e-12, N=20, subtract_radiation_energy=True)
 
 
 def test_phase_b_options_need_the_time_dependent_gray_mode():

@@ -20,6 +20,8 @@ class RadHydroState(HydroState):
     T_rad: np.ndarray      # cells  (radiation temperature, K)
     E_rad: np.ndarray  # cells  (radiation energy density, erg/cm^3)
     F_rad: np.ndarray = None  # nodes  (radiation flux, erg/cm^2/s)
+    P_rad: np.ndarray = None  # cells  (radiation pressure in the momentum equation; only
+                              #         with rad_coupling="physical", IMC plan M5b)
 
     def _replace(self, **changes):
         """Utility method to create a new instance with some fields updated."""

@@ -1,4 +1,4 @@
-"""IMC as a drop-in radiation solver for rad_hydro_sim (plan milestone M4).
+"""IMC as a drop-in radiation solver for rad_hydro_sim (plan milestones M4, M5, M5b).
 
 rad_hydro_sim calls `radiation_step(state, dt, case, T_left)` once per step;
 `IMCSolver.step` has the same signature and return tuple
@@ -7,7 +7,7 @@ rad_hydro_sim calls `radiation_step(state, dt, case, T_left)` once per step;
 
 so the integrator can switch solvers with SimulationConfig.radiation_solver.
 The solver keeps what diffusion does not need: the census (radiation packets)
-and the energy ledger.  It is created by simulate_rad_hydro.
+and the energy ledgers.  It is created by simulate_rad_hydro.
 
 Conventions, matching the diffusion code and the manuscript's transport setup:
   * CGS units with rad_hydro_sim's c and a (PowerLawMaterial.from_case);
@@ -19,7 +19,13 @@ Conventions, matching the diffusion code and the manuscript's transport setup:
   * F: net energy current at faces 0..N-1 averaged over the step (diffusion's
     index convention, face 0 = the bath face).
 
-Radiation-only for now (static mesh); the Lagrangian coupling is Phase C (M5).
+Lagrangian coupling (M5, md/imc_code/imc_coupling.md Sec. 3): between two
+radiation steps the hydro moves the mesh.  Each census packet keeps its cell,
+its relative position in it (Mesh.carry) and its weight, so the radiation
+energy per unit mass is unchanged by the motion: the transport counterpart of
+the diffusion code's rad_energy_per_mass=True.  With rad_coupling="physical"
+(M5b) the integrator also adds the radiation-pressure work to the census
+(add_radiation_work).
 """
 from __future__ import annotations
 
@@ -28,6 +34,8 @@ import numpy as np
 from imc.core import sources, stepper
 from imc.core.material import PowerLawMaterial
 from imc.core.mesh import Mesh
+from imc.core.particles import Particles
+from imc.core.tallies import EnergyLedger
 
 
 def power_law_bath(bath_solver, a: float, c: float) -> sources.BathSource:
@@ -72,12 +80,17 @@ class IMCSolver:
     def __init__(self, case, config, state, bath_solver=None, census_per_cell: int = 4):
         if case.geom.alpha != 0:
             raise NotImplementedError("The IMC coupling is planar only.")
-        if case.scenario != "radiation_only":
-            raise NotImplementedError("The IMC coupling is radiation_only for now (M4).")
+        if case.scenario not in ("radiation_only", "full_rad_hydro"):
+            raise NotImplementedError(f"The IMC coupling has no radiation to solve in {case.scenario!r}.")
         if case.bc_type not in ("Marshak", "Marshak_Menahem"):
             raise NotImplementedError(
                 "IMC needs an incident bath (bc_type='Marshak'); a Dirichlet surface "
                 "temperature has no transport counterpart.")
+        if case.scenario == "full_rad_hydro" and not getattr(config, "rad_energy_per_mass", False):
+            raise ValueError(
+                "IMC carries the census with the mass (radiation energy per unit mass is "
+                "unchanged by the hydro step); set rad_energy_per_mass=True so that diffusion, "
+                "which it is compared with, does the same.")
         self.material = PowerLawMaterial.from_case(
             case, subtract_radiation=getattr(config, "subtract_radiation_energy", False), T_floor=1.0)
         self.settings = stepper.IMCSettings(
@@ -94,24 +107,35 @@ class IMCSolver:
             raise ValueError("bc_type='Marshak' needs the SubsonicHeatWave bath solver or case.bath_table.")
 
         stepper.seed_all(config.imc_seed)
-        mesh = Mesh(state.x)
-        census = sources.uniform_radiation_particles(mesh.edges, state.E_rad, census_per_cell, state.t)
+        self.mesh = Mesh(state.x)
+        census = sources.uniform_radiation_particles(self.mesh.edges, state.E_rad, census_per_cell, state.t)
         T0 = self.material.temperature(state.rho * state.e_material, state.rho)
-        self.state = stepper.initial_state(T0, mesh, state.rho, self.material, census=census, t0=state.t)
+        self.state = stepper.initial_state(T0, self.mesh, state.rho, self.material, census=census, t0=state.t)
         self.steps = 0
         self.particles = 0
         self.collisions = 0
         self.capped = 0
         self.max_cell_residual = 0.0
         self.max_ledger_error = 0.0
+        self.work_total = 0.0          # sum of |radiation-pressure work| (M5b)
+        self.work_to_matter = 0.0      # ... the part the census could not carry
         self.E_rad_track = np.asarray(state.E_rad, dtype=float).copy()
 
     def step(self, state, dt, case, T_left, diagnostics=None):
         """One radiation step; same signature and return tuple as radiation_step."""
         mesh = Mesh(state.x)
+        census = self.state.census
+        if not np.array_equal(mesh.edges, self.mesh.edges):
+            # The hydro moved the mesh since the last step: carry the census with it.
+            census = Particles(self.mesh.carry(census.x, census.cell, mesh),
+                               census.mu, census.w, census.t, census.cell)
+        self.mesh = mesh
         rho = state.rho
         T = self.material.temperature(rho * state.e_material, rho)
-        imc_state = stepper.IMCState(T, self.state.census, state.t, self.state.ledger)
+        imc_state = stepper.IMCState(T, census, state.t)
+        # Per-step ledger: with hydro the matter energy also changes between
+        # radiation steps (p dV work), so a run-long ledger would not close.
+        imc_state.ledger = EnergyLedger(initial=stepper.total_energy(imc_state, mesh, rho, self.material))
         new, tl = stepper.imc_step(imc_state, mesh, rho, self.material, dt, self.bath, self.settings)
         self.state = new
 
@@ -140,6 +164,30 @@ class IMCSolver:
             diagnostics["F_right"] = tl.escaped_right / dt
         return new.T, e_material, T_rad, E_rad, F, 0.0
 
+    def add_radiation_work(self, work: np.ndarray, max_fraction: float = 0.5):
+        """Add the radiation-pressure work of the hydro step to the census (M5b).
+
+        work[j] (energy per area) is -dt Pbar_rad,j (ubar_{j+1} - ubar_j), the
+        discrete -P_rad dV of cell j.  The census of cell j is scaled by
+        1 + work_j / C_j.  Where that would change the cell's census by more
+        than max_fraction, or the cell has none (thick cells, where packets
+        live much less than dt), large weights would be needed; the work then
+        goes to the matter instead, which in such a cell is in equilibrium
+        with the radiation within the step anyway.  Total energy is conserved
+        either way.  Returns (E_rad, work charged to the matter per cell).
+        """
+        census = self.state.census
+        n = self.mesh.n_cells
+        C = census.energy_per_cell(n)
+        ok = (C > 0.0) & (np.abs(work) <= max_fraction * C)
+        factor = np.where(ok, 1.0 + work / np.where(C > 0.0, C, 1.0), 1.0)
+        self.state.census = Particles(census.x, census.mu, census.w * factor[census.cell],
+                                      census.t, census.cell)
+        to_matter = np.where(ok, 0.0, work)
+        self.work_total += float(np.abs(work).sum())
+        self.work_to_matter += float(np.abs(to_matter).sum())
+        return self.state.census.energy_per_cell(n) / self.mesh.widths, to_matter
+
     def summary(self) -> dict:
         return {
             "steps": self.steps,
@@ -148,4 +196,6 @@ class IMCSolver:
             "capped_histories": self.capped,
             "max_relative_cell_residual": self.max_cell_residual,
             "max_ledger_error": self.max_ledger_error,
+            "radiation_work_total": self.work_total,
+            "radiation_work_to_matter": self.work_to_matter,
         }

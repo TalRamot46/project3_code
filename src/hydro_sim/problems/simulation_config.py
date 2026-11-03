@@ -117,12 +117,21 @@ class SimulationConfig:
     # by 1.1 per step up to this cap (s); CFL still applies with hydro.  Gives
     # identical dt sequences to the diffusion and IMC solvers.
     dt_ramp_max: Optional[float] = None
-    # Radiation solver: "diffusion" (original) or "imc" (src/imc, radiation_only).
+    # Radiation solver: "diffusion" (original) or "imc" (src/imc; radiation_only
+    # and, since Phase C, full_rad_hydro).
     radiation_solver: str = "diffusion"
     imc_n_emission: int = 20000      # target emission packets per step
     imc_n_bath: int = 20000          # bath packets per step
     imc_max_census: int = 200000     # comb trigger
     imc_seed: int = 1
+
+    # --- IMC plan, Phase C (md/phase_c/phase_c_changes.md). ---
+    # Radiation-hydro coupling in full_rad_hydro: "matched" (the manuscript's
+    # equations: no radiation pressure, E_rad carried per unit mass) or
+    # "physical" (plan item A7: P_rad = E_rad/3 in the momentum update and its
+    # p dV work on the radiation; needs hydro_energy="compatible" and
+    # rad_energy_per_mass=True).
+    rad_coupling: str = "matched"
 
     def with_output_paths(self, case_name: str) -> "SimulationConfig":
         """

@@ -132,6 +132,16 @@ class SimulationConfig:
     # p dV work on the radiation; needs hydro_energy="compatible" and
     # rad_energy_per_mass=True).
     rad_coupling: str = "matched"
+    # The Marshak bath of the self-similar cases: "paper" (the manuscript's
+    # relation T_bath(t), exact only if radiation and matter are in equilibrium
+    # at the surface) or "calibrated" (that relation times the case's
+    # bath_correction table c(t), made so the simulated surface temperature
+    # follows the T_s(t) the semi-analytic solution imposes), or "calibrated_flux"
+    # (a table made so the net energy flux into the slab follows the solution's s(0, t)).
+    bath_drive: str = "paper"
+    # Lagrangian mesh: "default" (make_nodes: uniform for omega = 0, graded for
+    # omega != 0) or "uniform_mass" (every cell the same initial mass; planar).
+    mesh: str = "default"
 
     def with_output_paths(self, case_name: str) -> "SimulationConfig":
         """

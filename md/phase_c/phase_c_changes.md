@@ -163,3 +163,48 @@ The analysis compares them with Menahem's `AblationSolver` (profiles, and the cl
 ```bash
 uv run pytest tests/imc tests/test_phase_b_diffusion.py
 ```
+
+---
+
+## 6. Phase C½ additions (Tests 3–6; plan Addendum B)
+
+Everything below is opt-in as well; the defaults are the Phase C code. Results: `md/phase_c/phase_c_tests3to6_results.md`. Why the semi-analytic solution differs: `md/phase_c/why_the_solver_differs.md`.
+
+| # | Where | What | Switch (default = Phase C) |
+|---|---|---|---|
+| 12 | `iterator.initialize_problem` | mesh with equal initial cell masses for ρ₀x^(−ω), planar | `SimulationConfig.mesh="default"` / `"uniform_mass"` |
+| 13 | `iterator.compute_boundary_temperatures`, `bath_correction*`; `imc.coupling.rad_hydro.power_law_bath(factor=)` | the self-similar bath times a calibration table c(t) | `SimulationConfig.bath_drive="paper"` / `"calibrated"` / `"calibrated_flux"` |
+| 14 | `RadHydroCase.bath_correction`; `presets_config` | where each paper test's table lives (`src/rad_hydro_sim/data/bath_correction/<key>.txt`, `…_flux.txt`) | read only with a calibrated `bath_drive` |
+| 15 | `verification/imc_vs_diffusion.py` | Tests 3–6 (`test3_full` … `test6_full`); `--bath`, `--calibrate-bath`, `--calibrate-target`; temperature-based heat front; the opacity and bath-comparison figures; profiles in the style of the ICTT figures | new options and cases |
+
+### 6.1 The bath calibration (options (a) and (c))
+
+`bath_drive="paper"` (option (c), the default) is the manuscript's Marshak relation T_bath(t). A calibrated drive multiplies it by a factor c(t) read from a two-column table (t in ns, c), interpolated in log t and held constant outside the table. The same factor goes to the diffusion bath (`compute_boundary_temperatures`) and to the IMC bath (`power_law_bath`), where it multiplies the exact closed-form step energy by c⁴ at mid-step. So both solvers keep identical drives.
+
+`calibrate_bath(label, target)` makes the table by iterating diffusion runs on a log time grid, from 0.2 ns to t_end:
+- `target="temperature"` (`bath_drive="calibrated"`) matches the matter's surface temperature to T_s(t);
+- `target="flux"` (`bath_drive="calibrated_flux"`) matches the net energy flux into the slab to the solution's s(0, t) = 2σ_SB T_b⁴ B t^(4τ+p).
+
+Why there are two targets, and why the flux is the right one for copper and aluminum, is in `why_the_solver_differs.md` §2.
+
+Bugs found and fixed on the way:
+- The table reader was cached by path alone, so successive iterations, which rewrite one file, kept reading the first table. It is now cached by path and modification time (`test_bath_table_is_reread_after_a_rewrite`).
+- With a time grid starting at 0.02 ns the iteration could not converge: there the heated layer is thinner than the first cell. It now starts at 0.2 ns.
+
+### 6.2 The uniform-mass mesh
+
+x_i = ((1 − ω) m_i / ρ₀)^(1/(1−ω)) with m_i uniform. For ω = −0.5 the default graded mesh (`make_nonuniform_nodes` with `refine_by_mass`) put 628 of 1397 cells in the first 10⁻⁵ g/cm² and 0.06 mg/cm² cells across the shock. The uniform mesh gives 0.0073 mg/cm² everywhere at N = 1000, and is 20× cheaper (the default's first cells were 10⁻¹⁰ cm thick). Test: `test_uniform_mass_mesh_gives_equal_cell_masses`.
+
+### 6.3 Analysis
+
+- **The heat front** is the first point from the surface where T < 0.3 T_s (`fronts_of_profile`). Tables recompute it from the stored profiles at 1, 1.5 and 2 ns (`front_values`), so every run is analyzed with the same definition.
+- **The optical depth reported** is that of the hot plasma, T > T_s/2 (`layer_optical_depth`). The sum over the whole layer behind the front is dominated by the cold, dense front cells and changes with the mesh (gold: 43 at N = 400, 13 at N = 1000); the hot-plasma value does not (8.9, 9.0).
+
+### 6.4 Tests
+
+`tests/imc/test_paper_tests_options.py`, 7 tests:
+- the uniform-mass mesh, and that the default mesh is unchanged;
+- the `bath_drive` switch and its refusals;
+- the table re-read after a rewrite;
+- the IMC bath factor (c⁴ on the step energy and on the flux);
+- the front detector on a synthetic profile.

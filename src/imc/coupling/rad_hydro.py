@@ -38,11 +38,15 @@ from imc.core.particles import Particles
 from imc.core.tallies import EnergyLedger
 
 
-def power_law_bath(bath_solver, a: float, c: float) -> sources.BathSource:
+def power_law_bath(bath_solver, a: float, c: float, factor=None) -> sources.BathSource:
     """The self-similar Marshak bath T(t) = Tb t^tau (1 + B t^p)^(1/4), integrated exactly.
 
     T^4 = Tb^4 t^(4 tau) (1 + B t^p), so the step energy has a closed form even
     where the flux is singular at t = 0 (the paper's Test 1: p = -79/192).
+
+    factor: optional calibration c(t) (bath_drive="calibrated"), T -> c(t) T.  It
+    varies slowly, so the step energy is the closed form times c^4 at mid-step
+    (error O(dt^2 c''), next to the exact power-law singularity).
     """
     Tb, tau = float(bath_solver.Tb), float(bath_solver.tau)
     B, p = float(bath_solver.bath_B), float(bath_solver.bath_power)
@@ -52,11 +56,13 @@ def power_law_bath(bath_solver, a: float, c: float) -> sources.BathSource:
     sigma_sb = 0.25 * a * c
 
     def flux(t):
-        return sigma_sb * bath_solver.Tbath(time=np.maximum(t, 1e-300)) ** 4
+        T = bath_solver.Tbath(time=np.maximum(t, 1e-300))
+        return sigma_sb * (T if factor is None else T * factor(t)) ** 4
 
     def energy(t0, t1):
         prim = lambda t: t**k1 / k1 + B * t**k2 / k2          # noqa: E731
-        return sigma_sb * Tb**4 * (prim(t1) - prim(t0))
+        e = sigma_sb * Tb**4 * (prim(t1) - prim(t0))
+        return e if factor is None else e * float(factor(0.5 * (t0 + t1))) ** 4
 
     return sources.BathSource(flux, energy_integral=energy)
 
@@ -77,7 +83,7 @@ def tabulated_bath(path, a: float, c: float) -> sources.BathSource:
 class IMCSolver:
     """Persistent IMC radiation solver for one rad_hydro_sim run."""
 
-    def __init__(self, case, config, state, bath_solver=None, census_per_cell: int = 4):
+    def __init__(self, case, config, state, bath_solver=None, census_per_cell: int = 4, bath_factor=None):
         if case.geom.alpha != 0:
             raise NotImplementedError("The IMC coupling is planar only.")
         if case.scenario not in ("radiation_only", "full_rad_hydro"):
@@ -102,7 +108,7 @@ class IMCSolver:
         if getattr(case, "bath_table", None):
             self.bath = tabulated_bath(case.bath_table, a, c)
         elif bath_solver is not None:
-            self.bath = power_law_bath(bath_solver, a, c)
+            self.bath = power_law_bath(bath_solver, a, c, factor=bath_factor)
         else:
             raise ValueError("bc_type='Marshak' needs the SubsonicHeatWave bath solver or case.bath_table.")
 

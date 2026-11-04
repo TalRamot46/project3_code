@@ -880,6 +880,17 @@ PRESET_TEST_CASES[PRESET_PAPER_TEST2] = replace(
     title=r"Paper Test 2 ($\tau=158/1285$)",
 )
 
+# Phase C 1/2: where each paper test's bath calibration table lives.  It is read
+# only with SimulationConfig.bath_drive="calibrated" (option (a)); the default
+# "paper" keeps the manuscript's bath (option (c)).  Tables are made by
+# `python -m rad_hydro_sim.verification.imc_vs_diffusion --calibrate-bath --cases ...`.
+_BATH_CORRECTION_DIR = Path(__file__).resolve().parents[1] / "data" / "bath_correction"
+for _key in (PRESET_PAPER_TEST1, PRESET_PAPER_TEST2, CONSTANT_TEMPERATURE_OMEGA_0_5_FULL,
+             CONSTANT_TEMPERATURE_OMEGA_MINUS_0_5_FULL, PRESET_COPPER_CONST_TEMPERATURE,
+             PRESET_ALUMINUM_CONST_TEMPERATURE):
+    PRESET_TEST_CASES[_key] = replace(PRESET_TEST_CASES[_key],
+                                      bath_correction=str(_BATH_CORRECTION_DIR / f"{_key}.txt"))
+
 
 # ---------------------------------------------------------------------------
 # Default simulation config (slider + PNG at png_time_frac * t_end).

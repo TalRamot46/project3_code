@@ -307,3 +307,12 @@ You asked for this after Phase C and before Phase D, as the most important step 
   - ω = +0.5 puts ρ ~ 10⁶ g/cm³ in a first cell 10⁻¹⁰ cm thick. The acoustic CFL forces dt ~ 10⁻¹⁵ s, about 2×10⁶ steps to 2 ns, for diffusion too. IMC needs reduced packet counts there.
   - Copper has only 4 ablated cells at N = 100 on its 0.1 g/cm² domain, so it needs N ~ 1000.
   - Aluminum's ablated layer contains cells with τ ≈ 0.05 (N = 100 diffusion), the first case where diffusion is expected to differ from transport.
+
+> **Status of Addendum B (2026-11-03): Phase C½ done** (`md/phase_c/phase_c_tests3to6_results.md`, `md/phase_c/why_the_solver_differs.md`).
+> - **IMC vs. diffusion:** they agree in all six tests, in the order of the hot plasma's optical depth: Au (𝒯 = 8–10) ≤ 2.3%, Cu (3.2) ≤ 4.2%, Al (2.3) ≤ 5.3%.
+> - **The semi-analytic solution:**
+>   - It agrees within ~3% in Tests 1–3.
+>   - In Cu and Al it assumes a surface in equilibrium, which the runs contradict (T_rad/T_mat = 1.05–1.07). With the bath calibrated to its energy flux (`bath_drive="calibrated_flux"`), diffusion lies within ~4% of it.
+>   - In Test 4 (ω = −0.5) its rigid-front patching costs 6–14%. The hydro code reproduces the solver's own piston shock to 0.1%, so the codes are not the cause.
+> - **New options:** `mesh="uniform_mass"` (Test 4); `bath_drive` = `"paper"` (option c, default) / `"calibrated"` / `"calibrated_flux"` (option a).
+> - **Open, for you and Menahem:** the patching fix for ω < 0 (`why_the_solver_differs.md` §3.3), and the manuscript's wording on the LTE limit for Cu and Al.

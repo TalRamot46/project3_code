@@ -36,6 +36,8 @@ Figures: `phase_b/figures/`.
 |---|---|
 | [phase_c_changes.md](phase_c/phase_c_changes.md) | **Every Phase C code change** (census carried with the mesh, per-step ledger, radiation pressure M5b, the A9 v/c diagnostic, the paper presets), the decisions taken, and findings left unchanged |
 | [phase_c_results.md](phase_c/phase_c_results.md) | IMC vs. diffusion vs. the semi-analytic solution on the paper's full rad-hydro Tests 1 and 2 |
+| [phase_c_tests3to6_results.md](phase_c/phase_c_tests3to6_results.md) | Phase C½: the same comparison on all six paper tests (Au ω = 0, ±0.5; Cu; Al), which materials lose IMC–diffusion consistency, the bath options |
+| [why_the_solver_differs.md](phase_c/why_the_solver_differs.md) | Why the semi-analytic curve misses Tests 4–6: surface non-equilibrium (Cu, Al) and the rigid-front patching (Test 4), with the code walk-through and suggested fixes |
 
 Figures: `phase_c/figures/`.
 

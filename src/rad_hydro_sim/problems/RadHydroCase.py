@@ -102,6 +102,11 @@ class RadHydroCase(ABC):
     # from this table instead of the subsonic self-similar Marshak relation
     # (SubsonicHeatWave.Tbath), e.g. for the SiO2 benchmark of the IMC plan.
     bath_table: str | None = None
+    # Optional calibration of the self-similar Marshak bath (Phase C 1/2): a
+    # two-column file of t [ns] and a factor c(t), so T_bath = c(t) T_bath,law(t).
+    # It is used only with SimulationConfig.bath_drive="calibrated"; made by
+    # verification.imc_vs_diffusion --calibrate-bath (md/phase_c/phase_c_results.md).
+    bath_correction: str | None = None
 
 
     @property

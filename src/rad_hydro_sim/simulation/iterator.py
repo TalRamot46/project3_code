@@ -44,10 +44,25 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
     # Spatial grid: refined near x=0 for omega != 0, uniform for omega == 0.
     # A driven ablation surface needs that refinement graded in mass rather
     # than in space; see RadHydroCase.has_ablation_surface.
-    x_nodes = make_nodes(
-        case.x_min, case.x_max, config.N, omega=omega, d=d_dim,
-        refine_by_mass=case.has_ablation_surface,
-    )
+    mesh = getattr(config, "mesh", "default")
+    if mesh == "uniform_mass":
+        # Phase C 1/2: every cell the same initial mass, for rho0 x^-omega (planar), as the
+        # omega = 0 cases already have.  The default refinement crowds the cells next to
+        # m = 0 (omega = -0.5: 628 of 1397 cells in the first 1e-5 g/cm^2, 0.06 mg/cm^2
+        # cells across the shock).
+        if geom.alpha != 0 or case.x_min != 0.0:
+            raise NotImplementedError("mesh='uniform_mass' is implemented for planar x_min = 0 only.")
+        m_total = case.rho0 * case.x_max ** (1.0 - omega) / (1.0 - omega)
+        m_nodes = np.linspace(0.0, m_total, config.N + 1)
+        x_nodes = ((1.0 - omega) * m_nodes / case.rho0) ** (1.0 / (1.0 - omega))
+        x_nodes[-1] = case.x_max
+    elif mesh == "default":
+        x_nodes = make_nodes(
+            case.x_min, case.x_max, config.N, omega=omega, d=d_dim,
+            refine_by_mass=case.has_ablation_surface,
+        )
+    else:
+        raise ValueError(f"mesh must be 'default' or 'uniform_mass', got {mesh!r}")
     x_cells = 0.5 * (x_nodes[:-1] + x_nodes[1:])
 
     # Cell masses of rho(r) = rho0 r^-omega, integrated over the true volume
@@ -397,13 +412,69 @@ def tabulated_bath_temperature(path: str, t):
     return np.interp(t, t_tab, T_tab)
 
 
+@lru_cache(maxsize=None)
+def _bath_correction_table(path: str, mtime: float) -> Tuple[np.ndarray, np.ndarray]:
+    """(log10 t [s], factor) of a two-column bath correction file in ns.
+
+    Cached by path and modification time: the calibration rewrites the same file each iteration.
+    """
+    data = np.loadtxt(path)
+    order = np.argsort(data[:, 0])
+    return np.log10(data[order, 0] * 1e-9), data[order, 1]
+
+
+def bath_correction(path: str):
+    """The calibration factor c(t) of a bath correction file, t in seconds (Phase C 1/2).
+
+    Interpolated linearly in log t, and held constant before the first and after
+    the last entry.
+    """
+    log_t, factor = _bath_correction_table(str(path), os.path.getmtime(path))
+
+    def c(t):
+        return np.interp(np.log10(np.maximum(t, 1e-30)), log_t, factor)
+    return c
+
+
+def bath_correction_for(case: RadHydroCase, config: SimulationConfig):
+    """c(t) for config.bath_drive, or None for "paper" (the manuscript's bath).
+
+    "calibrated" reads case.bath_correction (the surface temperature follows T_s(t));
+    "calibrated_flux" reads the same path with the suffix _flux (the net energy flux into
+    the slab follows the semi-analytic s(0, t)).
+    """
+    drive = getattr(config, "bath_drive", "paper")
+    if drive == "paper":
+        return None
+    if drive not in ("calibrated", "calibrated_flux"):
+        raise ValueError(f"bath_drive must be 'paper', 'calibrated' or 'calibrated_flux', got {drive!r}")
+    path = bath_correction_path(case, drive)
+    if path is None or not os.path.exists(path):
+        raise ValueError(f"bath_drive={drive!r} but case {case.title!r} has no table at {path}; make one with "
+                         "`python -m rad_hydro_sim.verification.imc_vs_diffusion --calibrate-bath --cases <case>`.")
+    return bath_correction(path)
+
+
+def bath_correction_path(case: RadHydroCase, drive: str):
+    """The calibration table of a case for bath_drive "calibrated" or "calibrated_flux"."""
+    base = getattr(case, "bath_correction", None)
+    if base is None:
+        return None
+    if drive == "calibrated_flux":
+        root, ext = os.path.splitext(base)
+        return root + "_flux" + ext
+    return base
+
+
 def compute_boundary_temperatures(
     state: RadHydroState,
     rad_hydro_case: RadHydroCase,
     solver: Optional[SubsonicHeatWave] = None,
+    correction=None,
 ) -> Tuple[float, float, float, RadHydroCase]:
     """Compute boundary conditions and surface temperatures for current simulation step.
 
+    correction: optional c(t) multiplying the self-similar bath (bath_drive="calibrated").
     Returns (T_left, T_surface, T_bath, updated_rad_hydro_case).
     """
     T_bath = 0.0
@@ -418,6 +489,8 @@ def compute_boundary_temperatures(
     elif rad_hydro_case.scenario != "hydro_only" and rad_hydro_case.bc_type in ["Marshak", "Marshak_Menahem"]:
         assert solver is not None, "SubsonicHeatWave solver required for Marshak BC"
         T_bath = solver.Tbath(time=state.t + 1e-20)
+        if correction is not None:
+            T_bath = T_bath * float(correction(state.t + 1e-20))
         T_surface = (state.E_rad[0] / a_Kelvin) ** 0.25
         T_left = T_bath
         updated_case = replace(rad_hydro_case, T_left=T_left)
@@ -475,12 +548,16 @@ def simulate_rad_hydro(
 
     case_name = rad_hydro_case.title or rad_hydro_case.scenario or "rad_hydro_run"
 
+    # Phase C 1/2: the manuscript's bath, or that bath times a calibration c(t).
+    bath_factor = bath_correction_for(rad_hydro_case, simulation_config) if solver is not None else None
+
     # Phase B: optional IMC radiation solver and energy budget.
     imc_solver = None
     if (getattr(simulation_config, "radiation_solver", "diffusion") == "imc"
             and rad_hydro_case.scenario != "hydro_only"):    # hydro_only has no radiation to solve
         from imc.coupling.rad_hydro import IMCSolver
-        imc_solver = IMCSolver(rad_hydro_case, simulation_config, state, bath_solver=solver)
+        imc_solver = IMCSolver(rad_hydro_case, simulation_config, state, bath_solver=solver,
+                               bath_factor=bath_factor)
     track_energy = getattr(simulation_config, "energy_diagnostics", False)
     imc_E_rad_track = []          # IMC track-length E_rad at each stored frame
     budget = {k: [] for k in ("t", "E_material", "E_kinetic", "E_radiation",
@@ -560,7 +637,7 @@ def simulate_rad_hydro(
             dt_prev = dt
 
             T_left, T_surface, T_bath, current_case = compute_boundary_temperatures(
-                state=state, rad_hydro_case=rad_hydro_case, solver=solver
+                state=state, rad_hydro_case=rad_hydro_case, solver=solver, correction=bath_factor
             )
 
             step_diag = {} if track_energy else None

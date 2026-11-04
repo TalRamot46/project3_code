@@ -97,6 +97,17 @@ HYDRO_CASES = {
     # near its 2e5 cap (0.6 s per step on the 1397-cell mesh), so the census is combed at 3e4.
     # The default graded mesh left 0.06 mg/cm^2 cells across the shock (the shock 13% behind the
     # solver's); a uniform-mass mesh of 1000 cells gives 0.0073 mg/cm^2 everywhere.
+    # Test 3 on a finer mesh: the default graded mesh's shocked region has cells of 1-12 mg/cm^2
+    # (the shock at 200-290 mg/cm^2); capping cells at 0.3 mg/cm^2 refines it ~30x while keeping
+    # the 1e-13 cm surface cells that set dt, so the step count is unchanged.
+    "test3_fine": HydroCase("CONSTANT_TEMPERATURE_OMEGA_0_5_FULL", r"Test 3 (Au, $\omega=+0.5$), fine mesh", N=25,
+                            store_every=2000, log_mass_axis=True, config=(("max_cell_mass", 3e-4),),
+                            imc=(("imc_n_emission", 2000), ("imc_n_bath", 2000), ("imc_max_census", 20000))),
+    # The same with the smooth cap (cell mass growing by <= 5% per cell); "test3_fine" was made with
+    # an earlier cap that split cells into whole pieces and left density spikes at the mass jumps.
+    "test3_smooth": HydroCase("CONSTANT_TEMPERATURE_OMEGA_0_5_FULL", r"Test 3 (Au, $\omega=+0.5$), fine mesh",
+                              N=25, store_every=2000, log_mass_axis=True, config=(("max_cell_mass", 3e-4),),
+                              imc=(("imc_n_emission", 2000), ("imc_n_bath", 2000), ("imc_max_census", 20000))),
     "test4_full": HydroCase("CONSTANT_TEMPERATURE_OMEGA_MINUS_0_5_FULL", r"Test 4 (Au, $\omega=-0.5$)", N=1000,
                             store_every=40, config=(("mesh", "uniform_mass"),),
                             imc=(("imc_n_emission", 5000), ("imc_n_bath", 5000), ("imc_max_census", 30000))),
@@ -979,7 +990,9 @@ FIGURE_NAMES = {"t1": "t1_sio2_outgoing_flux.png", "test1": "test1_profiles.png"
                 "test2": "test2_profiles.png", "thin100": "thin100_profiles.png",
                 "test1_full": ("test1_full_profiles.png", "test1_full_fronts.png"),
                 "test2_full": ("test2_full_profiles.png", "test2_full_fronts.png"),
-                **{f"test{k}_full": (f"test{k}_full_profiles.png", f"test{k}_full_fronts.png") for k in range(3, 7)}}
+                **{f"test{k}_full": (f"test{k}_full_profiles.png", f"test{k}_full_fronts.png") for k in range(3, 7)},
+                "test3_fine": ("test3_fine_profiles.png", "test3_fine_fronts.png"),
+                "test3_smooth": ("test3_full_profiles.png", "test3_smooth_fronts.png")}
 
 
 def main(argv=None):

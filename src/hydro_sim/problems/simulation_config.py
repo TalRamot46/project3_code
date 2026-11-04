@@ -142,6 +142,9 @@ class SimulationConfig:
     # Lagrangian mesh: "default" (make_nodes: uniform for omega = 0, graded for
     # omega != 0) or "uniform_mass" (every cell the same initial mass; planar).
     mesh: str = "default"
+    # If set (g/cm^2), every cell heavier than this is split into equal-mass cells
+    # (planar).  Refines the heavy cells only; the thinnest cells, which set dt, stay.
+    max_cell_mass: Optional[float] = None
 
     def with_output_paths(self, case_name: str) -> "SimulationConfig":
         """

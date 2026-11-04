@@ -63,6 +63,9 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
         )
     else:
         raise ValueError(f"mesh must be 'default' or 'uniform_mass', got {mesh!r}")
+    max_cell_mass = getattr(config, "max_cell_mass", None)
+    if max_cell_mass is not None:
+        x_nodes = _cap_cell_masses(x_nodes, case, geom, float(max_cell_mass))
     x_cells = 0.5 * (x_nodes[:-1] + x_nodes[1:])
 
     # Cell masses of rho(r) = rho0 r^-omega, integrated over the true volume
@@ -153,6 +156,39 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
         T_material=T_material, T_rad=T_rad, E_rad=E_rad,
     )
     return state
+
+
+def _cap_cell_masses(x_nodes: np.ndarray, case: RadHydroCase, geom, max_cell_mass: float,
+                     growth: float = 1.05) -> np.ndarray:
+    """Limit the cell mass to max_cell_mass, with a smooth transition (Phase C 1/2).
+
+    The given mesh is kept up to its first cell heavier than the cap: those cells, the default
+    graded mesh's thin surface cells, set the time step.  From there the cell mass grows by at
+    most `growth` per cell up to the cap, and stays at the cap to the end; the last cell takes
+    the remainder.  (Splitting each heavy cell into whole pieces instead left neighbours with
+    mass ratios down to 0.5, and the Lagrangian hydro made density spikes at those jumps.)
+    Planar, x_min = 0, rho0 x^-omega: m(x) = rho0 x^(1-omega) / (1-omega).
+    """
+    if geom.alpha != 0 or case.x_min != 0.0:
+        raise NotImplementedError("max_cell_mass is implemented for planar x_min = 0 only.")
+    w = case.omega
+    m_nodes = case.rho0 * x_nodes ** (1.0 - w) / (1.0 - w)
+    dm = np.diff(m_nodes)
+    heavy = np.flatnonzero(dm > max_cell_mass)
+    if not heavy.size:
+        return x_nodes
+    j = int(heavy[0])                          # keep nodes 0..j
+    m_new, size, m_total = list(m_nodes[:j + 1]), dm[j - 1] if j > 0 else max_cell_mass, m_nodes[-1]
+    while m_new[-1] < m_total:
+        size = min(max_cell_mass, size * growth)
+        m_new.append(min(m_new[-1] + size, m_total))
+    if len(m_new) > j + 2 and m_new[-1] - m_new[-2] < 0.5 * size:
+        m_new.pop(-2)                          # merge a sliver into the last cell
+    m_new = np.asarray(m_new)
+    x_new = ((1.0 - w) * m_new / case.rho0) ** (1.0 / (1.0 - w))
+    x_new[: j + 1] = x_nodes[: j + 1]
+    x_new[-1] = x_nodes[-1]
+    return x_new
 
 
 def _subsonic_heat_wave_cache_key(case: RadHydroCase) -> tuple[float, float, float, float, float, float, float, float, float]:

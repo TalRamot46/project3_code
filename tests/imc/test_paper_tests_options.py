@@ -30,6 +30,17 @@ def test_uniform_mass_mesh_gives_equal_cell_masses(key):
     assert state.x[0] == 0.0 and state.x[-1] == case.x_max
 
 
+def test_max_cell_mass_splits_only_the_heavy_cells():
+    case = P.PRESET_TEST_CASES[P.CONSTANT_TEMPERATURE_OMEGA_0_5_FULL]
+    coarse = initialize_problem(case, SimulationConfig(N=25))
+    fine = initialize_problem(case, SimulationConfig(N=25, max_cell_mass=3e-4))
+    assert fine.m_cells.max() <= 3e-4 * (1 + 1e-9)
+    assert fine.m_cells.sum() == pytest.approx(coarse.m_cells.sum(), rel=1e-12)
+    # The light surface cells, which set the time step, are kept node for node.
+    light = int(np.argmax(coarse.m_cells > 3e-4))
+    np.testing.assert_array_equal(fine.x[:light + 1], coarse.x[:light + 1])
+
+
 def test_default_mesh_is_unchanged():
     default = initialize_problem(TEST4, SimulationConfig(N=50))
     explicit = initialize_problem(TEST4, SimulationConfig(N=50, mesh="default"))

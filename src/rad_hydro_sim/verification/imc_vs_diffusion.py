@@ -700,8 +700,13 @@ def optical_depth_line(run) -> str:
     return "optical depth of the hot plasma, T > T_s/2 (diffusion run): " + "; ".join(parts)
 
 
-def plot_hydro_profiles(out: Path, label: str, seeds, path: Path):
+def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, patched=()):
     """rho, p, u, T against mass at 1, 1.5, 2 ns, in the style of the ICTT figures.
+
+    ``solver``: an AblationSolver to reuse (building one takes ~20 min).  ``patched``: extra
+    semi-analytic curves, (legend label, object with solve(mass=, time=), plot kwargs); with
+    any given, the original AblationSolver is drawn gray dashed and these on top
+    (md/phase_c/patching_poc.md).
 
     Matches results/ictt/const_T/dimensional_verification/const_T_fully_patched_comparison.png
     (src/ictt29/full_fitting.py, plot_fully_patched_comparison): a 2x2 grid on a linear mass axis
@@ -719,8 +724,10 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path):
     runs = _load_hydro(out, label, seeds)
     d, imc = runs["diffusion"], runs["imc"]
     case = _hydro_case(HYDRO_CASES[label])
-    solver = AblationSolver(**_ablation_kwargs_from_case(case))
+    if solver is None:
+        solver = AblationSolver(**_ablation_kwargs_from_case(case))
     snaps = [k for k, t in enumerate(d["t"]) if t * 1e9 >= 0.99][-3:]
+    original = dict(color="black", lw=2.0) if not patched else dict(color="gray", lw=1.5, linestyle="--")
     sim_colors = ["royalblue", "darkorange", "crimson"]
     scales = {"rho": 1.0, "p": 1e-12, "u": 1e-5, "T_material": 1.0 / K_PER_HEV}
     ref_keys = {"rho": "density", "p": "pressure", "u": "velocity", "T_material": "temperature"}
@@ -739,7 +746,10 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path):
         for key, ax in panels.items():
             ref = np.asarray(exact[ref_keys[key]], dtype=float)
             ax.plot(m_sim * 1e3, d[key][k] * scales[key], "-", color=col, alpha=0.8)
-            ax.plot(mass * 1e3, ref * scales[key], "-", color="black", lw=2.0)
+            ax.plot(mass * 1e3, ref * scales[key], **original)
+            for _, obj, style in patched:
+                sol = obj.solve(mass=mass, time=t)
+                ax.plot(mass * 1e3, np.asarray(sol[ref_keys[key]], dtype=float) * scales[key], **style)
             if mean is not None:
                 ax.plot(imc[0]["m"][k] * 1e3, mean[key] * scales[key], "--", color="forestgreen", lw=1.8)
         fv = front_values(d, label, t)
@@ -773,10 +783,16 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path):
         ax.tick_params(labelsize=11)
     legend = [Line2D([0], [0], color=c, lw=2, label=f"Diffusion ({d['t'][k] * 1e9:.1f} ns)")
               for c, k in zip(sim_colors, snaps)]
-    legend += [Line2D([0], [0], color="black", lw=2, label="Analytic"),
-               Line2D([0], [0], color="forestgreen", lw=1.8, linestyle="--",
-                      label=f"IMC ({len(imc)} seed{'s' if len(imc) > 1 else ''})" if imc else "IMC (still running)")]
-    panels["rho"].legend(handles=legend, loc="upper left", fontsize=12)
+    legend += [Line2D([0], [0], label="Analytic (original patch)" if patched else "Analytic", **original)]
+    legend += [Line2D([0], [0], label=name, **style) for name, _, style in patched]
+    legend += [Line2D([0], [0], color="forestgreen", lw=1.8, linestyle="--",
+                      label=f"IMC ({len(imc)} seed{'s' if len(imc) > 1 else ''})" if imc
+                      else ("IMC (not run)" if patched else "IMC (still running)"))]
+    if patched:   # more curves: one row under the title, off the data
+        fig.legend(handles=legend, loc="upper center", bbox_to_anchor=(0.5, 0.905), ncol=4, fontsize=11.5,
+                   frameon=False)
+    else:
+        panels["rho"].legend(handles=legend, loc="upper left", fontsize=12)
 
     # Zoom insets: the ablation layer's velocity, the shocked region's temperature.
     u_layer = np.concatenate([d["u"][k][d["m"][k] < 2.0 * max(m_heat)] for k in snaps]) * scales["u"]
@@ -792,7 +808,7 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path):
             ins.plot(line.get_xdata(), line.get_ydata(), color=line.get_color(), linestyle=line.get_linestyle(),
                      linewidth=line.get_linewidth(), alpha=line.get_alpha() if line.get_alpha() is not None else 1.0)
         ins.set_xlim(*xlim)
-        ins.set_ylim(*ylim)
+        ins.set_ylim(ylim[0], min(ylim[1], ax.get_ylim()[1]))   # the zoom box stays inside its panel
         ins.grid(True, alpha=0.3)
         ins.tick_params(labelsize=9)
         ax.indicate_inset_zoom(ins, edgecolor="gray", alpha=0.6)
@@ -803,7 +819,7 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path):
     fig.text(0.5, 0.925, rf"hot ablated plasma ($T > T_s/2$) at {d['t'][-1] * 1e9:.1f} ns: optical depth $\mathcal{{T}}$ = {tau:.3g}, "
              rf"{thin:.0%} of its mass in cells with $\tau$ < 1;  surface T = {T_s:.3f} HeV (solver: "
              rf"{T_drive(label, float(d['t'][-1])):.3f})", ha="center", fontsize=12, style="italic")
-    plt.tight_layout(rect=(0, 0, 1, 0.93))
+    plt.tight_layout(rect=(0, 0, 1, 0.885 if patched else 0.93))
     fig.savefig(path, dpi=200)
     plt.close(fig)
 

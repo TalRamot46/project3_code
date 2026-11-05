@@ -298,6 +298,35 @@ def plot_profiles(label: str, path: Path, t: float = 2e-9, shown=("original", "B
     print(f"  wrote {path}")
 
 
+class _AtSnapshot:
+    """A patching evaluated at the integrated time nearest the requested one (within 1%):
+    the runs' stored frames sit up to ~0.3% off the nominal times."""
+
+    def __init__(self, obj):
+        self.obj = obj
+
+    def solve(self, *, mass, time):
+        t = float(TIMES[np.argmin(np.abs(TIMES - time))])
+        assert abs(t - time) <= 1e-2 * time, f"no patched solution near t = {time:g}"
+        return self.obj.solve(mass=mass, time=t)
+
+
+def plot_patched_profiles(label: str, path: Path):
+    """imc_vs_diffusion's <label>_profiles figure (rho, p, u, T at 1, 1.5, 2 ns: diffusion,
+    IMC) with the corrected patchings on top: B massless (black) and C impulse (dotted);
+    the original AblationSolver gray dashed."""
+    import matplotlib
+    matplotlib.use("Agg")
+
+    solvers = patched_solvers(label)
+    patched = [("Analytic, B: moving front (massless)", _AtSnapshot(solvers["B_massless"]),
+                dict(color="black", lw=2.0)),
+               ("Analytic, C: impulse-matched", _AtSnapshot(solvers["C_impulse"]),
+                dict(color="black", lw=1.6, linestyle=":"))]
+    ivd.plot_hydro_profiles(SIM_OUT, label, (1, 2, 3), path, solver=solver_for(label), patched=patched)
+    print(f"  wrote {path}", flush=True)
+
+
 def main(argv=None):
     logging.disable(logging.INFO)
     ap = argparse.ArgumentParser()
@@ -307,6 +336,8 @@ def main(argv=None):
     ap.add_argument("--seeds", nargs="*", type=int, default=[], help="IMC seeds of the omega-scan runs")
     ap.add_argument("--verify", action="store_true", help="the moving-front check against PistonShock")
     ap.add_argument("--figures", action="store_true", help="the omega-scan and Test 4 profile figures")
+    ap.add_argument("--profiles", action="store_true",
+                    help="each case's profile figure with the corrected patchings, md/phase_c/figures/patched/")
     ap.add_argument("--run-only", action="store_true", help="only run the omega-scan simulations")
     args = ap.parse_args(argv)
     labels = list(args.cases)
@@ -319,6 +350,10 @@ def main(argv=None):
     if args.verify:
         for label in labels:
             print(verify_moving_front(label), flush=True)
+        return
+    if args.profiles:
+        for label in labels:
+            plot_patched_profiles(label, ivd.REPO / "md" / "phase_c" / "figures" / "patched" / f"{label}_profiles.png")
         return
     if args.figures:
         FIG = ivd.REPO / "md" / "phase_c" / "figures"

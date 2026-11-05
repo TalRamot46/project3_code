@@ -208,6 +208,12 @@ class PatchedAblationSolver:
         e = np.interp(mass_shock, mc[cells], s["e"][cells])
         x = np.interp(mass_shock, M[k:], s["x"][k:])
         u = np.interp(mass_shock, M[k:], s["u"][k:])
+        # beyond the integrated domain the target is undisturbed
+        out_ = mass_shock > M[-1]
+        x[out_] = self.shock.initial_position(mass_shock[out_])
+        w = self.shock.omega
+        rho[out_] = self.shock.rho0 * x[out_]**(-w)
+        p[out_], e[out_], u[out_] = 0.0, 0.0, 0.0
         base = self.base
         T_shock = ((p * rho**(base.mu_shock - 1.0)) / (base.shock_solver.r * base.f_shock))**(1.0 / base.beta_shock)
         out = {}

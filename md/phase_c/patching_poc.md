@@ -102,3 +102,28 @@ IMC agrees with diffusion on the new ω runs to 0.9–1.4% in the shock (−0.75
   2. Solve the heat wave with a finite-density inflow at the front (v_target(t) instead of ṽ = 0). It isn't self-similar, but it can be treated as a perturbation in v_target/v_layer, which is the candidate explanation of conclusion 4. A cheap test before any theory: rerun Test 4 with a denser target at the same mass history. If the heat-front excess shrinks, the hypothesis holds.
   3. A better early-time model for C_impulse: an explicit supersonic-to-subsonic transition for the front, instead of the cap used here.
 - **Not done (POC scope):** convergence of the ω-scan simulations beyond N = 400/2000; IMC for ω = +0.25 at N = 2000; multiple IMC seeds for the scan; clean front series for Tests 1, 2, 5, 6 (rerunning them, ~1 min each for diffusion, would make B_simdrive clean there too).
+
+## 7. Profile figures with the corrected patching
+
+`--profiles` redraws each case's `<label>_profiles` figure (ρ, p, u, T against mass at 1, 1.5 and 2 ns; diffusion per time, IMC dashed green) with the corrections on top. The black solid curve is B (massless moving front), the black dotted curve is C_impulse, and the gray dashed curve is the original AblationSolver.
+
+```
+uv run python -m rad_hydro_sim.verification.patching_poc --cases test1_full test4_full ... --profiles
+uv run python -m rad_hydro_sim.verification.patching_poc --cases --omega-scan=-0.75 --profiles
+uv run python -m rad_hydro_sim.verification.patching_poc --cases --omega-scan=0.25 --N 2000 --profiles
+```
+
+| ω (gold) | figure |
+|---|---|
+| −0.75 | [figures/patched/omegam075_profiles.png](figures/patched/omegam075_profiles.png) |
+| −0.5 (Test 4, N = 1000) | [figures/patched/test4_full_profiles.png](figures/patched/test4_full_profiles.png) |
+| −0.5 (scan, N = 400) | [figures/patched/omegam050_profiles.png](figures/patched/omegam050_profiles.png) |
+| −0.25 | [figures/patched/omegam025_profiles.png](figures/patched/omegam025_profiles.png) |
+| 0 (Test 1; Test 2 with τ > 0) | [test1_full](figures/patched/test1_full_profiles.png), [test2_full](figures/patched/test2_full_profiles.png) |
+| +0.25 (N = 2000, no IMC) | [figures/patched/omegap025_n2000_profiles.png](figures/patched/omegap025_n2000_profiles.png) |
+| +0.5 (Test 3, log mass axis) | [figures/patched/test3_smooth_profiles.png](figures/patched/test3_smooth_profiles.png) |
+| Cu, Al (ω = 0) | [test5_full](figures/patched/test5_full_profiles.png), [test6_full](figures/patched/test6_full_profiles.png) |
+
+What they show:
+- **ω < 0:** the original patch jumps in every quantity at m_f, and its shock (gray) runs ahead of the simulations. B is continuous and close to diffusion and IMC in ρ, u and T. The visible remainder is in the pressure: the simulations' front pressure is higher and their heat front further out, which is the heat-side residual of §5.4.
+- **ω ≥ 0:** the three analytic curves lie on top of each other and on the simulations. In Test 1, B is ~3% behind the simulated shock, while the original lies on it (§5.6).

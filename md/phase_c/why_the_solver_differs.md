@@ -165,3 +165,13 @@ At N = 400 the gold heat fronts sit 4–9% off the solver; at N = 1000 they are 
 | Paper vs. calibrated bath | `results/imc_vs_diffusion{,_calibrated}` | table above |
 | Test 4 mesh independence | graded (1397 cells) vs. uniform-mass (1000) | shock −13.3% / −12.5% |
 | IMC vs. diffusion | `phase_c_results.md`, tracker | ≤ 2.2% (Au), ≤ 5.5% (Cu, Al) |
+
+---
+
+## Addendum (2026-11-05): fixes B and C tried
+
+Proof of concept on branch `feat/patching-poc`; results, tables and conclusions in `patching_poc.md`.
+- Fix B, the target driven at the moving front, is exact on the target side. Driven by the simulation's own front history it reproduces the simulated shock to 0.3–1.8% for gold, ω = −0.75 … +0.5.
+- The closure that matters is a *massless* front: the ablated layer does not decelerate with the front. The original patching is, to first order, the *massive* closure. That, rather than the mass bookkeeping of §3.1b–3.2, is the dynamical reason it overshoots for ω < 0.
+- With the rigid heat solution as the drive, B cuts Test 4's shock error from −12.5% to +5.9%. The remainder comes from the heat side: the real heat front runs ahead of the rigid one for ω < 0 (+6% in Test 4). Likely cause: the heat solution's front condition ṽ(ξ_f) = 0 (not yet tested).
+- Fix C as semi-analytic impulse matching tracks B to 1–4% for ω ≥ −0.5, but not at ω = −0.75.

@@ -1,6 +1,15 @@
-# Better patching of the semi-analytic solution: proof of concept (fixes B and C)
+# LEGACY: better patching with a numerical target (fix B), proof of concept
 
-Follow-up to `why_the_solver_differs.md` §3.3. Branch `feat/patching-poc`, 2026-11-05.
+> **Legacy, 2026-11-05.** Fix B is not an analytic model: `MovingFrontShock.run` integrates the
+> Lagrangian Euler equations of the target in (m, t), a 1-D hydro simulation, so any curve built
+> on it is a hybrid and cannot benchmark IMC and diffusion. It is kept as the record of what it
+> established (the massless-front closure, §2 and §5.2–5.3), which the analytic patch builds on.
+> The analytic results are in [`../analytic_patching.md`](../analytic_patching.md).
+> Code: `src/menahem_new/legacy/moving_front_shock.py` and
+> `src/rad_hydro_sim/verification/legacy/patching_fix_b.py`. Figures:
+> `md/phase_c/figures/legacy/fix_B/`. Tables: `results/patching_poc/legacy/`.
+
+Follow-up to `../why_the_solver_differs.md` §3.3. Branch `feat/patching-poc`, 2026-11-05.
 
 **In one paragraph.** The rigid-front patching is wrong on the *target* side, and that can now be fixed exactly. A Lagrangian hydro of the target, driven at the moving ablation front m_f(t) (fix B), reproduces the simulated shock to 0.3–1.8% when it is given the simulation's own front history. It does so for every gold case with ω between −0.75 and +0.5. The closure that matters is a **massless front**: the target is pushed by the front pressure, and the matter swept into the ablated layer leaves with its momentum. The original patching turns out to be, to first order, the opposite closure, the **massive front**, in which the ablated layer decelerates with the front. That is why it overshoots the shock by 11–16% for ω ≤ −0.5. With the rigid heat solution as the drive, B‑massless cuts Test 4's shock error from −12.5% to +5.9%, and ω = −0.75's from −16.2% to +3.1%. What is left is on the **heat side**: for ω < 0 the real heat front runs ahead of the rigid self-similar one (+6% in Test 4, +16% at ω = −0.75). That is a third approximation of the solver that the earlier analysis did not separate out. A semi-analytic version of B (C_impulse) gets within 1–2% of B for ω ≥ −0.25 and within 1–4% at ω = −0.5. It falls 9–13% short at ω = −0.75, where the early, supersonic phase of the heat front dominates the history.
 
@@ -10,19 +19,19 @@ Follow-up to `why_the_solver_differs.md` §3.3. Branch `feat/patching-poc`, 2026
 
 | | Where | What it is |
 |---|---|---|
-| `MovingFrontShock` | `src/menahem_new/ablation_patching.py` | 1-D planar Lagrangian hydro (staggered von Neumann–Richtmyer, ideal gas, q-viscosity) of ρ₀x^(−ω), with its left boundary at the mass m_f(t). Cells are removed as the front sweeps them. ~3000 cells, 2–10 s per case. |
+| `MovingFrontShock` | `src/menahem_new/legacy/moving_front_shock.py` | 1-D planar Lagrangian hydro (staggered von Neumann–Richtmyer, ideal gas, q-viscosity) of ρ₀x^(−ω), with its left boundary at the mass m_f(t). Cells are removed as the front sweeps them. ~3000 cells, 2–10 s per case. |
 | `PatchedAblationSolver` | same | Fix B: the rigid heat solution (m_f(t), p_f(t)) drives `MovingFrontShock`. The heat layer is then shifted to the front's position **and velocity** (and, for the massive closure, pressure), so x, u and p are continuous at m_f. |
-| `MatchedPistonPatch` | same | Fix C: PistonShock kept self-similar, with an effective amplitude p_eff(t). `match="pressure"`: p_PS(m_f) = p_f at the cut (quasi-static). `match="impulse"`: the momentum beyond the cut equals what the moving front delivered, ∫(p_f − ṁ_f u_f)dt, marched in time. |
-| driver | `src/rad_hydro_sim/verification/patching_poc.py` | Tables against the cached diffusion and IMC runs, the ω-scan runs, the verification (`--verify`) and the figures (`--figures`). |
+| `MatchedPistonPatch` | `src/menahem_new/ablation_patching.py` | Fix C: PistonShock kept self-similar, with an effective amplitude p_eff(t). `match="pressure"`: p_PS(m_f) = p_f at the cut (quasi-static). `match="impulse"`: the momentum beyond the cut equals what the moving front delivered, ∫(p_f − ṁ_f u_f)dt, marched in time. |
+| driver | `src/rad_hydro_sim/verification/legacy/patching_fix_b.py` | Tables against the cached diffusion and IMC runs, the ω-scan runs, the verification (`--verify`) and the figures (`--figures`). |
 
 The ω scan: Test 4 twins (gold, 1 HeV, τ = 0, uniform-mass mesh) at ω = −0.75, −0.25 and +0.25, plus ω = −0.5 at N = 400 as a resolution check against Test 4's N = 1000. Diffusion runs, with one IMC seed at N = 400. ω = +0.25 needs N = 2000 (§5).
 
 ```
-uv run python -m rad_hydro_sim.verification.patching_poc --cases test1_full test4_full ...
+uv run python -m rad_hydro_sim.verification.legacy.patching_fix_b --cases test1_full test4_full ...
 uv run python -m rad_hydro_sim.verification.patching_poc --cases --omega-scan=-0.75 --seeds 1
 uv run python -m rad_hydro_sim.verification.patching_poc --cases --omega-scan=0.25 --N 2000
-uv run python -m rad_hydro_sim.verification.patching_poc --cases test1_full test4_full --verify
-uv run python -m rad_hydro_sim.verification.patching_poc --cases --figures
+uv run python -m rad_hydro_sim.verification.legacy.patching_fix_b --cases test1_full test4_full --verify
+uv run python -m rad_hydro_sim.verification.legacy.patching_fix_b --figures
 ```
 
 The first `AblationSolver` construction per case takes ~20 min. Solvers are pickled to `results/patching_poc/solver_<label>.pkl`, and every later call takes seconds.
@@ -38,7 +47,7 @@ where p_b is the pressure the front exerts on the target and u_f the velocity of
 - **Massless front:** p_b = p_f, the rigid heat solution's front pressure. Each ablated element keeps the velocity it had when it crossed the front, and is then accelerated only by the layer's own (rigid) pressure gradient.
 - **Massive front:** the layer rides on the front, u = u_f(t) + u_heat(m, t). Momentum balance of the layer then gives p_b = p_f − m_f du_f/dt. In the frame of the decelerating front, the layer feels a body force. This is the frame acceleration of the doc's fix C, applied in full.
 
-**Why the original patching is the massive closure, to first order.** In PistonShock, the slab 0 < m < m_f is shocked matter between the piston and the cut, moving at about u_p and decelerating with it. Across it the pressure rises by ≈ m_f|du_p/dt|. That is the 20% jump at the cut in Test 4 (`why_the_solver_differs.md` §3.1b), and it is exactly the massive closure's extra term. The numbers confirm it: B‑massive lands on the original to within 1–2% in every case (§4). So the original patch was never a "wrong mass" bookkeeping error. It assumes the ablated layer decelerates with the front.
+**Why the original patching is the massive closure, to first order.** In PistonShock, the slab 0 < m < m_f is shocked matter between the piston and the cut, moving at about u_p and decelerating with it. Across it the pressure rises by ≈ m_f|du_p/dt|. That is the 20% jump at the cut in Test 4 (`../why_the_solver_differs.md` §3.1b), and it is exactly the massive closure's extra term. The numbers confirm it: B‑massive lands on the original to within 1–2% in every case (§4). So the original patch was never a "wrong mass" bookkeeping error. It assumes the ablated layer decelerates with the front.
 
 **The ω dependence follows.** For ω < 0 the piston decelerates, u_p ∝ t^((ω+c₃)/(2−ω)), and m_f/m_s ∝ t^(−0.42) at ω = −0.5. The inertial term m_f|a|/p_f is then large: 20% in Test 4, 39% at ω = −0.75 at 2 ns. For ω = 0 it is ~3%. For ω > 0, m_f ≪ m_s and the closures coincide.
 
@@ -53,7 +62,7 @@ Check 2 caught two bugs that are now fixed. (a) Before the PistonShock shock rea
 
 ## 4. Results
 
-Shock front, diffusion vs. each patching (%, + means the simulation is ahead). The heat front, front pressure and the other times are in `results/patching_poc/<label>_table.md`.
+Shock front, diffusion vs. each patching (%, + means the simulation is ahead). The heat front, front pressure and the other times are in `results/patching_poc/legacy/<label>_table.md`.
 
 | case | ω | m_f/m_s | t | original | B_massless | B_massive | C_pressure | C_impulse | **B_simdrive** |
 |---|---|---|---|---|---|---|---|---|---|
@@ -75,11 +84,11 @@ B_simdrive is the diagnostic: the moving-front target driven by the diffusion ru
 
 IMC agrees with diffusion on the new ω runs to 0.9–1.4% in the shock (−0.75: −1.0%, −0.5: −0.9%, −0.25: −1.4%), as in the old tests.
 
-![shock error vs omega and the heat-side residual](figures/patching_omega_scan.png)
+![shock error vs omega and the heat-side residual](../figures/legacy/fix_B/patching_omega_scan.png)
 
 *Left: shock error against ω for each patching (gold, 1 HeV, τ = 0). Right: the simulated heat front and front pressure against the rigid heat solution's.*
 
-![Test 4 profiles](figures/patching_test4_profiles.png)
+![Test 4 profiles](../figures/legacy/fix_B/patching_test4_profiles.png)
 
 *Test 4 at 2 ns. The original patching jumps in p and u at m_f (dotted). B and C are continuous. The simulated layer velocity sits on the front-shifted heat solution, and the simulated layer pressure follows the rigid heat profile (orange), not p′ + m|a| (green).*
 
@@ -87,7 +96,7 @@ IMC agrees with diffusion on the new ω runs to 0.9–1.4% in the shock (−0.75
 
 1. **The target side is solved by fix B.** Driven by the true front history, the moving-front target reproduces the simulated shock to 0.3–1.8% for every clean gold case, from ω = −0.75 to +0.5. With PistonShock's own cut pressure it reproduces PistonShock to 0.2%. Nothing else is needed on the target side.
 2. **The massless front is the physically right closure.** Three things show it. (a) The simulated pressure inside the ablated layer follows the rigid heat profile, not p′ + m|a| (Test 4 profiles). (b) The simulated layer velocity is the rigid one shifted by u_f, which the massless model also produces. (c) B‑massive is no better than the original, which it reproduces to within 1–2%.
-3. **The original patching = the massive closure.** Its error scales with m_f|du_f/dt|/p_f: −12.5% in Test 4 and −16% at ω = −0.75, while it is right for ω ≥ 0 where that term is small. This replaces the "mass bookkeeping" explanation of `why_the_solver_differs.md` §3.1–3.2 with a dynamical one: the ablated layer does not decelerate with the front.
+3. **The original patching = the massive closure.** Its error scales with m_f|du_f/dt|/p_f: −12.5% in Test 4 and −16% at ω = −0.75, while it is right for ω ≥ 0 where that term is small. This replaces the "mass bookkeeping" explanation of `../why_the_solver_differs.md` §3.1–3.2 with a dynamical one: the ablated layer does not decelerate with the front.
 4. **What remains is a heat-side approximation not identified before.** With the rigid heat solution as the drive, B‑massless still leaves +3 … +6% for ω < 0. B_simdrive removes it, so it comes entirely from m_f(t) and p_f(t). The simulated heat front runs ahead of the rigid one by +16% (ω = −0.75), +6% (−0.5), +1.6% (−0.25), +1.2% (0), and −0.6 … −1% (ω > 0). The errors are larger early on: +19% at 0.5 ns in Test 4. The likely cause is the heat solution's front condition ṽ(ξ_f) = 0, a front against an infinitely dense wall. For ω < 0 the target near x = 0 is light (ρ₀x^(−ω) → 0), so the shocked matter ahead of the front is far from a dense wall: in Test 4 it is ~4 g/cm³ at 2 ns, and lighter at earlier times. This is a hypothesis. It is not tested here.
 5. **Fix C, semi-analytic.**
    - *C_pressure* (quasi-static, p_PS(m_f) = p_f) happens to land within 1% for ω = −0.25 and −0.5 at late times. It is wrong by +32% at ω = −0.75 and early times, because it applies today's m_f/m_s to the whole history. It is a coincidence, not a theory.
@@ -108,21 +117,21 @@ IMC agrees with diffusion on the new ω runs to 0.9–1.4% in the shock (−0.75
 `--profiles` redraws each case's `<label>_profiles` figure (ρ, p, u, T against mass at 1, 1.5 and 2 ns; diffusion per time, IMC dashed green) with the corrections on top. The black solid curve is B (massless moving front), the black dotted curve is C_impulse, and the gray dashed curve is the original AblationSolver.
 
 ```
-uv run python -m rad_hydro_sim.verification.patching_poc --cases test1_full test4_full ... --profiles
-uv run python -m rad_hydro_sim.verification.patching_poc --cases --omega-scan=-0.75 --profiles
-uv run python -m rad_hydro_sim.verification.patching_poc --cases --omega-scan=0.25 --N 2000 --profiles
+uv run python -m rad_hydro_sim.verification.legacy.patching_fix_b --cases test1_full test4_full ... --profiles
+uv run python -m rad_hydro_sim.verification.legacy.patching_fix_b --omega-scan -0.75 --profiles
+uv run python -m rad_hydro_sim.verification.legacy.patching_fix_b --omega-scan 0.25 --N 2000 --profiles
 ```
 
 | ω (gold) | figure |
 |---|---|
-| −0.75 | [figures/patched/omegam075_profiles.png](figures/patched/omegam075_profiles.png) |
-| −0.5 (Test 4, N = 1000) | [figures/patched/test4_full_profiles.png](figures/patched/test4_full_profiles.png) |
-| −0.5 (scan, N = 400) | [figures/patched/omegam050_profiles.png](figures/patched/omegam050_profiles.png) |
-| −0.25 | [figures/patched/omegam025_profiles.png](figures/patched/omegam025_profiles.png) |
-| 0 (Test 1; Test 2 with τ > 0) | [test1_full](figures/patched/test1_full_profiles.png), [test2_full](figures/patched/test2_full_profiles.png) |
-| +0.25 (N = 2000, no IMC) | [figures/patched/omegap025_n2000_profiles.png](figures/patched/omegap025_n2000_profiles.png) |
-| +0.5 (Test 3) | [log mass axis](figures/patched/test3_smooth_profiles.png), [linear mass axis](figures/patched/test3_smooth_profiles_linear.png) (`--linear`) |
-| Cu, Al (ω = 0) | [test5_full](figures/patched/test5_full_profiles.png), [test6_full](figures/patched/test6_full_profiles.png) |
+| −0.75 | [figures/legacy/fix_B/profiles/omegam075_profiles.png](../figures/legacy/fix_B/profiles/omegam075_profiles.png) |
+| −0.5 (Test 4, N = 1000) | [figures/legacy/fix_B/profiles/test4_full_profiles.png](../figures/legacy/fix_B/profiles/test4_full_profiles.png) |
+| −0.5 (scan, N = 400) | [figures/legacy/fix_B/profiles/omegam050_profiles.png](../figures/legacy/fix_B/profiles/omegam050_profiles.png) |
+| −0.25 | [figures/legacy/fix_B/profiles/omegam025_profiles.png](../figures/legacy/fix_B/profiles/omegam025_profiles.png) |
+| 0 (Test 1; Test 2 with τ > 0) | [test1_full](../figures/legacy/fix_B/profiles/test1_full_profiles.png), [test2_full](../figures/legacy/fix_B/profiles/test2_full_profiles.png) |
+| +0.25 (N = 2000, no IMC) | [figures/legacy/fix_B/profiles/omegap025_n2000_profiles.png](../figures/legacy/fix_B/profiles/omegap025_n2000_profiles.png) |
+| +0.5 (Test 3) | [log mass axis](../figures/legacy/fix_B/profiles/test3_smooth_profiles.png), [linear mass axis](../figures/legacy/fix_B/profiles/test3_smooth_profiles_linear.png) (`--linear`) |
+| Cu, Al (ω = 0) | [test5_full](../figures/legacy/fix_B/profiles/test5_full_profiles.png), [test6_full](../figures/legacy/fix_B/profiles/test6_full_profiles.png) |
 
 What they show:
 - **ω < 0:** the original patch jumps in every quantity at m_f, and its shock (gray) runs ahead of the simulations. B is continuous and close to diffusion and IMC in ρ, u and T. The visible remainder is in the pressure: the simulations' front pressure is higher and their heat front further out, which is the heat-side residual of §5.4.

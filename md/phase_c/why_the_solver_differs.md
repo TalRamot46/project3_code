@@ -175,3 +175,7 @@ Proof of concept on branch `feat/patching-poc`; results, tables and conclusions 
 - The closure that matters is a *massless* front: the ablated layer does not decelerate with the front. The original patching is, to first order, the *massive* closure. That, rather than the mass bookkeeping of §3.1b–3.2, is the dynamical reason it overshoots for ω < 0.
 - With the rigid heat solution as the drive, B cuts Test 4's shock error from −12.5% to +5.9%. The remainder comes from the heat side: the real heat front runs ahead of the rigid one for ω < 0 (+6% in Test 4). Likely cause: the heat solution's front condition ṽ(ξ_f) = 0 (not yet tested).
 - Fix C as semi-analytic impulse matching tracks B to 1–4% for ω ≥ −0.5, but not at ω = −0.75.
+
+## Addendum (2026-11-05, later): fix B is legacy; the analytic patch
+
+Fix B integrates the target's hydro equations in (m, t), so it is not an analytic model and cannot benchmark IMC and diffusion. It is now legacy (`legacy/patching_poc_fix_B.md`, with its code under `legacy/` folders). The current result is the analytic impulse-matched patch (fix C) in `analytic_patching.md`: both pieces stay self-similar, and the PistonShock amplitude is set by the momentum a massless front delivers. With the paper bath it agrees better with the simulations than the original over the whole profile for every ω < 0 case and for Cu and Al, ties for ω > 0, and is worse in Test 1. Figures are now partitioned by bath and analytic method in `figures/` (see `figures/README.md`).

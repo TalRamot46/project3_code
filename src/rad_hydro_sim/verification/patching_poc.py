@@ -1,20 +1,21 @@
-"""Proof of concept: better patching of the semi-analytic ablation solution (fix B / C of
-md/phase_c/why_the_solver_differs.md Sec. 3.3), against the cached diffusion and IMC runs.
+"""Analytic patchings of the semi-analytic ablation solution against the cached diffusion and
+IMC runs (fix C of md/phase_c/why_the_solver_differs.md Sec. 3.3; md/phase_c/analytic_patching.md).
 
-    uv run python -m rad_hydro_sim.verification.patching_poc --cases test4_full test1_full
-    uv run python -m rad_hydro_sim.verification.patching_poc --omega-scan -0.75 -0.25 0.25
+Every curve here is analytic: the self-similar heat wave and PistonShock, joined differently.
+The numerical moving-front target (fix B) is legacy: rad_hydro_sim.verification.legacy.patching_fix_b.
 
-Patchings compared (menahem_new.ablation_patching):
+    uv run python -m rad_hydro_sim.verification.patching_poc --cases test4_full test1_full   # tables
+    uv run python -m rad_hydro_sim.verification.patching_poc --cases --omega-scan=-0.75 --seeds 1
+    uv run python -m rad_hydro_sim.verification.patching_poc --cases test1_full ... --profiles
+
+Patchings (menahem_new.ablation_patching):
   original     AblationSolver: PistonShock with the piston at m = 0, cut at m_f.
-  B_massless   numerical target driven at the moving front m_f(t) with p_f.
-  B_massive    the same, with the ablated layer riding on the front (p_b = p_f - m_f du_f/dt).
   C_pressure   PistonShock with its amplitude matched so that p = p_f at the cut m_f (quasi-static).
-  C_impulse    PistonShock with its amplitude matched to the momentum the moving (massless)
-               front has delivered beyond the cut, marched in time.
-  B_simdrive   diagnostic: B driven by the diffusion run's own front m_heat(t), p_abl(t).
+  C_impulse    PistonShock with its amplitude matched to the momentum a massless ablation front
+               has delivered beyond the cut, marched in time.
 
-The omega scan adds Test 4 variants (gold, 1 HeV, tau = 0) with other omegas, run with
-diffusion only on a coarser uniform-mass mesh; the runs are cached in --out like the others.
+The omega scan adds Test 4 variants (gold, 1 HeV, tau = 0) with other omegas on a uniform-mass
+mesh; the runs are cached with the others.  --profiles writes md/phase_c/figures/<bath>/<method>/.
 """
 from __future__ import annotations
 
@@ -31,7 +32,17 @@ from rad_hydro_sim.verification import imc_vs_diffusion as ivd
 OUT = ivd.REPO / "results" / "patching_poc"
 SIM_OUT = ivd.DEFAULT_OUT
 TIMES = np.array([0.5, 1.0, 1.5, 2.0]) * 1e-9
-PATCHINGS = ("original", "B_massless", "B_massive", "C_pressure", "C_impulse", "B_simdrive")
+PATCHINGS = ("original", "C_pressure", "C_impulse")
+# simulation runs per bath (imc_vs_diffusion --bath), and their figure folders
+BATHS = {"paper": ("paper_bath", SIM_OUT),
+         "calibrated": ("calibrated_T_bath", SIM_OUT.with_name(SIM_OUT.name + "_calibrated")),
+         "calibrated_flux": ("calibrated_flux_bath", SIM_OUT.with_name(SIM_OUT.name + "_calibrated_flux"))}
+BATH_TEXT = {"paper": "paper bath", "calibrated": "bath calibrated to the surface temperature",
+             "calibrated_flux": "bath calibrated to the energy flux"}
+# analytic method per figure folder: (patching, what the figure calls it)
+METHODS = {"original_patch": ("original", "original patch"),
+           "impulse_patch": ("C_impulse", "impulse-matched patch")}
+FIG = ivd.REPO / "md" / "phase_c" / "figures"
 
 
 def omega_label(omega: float) -> str:
@@ -80,9 +91,9 @@ def solver_for(label: str):
     return _solver_for_case(ivd._hydro_case(ivd.HYDRO_CASES[label]), label.split("_n")[0])
 
 
-def patched_solvers(label: str, n_cells: int = 3000):
+def patched_solvers(label: str):
     """{patching: object with front_values(t) and solve(mass, time)} for one case."""
-    from menahem_new.ablation_patching import MatchedPistonPatch, PatchedAblationSolver
+    from menahem_new.ablation_patching import MatchedPistonPatch
 
     base = solver_for(label)
     hs, ps = base.heat_solver, base.shock_solver
@@ -97,235 +108,209 @@ def patched_solvers(label: str, n_cells: int = 3000):
         def solve(self, *, mass, time):
             return base.solve(mass=mass, time=time)
 
-    out = {"original": Original()}
-    for front in ("massless", "massive"):
-        out[f"B_{front}"] = PatchedAblationSolver(base, times=TIMES, front=front, n_cells=n_cells)
-    out["C_pressure"] = MatchedPistonPatch(base, front="massless", match="pressure")
-    out["C_impulse"] = MatchedPistonPatch(base, front="massless", match="impulse", t_end=TIMES[-1])
-    return out
+    return {"original": Original(),
+            "C_pressure": MatchedPistonPatch(base, front="massless", match="pressure"),
+            "C_impulse": MatchedPistonPatch(base, front="massless", match="impulse", t_end=TIMES[-1])}
 
 
-class SimDriven:
-    """Diagnostic: the moving-front target driven by a simulation's own front history.
-
-    m_f(t) and the pressure at the front come from the run's front series (the pressure
-    there already contains whatever the ablated layer does), so the front is "massless".
-    Agreement with the run's shock tests the target model alone, free of the rigid heat
-    solution's m_f(t) and p_f(t).
-    """
-
-    def __init__(self, label: str, run, n_cells: int = 3000):
-        from menahem_new.ablation_patching import MovingFrontShock, shock_mass
-
-        ps = solver_for(label).shock_solver
-        t, mh, pa = run["series_t"], run["m_heat"], run["p_abl"]
-        ok = np.isfinite(mh) & np.isfinite(pa) & (t > 0)
-        t, mh, pa = t[ok], mh[ok], pa[ok]
-        # before the first frame with a resolved front: the power laws through the first 5%
-        early = t < t[0] + 0.05 * (t[-1] - t[0])
-        km, cm = np.polyfit(np.log(t[early]), np.log(mh[early]), 1)
-        kp, cp = np.polyfit(np.log(t[early]), np.log(pa[early]), 1)
-        m_f = lambda tt: float(np.interp(tt, t, mh)) if tt >= t[0] else float(np.exp(cm) * tt**km)
-        p_f = lambda tt: float(np.interp(tt, t, pa)) if tt >= t[0] else float(np.exp(cp) * tt**kp)
-        m_max = 1.4 * float(np.ravel(ps.shocked_mass(time=TIMES[-1]))[0])
-        self.shock = MovingFrontShock(rho0=ps.rho0, omega=ps.omega, gamma=ps.gamma, m_front=m_f, p_front=p_f,
-                                      m_max=m_max, n_cells=n_cells, front="massless")
-        snaps, _ = self.shock.run(TIMES)
-        self.values = {}
-        for tt, sn in zip(TIMES, snaps):
-            M = sn["M"]
-            rho_init = np.diff(M) / np.diff(self.shock.initial_position(M))
-            self.values[tt] = dict(m_heat=m_f(tt), m_shock=shock_mass(M, sn["v"], rho_init), p_abl=p_f(tt))
-
-    def front_values(self, t):
-        return self.values[t]
-
-
-def verify_moving_front(label: str, n_cells: int = 3000) -> str:
-    """The moving-front target driven by PistonShock's own pressure at the cut, p_PS(m_f(t), t),
-    must reproduce PistonShock beyond the cut (the restriction of PistonShock to m > m_f solves
-    the same equations with the same boundary data).  Returns one line of shock errors."""
-    from menahem_new.ablation_patching import MovingFrontShock, shock_mass
-
-    base = solver_for(label)
-    hs, ps = base.heat_solver, base.shock_solver
-    m_f = lambda t: float(hs.ablated_mass(time=t))
-    p_cut = lambda t: float(ps.solve(mass=np.array([m_f(t), 1.0001 * m_f(t)]), time=t)["pressure"][0])
-    m_s = lambda t: float(np.ravel(ps.shocked_mass(time=t))[0])
-    sh = MovingFrontShock(rho0=ps.rho0, omega=ps.omega, gamma=ps.gamma, m_front=m_f, p_front=p_cut,
-                          m_max=1.4 * m_s(TIMES[-1]), n_cells=n_cells, front="massless")
-    snaps, _ = sh.run(TIMES)
-    errs = [shock_mass(sn["M"], sn["v"], np.diff(sn["M"]) / np.diff(sh.initial_position(sn["M"]))) / m_s(sn["t"]) - 1
-            for sn in snaps]
-    return f"{label}: moving front driven by p_PS(m_f) vs PistonShock, shock at " +         ", ".join(f"{t * 1e9:g} ns {100 * e:+.2f}%" for t, e in zip(TIMES, errs))
-
-
-def sim_fronts(label: str):
+def sim_fronts(label: str, out: Path = SIM_OUT):
     """{run name: {t: front values}} of the cached diffusion / IMC runs."""
     runs = {}
     for tag in ["diffusion", "imc1", "imc2", "imc3"]:
-        path = SIM_OUT / f"{label}_{tag}.npz"
+        path = out / f"{label}_{tag}.npz"
         if path.exists():
             run = np.load(path)
             runs[tag] = {t: ivd.front_values(run, label, t) for t in TIMES}
     return runs
 
 
-def table(label: str, solvers, sims) -> str:
-    rows = [f"### {label}", "",
-            "| t [ns] | quantity | diffusion | IMC | " + " | ".join(PATCHINGS) + " |",
-            "|---|---|---|---|" + "---|" * len(PATCHINGS)]
+def table(label: str, solvers, sims, patchings=PATCHINGS, title=None) -> str:
+    rows = [f"### {title or label}", "",
+            "| t [ns] | quantity | diffusion | IMC | " + " | ".join(patchings) + " |",
+            "|---|---|---|---|" + "---|" * len(patchings)]
     for t in TIMES:
-        ref = {p: solvers[p].front_values(t) for p in PATCHINGS}
+        ref = {p: solvers[p].front_values(t) for p in patchings}
         for q, unit in (("m_heat", 1e3), ("m_shock", 1e3), ("p_abl", 1e-12)):
             d = sims["diffusion"][t][q]
             imc = [s[t][q] for k, s in sims.items() if k.startswith("imc")]
             cells = [f"{d * unit:.4g}", f"{np.mean(imc) * unit:.4g}" if imc else "-"]
-            cells += [f"{ref[p][q] * unit:.4g} ({100 * (d / ref[p][q] - 1):+.1f}%)" for p in PATCHINGS]
+            cells += [f"{ref[p][q] * unit:.4g} ({100 * (d / ref[p][q] - 1):+.1f}%)" for p in patchings]
             rows.append(f"| {t * 1e9:.1f} | {q} | " + " | ".join(cells) + " |")
     rows.append("")
     rows.append("(m in mg/cm^2, p in Mbar; the % is diffusion vs. that patching)")
     return "\n".join(rows)
 
 
-# reference palette (dataviz skill), categorical slots in fixed order; ink for the simulations
-STYLE = {
-    "original": dict(color="#2a78d6", ls="-", marker="o"),
-    "B_massless": dict(color="#eb6834", ls="-", marker="s"),
-    "B_massive": dict(color="#1baf7a", ls="-", marker="^"),
-    "C_pressure": dict(color="#eda100", ls="--", marker="v"),
-    "C_impulse": dict(color="#e87ba4", ls="--", marker="D"),
-    "B_simdrive": dict(color="#555550", ls=":", marker="x"),
-}
+def figure_name(label: str) -> str:
+    return ivd.FIGURE_NAMES[label][0] if label in ivd.FIGURE_NAMES else f"{label}_profiles.png"
+
+
+def plot_profile_set(labels, baths=tuple(BATHS)):
+    """One full-profile figure per (bath, analytic method, case) with runs in that bath:
+    md/phase_c/figures/<bath>_bath/<method>/<case>_profiles.png, the analytic curve in black."""
+    import matplotlib
+    matplotlib.use("Agg")
+
+    for label in labels:
+        solvers = None
+        for bath in baths:
+            folder, out = BATHS[bath]
+            if not (out / f"{label}_diffusion.npz").exists():
+                continue
+            solvers = solvers or patched_solvers(label)
+            for method, (patching, name) in METHODS.items():
+                path = FIG / folder / method / figure_name(label)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                ivd.plot_hydro_profiles(out, label, (1, 2, 3), path, solver=solvers[patching],
+                                        analytic_label=f"Analytic ({name})",
+                                        method=f"{BATH_TEXT[bath]}; analytic: {name}")
+                print(f"  wrote {path.relative_to(ivd.REPO)}", flush=True)
+
+
+# overlay figure: one hue per bath (reference palette, fixed order), ink for the analytic curves
+BATH_COLOR = {"paper": "#2a78d6", "calibrated": "#eb6834", "calibrated_flux": "#1baf7a"}
+BATH_SHORT = {"paper": "paper bath", "calibrated": "T-calibrated bath", "calibrated_flux": "flux-calibrated bath"}
+METHOD_STYLE = {"original_patch": "--", "impulse_patch": "-"}
 INK, MUTED, GRID = "#1f1f1d", "#6b6a64", "#e4e3dd"
-# the gold cases of the omega scan, and whether their front series is the snapshot's definition
-GOLD_SCAN = {-0.75: "omegam075", -0.5: "test4_full", -0.25: "omegam025", 0.0: "test1_full",
-             0.25: "omegap025_n2000", 0.5: "test3_smooth"}
-# omega = +0.25 at N = 400 leaves ~8 cells in the ablated layer (heat front +7%, IMC and diffusion
-# 13% apart); N = 2000 resolves it.
-CLEAN_SERIES = {"test4_full", "test3_smooth", "omegam075", "omegam050", "omegam025", "omegap025_n2000"}
+FIELDS = (("rho", "density", r"$\rho$ [g/cm$^3$]", 1.0), ("p", "pressure", r"$P$ [Mbar]", 1e-12),
+          ("u", "velocity", r"$u$ [km/s]", 1e-5), ("T_material", "temperature", r"$T$ [HeV]", 1.0 / ivd.K_PER_HEV))
 
 
-def _axes_style(ax):
-    ax.grid(True, color=GRID, lw=0.8)
-    ax.set_axisbelow(True)
-    for side in ("top", "right"):
-        ax.spines[side].set_visible(False)
-    for side in ("left", "bottom"):
-        ax.spines[side].set_color(MUTED)
-    ax.tick_params(colors=MUTED, labelcolor=INK)
-
-
-def plot_omega_scan(path: Path, t: float = 2e-9):
-    """Left: shock, diffusion vs each patching, against omega.  Right: the heat side,
-    the run's heat front and front pressure against the rigid heat solution's."""
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    rows = []
-    for w, label in GOLD_SCAN.items():
-        if label.startswith("omega"):
-            register_omega_case(w, N=int(label.split("_n")[1]) if "_n" in label else 400)
-        if not (SIM_OUT / f"{label}_diffusion.npz").exists():
-            continue
-        solvers = patched_solvers(label)
-        if label in CLEAN_SERIES:
-            solvers["B_simdrive"] = SimDriven(label, np.load(SIM_OUT / f"{label}_diffusion.npz"))
-        d = sim_fronts(label)["diffusion"][t]
-        ref = {p: solvers[p].front_values(t) for p in solvers}
-        rows.append((w, d, ref))
-    fig, (a1, a2) = plt.subplots(1, 2, figsize=(11, 4.2))
-    for p in PATCHINGS:
-        pts = [(w, 100 * (d["m_shock"] / ref[p]["m_shock"] - 1)) for w, d, ref in rows if p in ref]
-        if pts:
-            a1.plot(*zip(*pts), lw=2, ms=7, label=p.replace("_", " "), **STYLE[p])
-    a1.axhline(0, color=MUTED, lw=1)
-    a1.set_xlabel(r"$\omega$  (gold, 1 HeV, $\tau=0$)", color=INK)
-    a1.set_ylabel("shock: diffusion vs patching [%]", color=INK)
-    a1.set_title(f"Shock front at {t * 1e9:g} ns", color=INK, loc="left")
-    a1.legend(frameon=False, fontsize=8.5, labelcolor=INK)
-    for q, name, st in (("m_heat", "heat front", dict(color="#2a78d6", marker="o")),
-                        ("p_abl", "front pressure", dict(color="#eb6834", marker="s"))):
-        pts = [(w, 100 * (d[q] / ref["original"][q] - 1)) for w, d, ref in rows]
-        a2.plot(*zip(*pts), lw=2, ms=7, label=name, **st)
-    a2.axhline(0, color=MUTED, lw=1)
-    a2.set_xlabel(r"$\omega$", color=INK)
-    a2.set_ylabel("diffusion vs rigid heat solution [%]", color=INK)
-    a2.set_title("What the front really does (the heat side)", color=INK, loc="left")
-    a2.legend(frameon=False, fontsize=8.5, labelcolor=INK)
-    for ax in (a1, a2):
-        _axes_style(ax)
-    fig.tight_layout()
-    fig.savefig(path, dpi=150)
-    print(f"  wrote {path}")
-
-
-def plot_profiles(label: str, path: Path, t: float = 2e-9, shown=("original", "B_massless", "B_massive", "C_impulse")):
-    """Pressure and velocity against mass at t: runs vs patchings (the jump at m_f)."""
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    solvers = patched_solvers(label)
-    run = np.load(SIM_OUT / f"{label}_diffusion.npz")
-    k = int(np.argmin(np.abs(run["t"] - t)))
+def profile_score(run, k, analytic, t):
+    """Mass-weighted L1 distance between a run's profile at frame k and an analytic one,
+    sum |f_run - f_an| dm / sum |f_an| dm, averaged over rho, p, u, T."""
     m = run["m"][k]
-    mc = m - 0.5 * np.diff(m, prepend=0.0)
-    imc = [np.load(SIM_OUT / f"{label}_imc{s}.npz") for s in (1, 2, 3) if (SIM_OUT / f"{label}_imc{s}.npz").exists()]
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
-    for ax, key, unit, ylab in ((axes[0], "p", 1e-12, "pressure [Mbar]"), (axes[1], "u", 1e-5, "velocity [km/s]")):
-        ax.plot(mc * 1e3, run[key][k] * unit, color=INK, lw=2.5, label="diffusion")
-        if imc:
-            ax.plot(mc * 1e3, imc[0][key][k] * unit, color=MUTED, lw=1.2, ls="--", label="IMC")
-        for p in shown:
-            sol = solvers[p].solve(mass=m, time=float(run["t"][k]))
-            val = sol["pressure" if key == "p" else "velocity"]
-            st = dict(STYLE[p]); st.pop("marker")
-            ax.plot(m * 1e3, np.asarray(val) * unit, lw=1.6, label=p.replace("_", " "), **st)
-        m_f = solvers["original"].front_values(float(run["t"][k]))["m_heat"]
-        ax.axvline(m_f * 1e3, color=MUTED, lw=0.8, ls=":")
-        ax.set_xlim(0, 1.25 * solvers["original"].front_values(float(run["t"][k]))["m_shock"] * 1e3)
-        if key == "u":
-            ax.set_ylim(-60, 1.6 * np.nanmax(run["u"][k][mc > m_f]) * unit)
-        ax.set_xlabel(r"mass [mg/cm$^2$]", color=INK)
-        ax.set_ylabel(ylab, color=INK)
-        _axes_style(ax)
-    axes[0].set_title(f"{ivd.HYDRO_CASES[label].title}, {t * 1e9:g} ns", color=INK, loc="left")
-    axes[1].legend(frameon=False, fontsize=8.5, labelcolor=INK, loc="lower right")
-    fig.tight_layout()
-    fig.savefig(path, dpi=150)
-    print(f"  wrote {path}")
+    dm = np.diff(m, prepend=0.0)
+    sol = analytic.solve(mass=m - 0.5 * dm, time=t)
+    errs = []
+    for key, ref, _, _ in FIELDS:
+        an = np.nan_to_num(np.asarray(sol[ref], dtype=float))
+        errs.append(np.sum(np.abs(run[key][k] - an) * dm) / np.sum(np.abs(an) * dm))
+    return float(np.mean(errs))
 
 
-class _AtSnapshot:
-    """A patching evaluated at the integrated time nearest the requested one (within 1%):
-    the runs' stored frames sit up to ~0.3% off the nominal times."""
-
-    def __init__(self, obj):
-        self.obj = obj
-
-    def solve(self, *, mass, time):
-        t = float(TIMES[np.argmin(np.abs(TIMES - time))])
-        assert abs(t - time) <= 1e-2 * time, f"no patched solution near t = {time:g}"
-        return self.obj.solve(mass=mass, time=t)
-
-
-def plot_patched_profiles(label: str, path: Path, log_axis=None):
-    """imc_vs_diffusion's <label>_profiles figure (rho, p, u, T at 1, 1.5, 2 ns: diffusion,
-    IMC) with the corrected patchings on top: B massless (black) and C impulse (dotted);
-    the original AblationSolver gray dashed."""
+def plot_overlay(label: str, path: Path, t: float = 2e-9):
+    """Every (bath, analytic method) option for one case at t, overlaid, the best one by
+    profile_score drawn bold, with the ranking and the front errors beside the profiles."""
     import matplotlib
     matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.gridspec import GridSpec
+    from matplotlib.lines import Line2D
 
     solvers = patched_solvers(label)
-    patched = [("Analytic, B: moving front (massless)", _AtSnapshot(solvers["B_massless"]),
-                dict(color="black", lw=2.0)),
-               ("Analytic, C: impulse-matched", _AtSnapshot(solvers["C_impulse"]),
-                dict(color="black", lw=1.6, linestyle=":"))]
-    ivd.plot_hydro_profiles(SIM_OUT, label, (1, 2, 3), path, solver=solver_for(label), patched=patched,
-                            log_axis=log_axis)
-    print(f"  wrote {path}", flush=True)
+    runs = {b: np.load(out / f"{label}_diffusion.npz") for b, (_, out) in BATHS.items()
+            if (out / f"{label}_diffusion.npz").exists()}
+    k = {b: int(np.argmin(np.abs(r["t"] - t))) for b, r in runs.items()}
+    rows = []
+    for b, r in runs.items():
+        tb = float(r["t"][k[b]])
+        fv = ivd.front_values(r, label, tb)
+        for method, (patching, name) in METHODS.items():
+            ref = solvers[patching].front_values(tb)
+            rows.append(dict(bath=b, method=method, score=profile_score(r, k[b], solvers[patching], tb),
+                             **{q: 100 * (fv[q] / ref[q] - 1) for q in ("m_heat", "m_shock", "p_abl")}))
+    rows.sort(key=lambda row: row["score"])
+    best = rows[0]
+
+    fig = plt.figure(figsize=(17, 9.2))
+    gs = GridSpec(2, 3, figure=fig, width_ratios=(1, 1, 0.92), wspace=0.28, hspace=0.32,
+                  left=0.055, right=0.985, top=0.86, bottom=0.08)
+    axes = {key: fig.add_subplot(gs[i // 2, i % 2]) for i, (key, *_) in enumerate(FIELDS)}
+    m_dense = np.unique(np.concatenate([np.linspace(1e-12, r["m"][k[b]][-1], 1200) for b, r in runs.items()] +
+                                       [np.geomspace(1e-4 * r["m"][k[b]][0], r["m"][k[b]][-1], 1200)
+                                        for b, r in runs.items()]))
+    t_an = float(runs[best["bath"]]["t"][k[best["bath"]]])
+    analytic = {method: solvers[patching].solve(mass=m_dense, time=t_an) for method, (patching, _) in METHODS.items()}
+    shock = max(max(solvers[p].front_values(t_an)["m_shock"] for p, _ in METHODS.values()),
+                max(ivd.front_values(r, label, float(r["t"][k[b]]))["m_shock"] for b, r in runs.items()))
+    log_axis = ivd.HYDRO_CASES[label].log_mass_axis
+    for key, ref, ylabel, scale in FIELDS:
+        ax = axes[key]
+        for b, r in runs.items():
+            hl = b == best["bath"]
+            ax.plot(r["m"][k[b]] * 1e3, r[key][k[b]] * scale, color=BATH_COLOR[b], lw=2.4 if hl else 1.2,
+                    alpha=1.0 if hl else 0.55, zorder=3 if hl else 2)
+        for method, sol in analytic.items():
+            hl = method == best["method"]
+            ax.plot(m_dense * 1e3, np.asarray(sol[ref], dtype=float) * scale, color=INK if hl else MUTED,
+                    ls=METHOD_STYLE[method], lw=2.2 if hl else 1.2, zorder=4 if hl else 1)
+        sim = np.concatenate([r[key][k[b]] * scale for b, r in runs.items()])
+        lo, hi = sim.min(), sim.max()
+        ax.set_ylim(lo - 0.06 * (hi - lo), hi + 0.12 * (hi - lo))
+        if log_axis:
+            ax.set_xscale("log")
+            ax.set_xlim(0.5e3 * min(r["m"][k[b]][0] for b, r in runs.items()), 1.15e3 * shock)
+        else:
+            ax.set_xlim(0.0, 1.15e3 * shock)
+        ax.set_ylabel(ylabel, color=INK, fontsize=12)
+        ax.set_xlabel(r"mass $m$ [mg/cm$^2$]", color=INK, fontsize=11)
+        ax.grid(True, color=GRID, lw=0.8)
+        ax.set_axisbelow(True)
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(False)
+        for side in ("left", "bottom"):
+            ax.spines[side].set_color(MUTED)
+        ax.tick_params(colors=MUTED, labelcolor=INK, labelsize=10)
+        ax.set_title(ref.capitalize(), color=INK, fontsize=13, loc="left", fontweight="bold")
+
+    # legend: the encodings, in one row under the title
+    handles = [Line2D([0], [0], color=BATH_COLOR[b], lw=2.4, label=f"Diffusion, {BATH_SHORT[b]}") for b in runs]
+    handles += [Line2D([0], [0], color=INK, ls=METHOD_STYLE[m], lw=2.0, label=f"Analytic, {n}")
+                for m, (_, n) in METHODS.items()]
+    fig.legend(handles=handles, loc="upper left", bbox_to_anchor=(0.055, 0.925), ncol=len(handles),
+               frameon=False, fontsize=10.5, handlelength=2.6, labelcolor=INK)
+
+    # ranking table
+    tab = fig.add_subplot(gs[:, 2])
+    tab.axis("off")
+    tab.set_title(f"All options at {t_an * 1e9:.1f} ns, best first", color=INK, fontsize=13, loc="left",
+                  fontweight="bold")
+    cols = ("bath", "analytic", "profile\nL1", "heat\nfront", "shock", "front\np")
+    table_name = {"paper": "paper", "calibrated": "T-calib.", "calibrated_flux": "flux-calib.",
+                  "original_patch": "original", "impulse_patch": "impulse"}
+    cell = [[table_name[r["bath"]], table_name[r["method"]],
+             f"{100 * r['score']:.1f}%", f"{r['m_heat']:+.1f}%", f"{r['m_shock']:+.1f}%", f"{r['p_abl']:+.1f}%"]
+            for r in rows]
+    t_ = tab.table(cellText=cell, colLabels=cols, loc="upper left", cellLoc="center",
+                   colWidths=(0.2, 0.17, 0.16, 0.16, 0.15, 0.16), bbox=(0.0, 1.0 - 0.075 * (len(rows) + 1), 1.0,
+                                                                         0.075 * (len(rows) + 1)))
+    t_.auto_set_font_size(False)
+    t_.set_fontsize(10.5)
+    for (i, j), c in t_.get_celld().items():
+        c.set_edgecolor(GRID)
+        c.set_text_props(color=INK)
+        if i == 0:
+            c.set_text_props(color=MUTED, fontweight="bold")
+            c.set_facecolor("white")
+        elif i == 1:
+            c.set_facecolor("#eef4fc")
+            c.set_text_props(color=INK, fontweight="bold")
+        if i > 0 and j == 0:   # the bath's color as a swatch: a colored left edge
+            c.set_text_props(color=BATH_COLOR[rows[i - 1]["bath"]], fontweight="bold" if i == 1 else "normal")
+    note = ("Best = smallest profile L1: the mass-weighted\n"
+            "|diffusion - analytic| over the domain, relative to\n"
+            "the analytic profile, averaged over rho, p, u and T.\n"
+            "Front columns: diffusion vs. analytic\n"
+            "(+ = diffusion ahead / higher).\n\n"
+            "Bold curves: the best option's bath (diffusion) and\n"
+            "analytic method. The analytic curve does not depend\n"
+            "on the bath. IMC agrees with diffusion to a few %\n"
+            "(per-bath figures) and is left out for readability.")
+    tab.text(0.0, 1.0 - 0.075 * (len(rows) + 1) - 0.04, note, va="top", ha="left", fontsize=9.5, color=MUTED,
+             transform=tab.transAxes, linespacing=1.5)
+    verdict = f"Best: {BATH_SHORT[best['bath']]}, {METHODS[best['method']][1]}"
+    if len(rows) > 1 and rows[1]["score"] - best["score"] < 1e-3:   # within 0.1 percentage point: no winner
+        verdict = (f"Tie: {BATH_SHORT[best['bath']]} with the {METHODS[best['method']][1]} or the "
+                   f"{METHODS[rows[1]['method']][1]}" if rows[1]["bath"] == best["bath"] else
+                   f"Tie: {BATH_SHORT[best['bath']]}, {METHODS[best['method']][1]} and "
+                   f"{BATH_SHORT[rows[1]['bath']]}, {METHODS[rows[1]['method']][1]}")
+    fig.suptitle(f"{ivd.HYDRO_CASES[label].title}: every bath and patch at {t_an * 1e9:.1f} ns.  {verdict}",
+                 x=0.055, ha="left", fontsize=15, fontweight="bold", color=INK, y=0.985)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=170)
+    plt.close(fig)
+    return rows
 
 
 def main(argv=None):
@@ -335,12 +320,12 @@ def main(argv=None):
     ap.add_argument("--omega-scan", nargs="*", type=float, default=[])
     ap.add_argument("--N", type=int, default=400, help="cells of the omega-scan diffusion runs")
     ap.add_argument("--seeds", nargs="*", type=int, default=[], help="IMC seeds of the omega-scan runs")
-    ap.add_argument("--verify", action="store_true", help="the moving-front check against PistonShock")
-    ap.add_argument("--figures", action="store_true", help="the omega-scan and Test 4 profile figures")
-    ap.add_argument("--profiles", action="store_true",
-                    help="each case's profile figure with the corrected patchings, md/phase_c/figures/patched/")
-    ap.add_argument("--linear", action="store_true", help="--profiles on a linear mass axis (<label>_profiles_linear.png)")
     ap.add_argument("--run-only", action="store_true", help="only run the omega-scan simulations")
+    ap.add_argument("--profiles", action="store_true",
+                    help="the full-profile figures, md/phase_c/figures/<bath>/<method>/")
+    ap.add_argument("--baths", nargs="*", default=list(BATHS), choices=list(BATHS))
+    ap.add_argument("--overlay", action="store_true",
+                    help="one figure per case with every bath and patch, md/phase_c/figures/overlay/")
     args = ap.parse_args(argv)
     labels = list(args.cases)
     for w in args.omega_scan:
@@ -349,28 +334,26 @@ def main(argv=None):
         labels.append(label)
     if args.run_only:
         return
-    if args.verify:
-        for label in labels:
-            print(verify_moving_front(label), flush=True)
-        return
     if args.profiles:
-        for label in labels:
-            name = f"{label}_profiles{'_linear' if args.linear else ''}.png"
-            plot_patched_profiles(label, ivd.REPO / "md" / "phase_c" / "figures" / "patched" / name,
-                                  log_axis=False if args.linear else None)
+        plot_profile_set(labels, args.baths)
         return
-    if args.figures:
-        FIG = ivd.REPO / "md" / "phase_c" / "figures"
-        plot_omega_scan(FIG / "patching_omega_scan.png")
-        plot_profiles("test4_full", FIG / "patching_test4_profiles.png")
+    if args.overlay:
+        for label in labels:
+            path = FIG / "overlay" / figure_name(label)
+            rows = plot_overlay(label, path)
+            print(f"  wrote {path.relative_to(ivd.REPO)}; best: {rows[0]['bath']} + {rows[0]['method']}; "
+                  + ", ".join(f"{r['bath']}/{r['method']} {100 * r['score']:.2f}%" for r in rows), flush=True)
         return
     OUT.mkdir(parents=True, exist_ok=True)
     for label in labels:
         solvers = patched_solvers(label)
-        solvers["B_simdrive"] = SimDriven(label, np.load(SIM_OUT / f"{label}_diffusion.npz"))
-        text = table(label, solvers, sim_fronts(label))
-        print(text, flush=True)
-        (OUT / f"{label}_table.md").write_text(text + "\n")
+        for bath in args.baths:
+            folder, out = BATHS[bath]
+            if not (out / f"{label}_diffusion.npz").exists():
+                continue
+            text = table(label, solvers, sim_fronts(label, out), title=f"{label}, {BATH_TEXT[bath]}")
+            print(text, flush=True)
+            (OUT / f"{label}_{folder}_table.md").write_text(text + "\n")
 
 
 if __name__ == "__main__":

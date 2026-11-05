@@ -30,9 +30,9 @@ These are the comparisons that close Phase C of `md/plans/full_plan_imc_comparis
 
 ## 2. Test 1
 
-![Test 1 profiles](figures/test1_full_profiles.png)
+![Test 1 profiles](figures/paper_bath/original_patch/test1_full_profiles.png)
 
-![Test 1 fronts](figures/test1_full_fronts.png)
+![Test 1 fronts](figures/legacy/non_profile/test1_full_fronts.png)
 
 | quantity | t [ns] | semi-analytic | diffusion | IMC (mean ± s.e.) | IMC vs. diffusion |
 |---|---|---|---|---|---|
@@ -51,9 +51,9 @@ The profiles of ρ, p, u and T at 1, 1.5 and 2 ns lie on top of each other throu
 
 ## 3. Test 2
 
-![Test 2 profiles](figures/test2_full_profiles.png)
+![Test 2 profiles](figures/paper_bath/original_patch/test2_full_profiles.png)
 
-![Test 2 fronts](figures/test2_full_fronts.png)
+![Test 2 fronts](figures/legacy/non_profile/test2_full_fronts.png)
 
 | quantity | t [ns] | semi-analytic | diffusion | IMC (mean ± s.e.) | IMC vs. diffusion |
 |---|---|---|---|---|---|

@@ -7,7 +7,9 @@ md/phase_c/phase_c_results.md:
     uv run python -m rad_hydro_sim.verification.imc_vs_diffusion --cases t1 test1 test2 thin100 \
         --figures-dir md/phase_b/figures
     uv run python -m rad_hydro_sim.verification.imc_vs_diffusion --cases test1_full test2_full \
-        --figures-dir md/phase_c/figures
+        --figures-dir md/phase_c/figures/paper_bath/original_patch
+    (the fronts figures land there too; md/phase_c/figures keeps only full profiles, see its
+    README; the full partitioned set comes from rad_hydro_sim.verification.patching_poc --profiles)
 
 Radiation-only cases (Phase B, static mesh):
   t1       SiO2 foam (PRESET_SIO2_FOAM_RADIATION_ONLY), 100 cells, 3 ns. Outgoing flux of
@@ -700,13 +702,17 @@ def optical_depth_line(run) -> str:
     return "optical depth of the hot plasma, T > T_s/2 (diffusion run): " + "; ".join(parts)
 
 
-def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, patched=(), log_axis=None):
+def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, patched=(), log_axis=None,
+                        analytic_label="Analytic", method=None):
     """rho, p, u, T against mass at 1, 1.5, 2 ns, in the style of the ICTT figures.
 
-    ``solver``: an AblationSolver to reuse (building one takes ~20 min).  ``patched``: extra
-    semi-analytic curves, (legend label, object with solve(mass=, time=), plot kwargs); with
-    any given, the original AblationSolver is drawn gray dashed and these on top
-    (md/phase_c/patching_poc.md).  ``log_axis``: overrides the case's log_mass_axis.
+    ``solver``: the analytic curve, an AblationSolver to reuse (building one takes ~20 min) or
+    any object with solve(mass=, time=), such as a patch from menahem_new.ablation_patching;
+    labelled ``analytic_label``.  ``method``: added to the title, naming the bath and the
+    analytic method.  ``patched``: extra curves, (legend label, object with solve(mass=, time=),
+    plot kwargs); with any given, ``solver`` is drawn gray dashed and these on top (the legacy
+    fix-B figures, md/phase_c/legacy/patching_poc_fix_B.md).  ``log_axis``: overrides the
+    case's log_mass_axis.
 
     Matches results/ictt/const_T/dimensional_verification/const_T_fully_patched_comparison.png
     (src/ictt29/full_fitting.py, plot_fully_patched_comparison): a 2x2 grid on a linear mass axis
@@ -784,7 +790,7 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, p
         ax.tick_params(labelsize=11)
     legend = [Line2D([0], [0], color=c, lw=2, label=f"Diffusion ({d['t'][k] * 1e9:.1f} ns)")
               for c, k in zip(sim_colors, snaps)]
-    legend += [Line2D([0], [0], label="Analytic (original patch)" if patched else "Analytic", **original)]
+    legend += [Line2D([0], [0], label="Analytic (original patch)" if patched else analytic_label, **original)]
     legend += [Line2D([0], [0], label=name, **style) for name, _, style in patched]
     legend += [Line2D([0], [0], color="forestgreen", lw=1.8, linestyle="--",
                       label=f"IMC ({len(imc)} seed{'s' if len(imc) > 1 else ''})" if imc
@@ -815,8 +821,8 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, p
         ax.indicate_inset_zoom(ins, edgecolor="gray", alpha=0.6)
 
     tau, thin, T_s = layer_optical_depth(d)
-    fig.suptitle(f"Patched Ablation & Shock Verification: Diffusion vs IMC\n{HYDRO_CASES[label].title}",
-                 fontsize=16, fontweight="bold", y=0.995)
+    fig.suptitle(f"Patched Ablation & Shock Verification: Diffusion vs IMC\n{HYDRO_CASES[label].title}"
+                 + (f"; {method}" if method else ""), fontsize=16, fontweight="bold", y=0.995)
     fig.text(0.5, 0.925, rf"hot ablated plasma ($T > T_s/2$) at {d['t'][-1] * 1e9:.1f} ns: optical depth $\mathcal{{T}}$ = {tau:.3g}, "
              rf"{thin:.0%} of its mass in cells with $\tau$ < 1;  surface T = {T_s:.3f} HeV (solver: "
              rf"{T_drive(label, float(d['t'][-1])):.3f})", ha="center", fontsize=12, style="italic")

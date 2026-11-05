@@ -38,8 +38,10 @@ Figures: `phase_b/figures/`.
 | [phase_c_results.md](phase_c/phase_c_results.md) | IMC vs. diffusion vs. the semi-analytic solution on the paper's full rad-hydro Tests 1 and 2 |
 | [phase_c_tests3to6_results.md](phase_c/phase_c_tests3to6_results.md) | Phase C½: the same comparison on all six paper tests (Au ω = 0, ±0.5; Cu; Al), which materials lose IMC–diffusion consistency, the bath options |
 | [why_the_solver_differs.md](phase_c/why_the_solver_differs.md) | Why the semi-analytic curve misses Tests 4–6: surface non-equilibrium (Cu, Al) and the rigid-front patching (Test 4), with the code walk-through and suggested fixes |
+| [analytic_patching.md](phase_c/analytic_patching.md) | The impulse-matched patch (fix C, analytic) against the original on all tests and an ω scan, with every bath; which option fits best per case |
+| [legacy/](phase_c/legacy/) | Superseded: fix B, a numerical moving-front target (not an analytic benchmark), kept as the record of how the patch's closure was found |
 
-Figures: `phase_c/figures/`.
+Figures: `phase_c/figures/`, all full-profile figures, by bath and analytic method, plus per-case overlays; layout in [phase_c/figures/README.md](phase_c/figures/README.md).
 
 ## Where to start
 - **New to the IMC:** `theory/imc_mc_derivation.md` §1, then `imc_code/imc_core.md`.

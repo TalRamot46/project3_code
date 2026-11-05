@@ -316,3 +316,28 @@ You asked for this after Phase C and before Phase D, as the most important step 
 >   - In Test 4 (ω = −0.5) its rigid-front patching costs 6–14%. The hydro code reproduces the solver's own piston shock to 0.1%, so the codes are not the cause.
 > - **New options:** `mesh="uniform_mass"` (Test 4); `bath_drive` = `"paper"` (option c, default) / `"calibrated"` / `"calibrated_flux"` (option a).
 > - **Open, for you and Menahem:** the patching fix for ω < 0 (`why_the_solver_differs.md` §3.3), and the manuscript's wording on the LTE limit for Cu and Al.
+
+---
+
+## Addendum C (2026-11-05): what Phase D is for, now that Phase C½ is done (new; everything above is unchanged)
+
+You asked whether Phase D matters for the comparison with diffusion and Menahem's solver. It does not change any comparison result. Its value is cost, the advisor's points, and the thesis.
+
+**Why it does not affect the comparison:**
+- The plan already says so. Finding 6 (Context): "Emission tilt, DDMC and variance reduction improve accuracy and cost; they are not prerequisites."
+- Every Phase D gate requires the analog answer: M6 "means agree with analog", M7 "unbiasedness", M9 "hybrid vs. pure IMC … give the same answers". They lower cost and noise, not the physics.
+- Noise is not the limit. `md/phase_c/phase_c_results.md` §4: "The IMC standard errors are tiny, but the differences are not noise; they are discretization" (±1 cell in the front positions).
+- Every IMC-vs-diffusion difference in Tests 1–6 is already explained, ordered by the hot plasma's optical depth (Addendum B status).
+- The open items for the paper don't need Phase D: the patching fix for ω < 0, the LTE wording for Cu and Al, and Test 3's density deficit behind the ablation front. The last one needs a flux-limited diffusion run (M11), not Phase D (`phase_c_tests3to6_results.md` §5).
+- M10's "all M6–M9 options selectable" is wording, not a dependency. M10 works with analog IMC.
+
+**Where Phase D does pay off:**
+1. **Cost on Test 3.** 3.1–4.7 h per IMC seed at 1/10 of the packets, and 2.5–8.8 h on the fine mesh. M10's convergence tables would need more seeds or full packet counts there. Part of the cost is the ~2×10⁶ CFL-limited steps, which Phase D does not remove. The split between per-packet and per-step cost has not been profiled.
+2. **The advisor's points.** A2, A4, A5 and A6 are in Phase D (explicit → IMC → continuous absorption, smart allocation, DDMC with τ > 10).
+3. **Supplying the paper's IMC curves** instead of Steinberg's code, if that is ever wanted. As an independent cross-check, analog IMC is enough.
+
+**A caution about DDMC (M9).** In DDMC cells the "transport" answer is a Monte Carlo solution of the same discrete diffusion equation being verified (M9 exercise), so those cells no longer check diffusion independently. Transport and diffusion agree in thick cells anyway, but keep the comparison runs (M10) on pure IMC and use DDMC only to measure the speedup.
+
+**Priority:**
+1. For the paper first: the patching fix (with Menahem), M10, and the M11 flux limiter for Test 3.
+2. Phase D, if the advisor expects it: M6 with M7/A4 first, because they pay off on Test 3. A global comb already exists in `population.py` (Test 4's census is combed at 3×10⁴ packets). Then M9, the most work for the least gain on these tests. M8 last or not at all: its gate concerns coarse meshes, and the runs already use the manuscript's 1000 cells.

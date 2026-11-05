@@ -134,9 +134,11 @@ def sim_series(omega: float):
 
 
 # reference palette (dataviz skill): one hue per bath in fixed order, ink for the analytic curve
-STYLE = {"diffusion, paper bath": dict(color="#2a78d6", lw=2.0),
-         "IMC, paper bath": dict(color="#2a78d6", lw=1.4, ls=(0, (4, 2))),
-         "diffusion, flux-calibrated bath": dict(color="#1baf7a", lw=2.0)}
+# where the baths agree (omega >= 0) the curves coincide: the paper bath is drawn wide underneath,
+# the flux-calibrated bath narrow on top, so both stay visible
+STYLE = {"diffusion, paper bath": dict(color="#2a78d6", lw=3.4, alpha=0.75),
+         "IMC, paper bath": dict(color="#184f95", lw=1.4, ls=(0, (4, 2))),
+         "diffusion, flux-calibrated bath": dict(color="#1baf7a", lw=1.6)}
 INK, MUTED, GRID = "#1f1f1d", "#6b6a64", "#e4e3dd"
 PANELS = (("x_f", r"heat front $x_f$ [$\mu$m]", 1e4), ("m_f", r"heat front $m_f$ [mg/cm$^2$]", 1e3),
           ("x_s", r"shock $x_s$ [$\mu$m]", 1e4), ("m_s", r"shock $m_s$ [mg/cm$^2$]", 1e3))

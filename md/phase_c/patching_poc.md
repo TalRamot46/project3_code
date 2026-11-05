@@ -121,7 +121,7 @@ uv run python -m rad_hydro_sim.verification.patching_poc --cases --omega-scan=0.
 | −0.25 | [figures/patched/omegam025_profiles.png](figures/patched/omegam025_profiles.png) |
 | 0 (Test 1; Test 2 with τ > 0) | [test1_full](figures/patched/test1_full_profiles.png), [test2_full](figures/patched/test2_full_profiles.png) |
 | +0.25 (N = 2000, no IMC) | [figures/patched/omegap025_n2000_profiles.png](figures/patched/omegap025_n2000_profiles.png) |
-| +0.5 (Test 3, log mass axis) | [figures/patched/test3_smooth_profiles.png](figures/patched/test3_smooth_profiles.png) |
+| +0.5 (Test 3) | [log mass axis](figures/patched/test3_smooth_profiles.png), [linear mass axis](figures/patched/test3_smooth_profiles_linear.png) (`--linear`) |
 | Cu, Al (ω = 0) | [test5_full](figures/patched/test5_full_profiles.png), [test6_full](figures/patched/test6_full_profiles.png) |
 
 What they show:

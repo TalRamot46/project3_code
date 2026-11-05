@@ -1,4 +1,8 @@
-"""Analytic patching of the subsonic heat wave to the shocked target (fix C).
+"""LEGACY: analytic patching of the subsonic heat wave to the shocked target (fix C).
+
+Superseded (md/phase_c/legacy/analytic_patching_impulse.md): the impulse match trades the
+original's shock error for a front-pressure error and is not a consistent improvement.  The
+current reference is the original AblationSolver (md/phase_c/bath_calibration.md).
 
 ``AblationSolver`` patches two self-similar solutions: the heat wave with a rigid
 ablation front (u = 0 at m_f) and ``PistonShock``, a piston at m = 0 pushing with the
@@ -8,7 +12,7 @@ to the pressure the target feels: to first order it is a "massive" ablation fron
 
 ``MatchedPistonPatch`` keeps both pieces self-similar -- no field is integrated in time --
 and changes only how they are joined: PistonShock gets an effective amplitude p_eff(t)
-chosen for a "massless" front (md/phase_c/analytic_patching.md), and the heat layer is
+chosen for a "massless" front (md/phase_c/legacy/analytic_patching_impulse.md), and the heat layer is
 shifted to the shock solution's position and velocity at the cut, so x and u are
 continuous at m_f (p too for the pressure match, not for the impulse match).  The numerical moving-front target (fix B) that motivated it is in
 ``menahem_new.legacy.moving_front_shock``.

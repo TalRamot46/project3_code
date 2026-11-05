@@ -3,7 +3,7 @@
 Not an analytic benchmark: every curve here involves ``menahem_new.legacy.moving_front_shock``,
 a 1-D hydro integration of the target.  Kept to reproduce md/phase_c/legacy/patching_poc_fix_B.md
 and the figures in md/phase_c/figures/legacy/fix_B/.  The analytic patchings live in
-``rad_hydro_sim.verification.patching_poc``.
+``rad_hydro_sim.verification.legacy.patching_poc`` (also legacy).
 
     uv run python -m rad_hydro_sim.verification.legacy.patching_fix_b --cases test4_full   # tables
     uv run python -m rad_hydro_sim.verification.legacy.patching_fix_b --cases test4_full --verify
@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 
 from rad_hydro_sim.verification import imc_vs_diffusion as ivd
-from rad_hydro_sim.verification.patching_poc import (
+from rad_hydro_sim.verification.legacy.patching_poc import (
     OUT, SIM_OUT, TIMES, patched_solvers, register_omega_case, sim_fronts, solver_for, table)
 
 PATCHINGS = ("original", "B_massless", "B_massive", "C_pressure", "C_impulse", "B_simdrive")

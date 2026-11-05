@@ -5,7 +5,7 @@ of the target in (m, t) (a 1-D hydro simulation), so a curve built on it is a hy
 self-similar heat wave and a numerical target, and cannot serve as an analytic benchmark
 for IMC and diffusion.  Kept for the record of md/phase_c/legacy/patching_poc_fix_B.md:
 it is what established the massless-front closure that the analytic patch in
-``menahem_new.ablation_patching`` (fix C) is built on.
+``menahem_new.legacy.matched_piston_patch`` (fix C, also legacy) is built on.
 
 - ``MovingFrontShock``: the target rho0 x^-omega driven at the moving ablation front m_f(t);
   cells below m_f(t) are removed from the integration as the front sweeps them.

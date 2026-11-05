@@ -1,37 +1,32 @@
-"""Analytic patchings of the semi-analytic ablation solution against the cached diffusion and
-IMC runs (fix C of md/phase_c/why_the_solver_differs.md Sec. 3.3; md/phase_c/analytic_patching.md).
+"""LEGACY: the impulse-matched and pressure-matched patches (fix C) against diffusion and IMC.
 
-Every curve here is analytic: the self-similar heat wave and PistonShock, joined differently.
-The numerical moving-front target (fix B) is legacy: rad_hydro_sim.verification.legacy.patching_fix_b.
+Superseded: the impulse match lowers the whole-profile error with the paper bath for omega < 0
+and Cu/Al, but flips the shock error (+7 ... +13% for omega <= -0.5), worsens the front pressure
+and leaves a pressure step at the front; with the flux-calibrated bath it wins only for Al
+(md/phase_c/legacy/analytic_patching_impulse.md).  The current comparison is
+rad_hydro_sim.verification.bath_calibration (the original AblationSolver under each bath).
 
-    uv run python -m rad_hydro_sim.verification.patching_poc --cases test4_full test1_full   # tables
-    uv run python -m rad_hydro_sim.verification.patching_poc --cases --omega-scan=-0.75 --seeds 1
-    uv run python -m rad_hydro_sim.verification.patching_poc --cases test1_full ... --profiles
+    uv run python -m rad_hydro_sim.verification.legacy.patching_poc --cases test4_full            # tables
+    uv run python -m rad_hydro_sim.verification.legacy.patching_poc --cases test4_full --profiles
+    uv run python -m rad_hydro_sim.verification.legacy.patching_poc --cases test4_full --overlay
 
-Patchings (menahem_new.ablation_patching):
-  original     AblationSolver: PistonShock with the piston at m = 0, cut at m_f.
-  C_pressure   PistonShock with its amplitude matched so that p = p_f at the cut m_f (quasi-static).
-  C_impulse    PistonShock with its amplitude matched to the momentum a massless ablation front
-               has delivered beyond the cut, marched in time.
-
-The omega scan adds Test 4 variants (gold, 1 HeV, tau = 0) with other omegas on a uniform-mass
-mesh; the runs are cached with the others.  --profiles writes md/phase_c/figures/<bath>/<method>/.
+Patchings (menahem_new.legacy.matched_piston_patch): original, C_pressure, C_impulse.
+Figures go to md/phase_c/figures/legacy/impulse_patch/; tables to results/patching_poc/.
 """
 from __future__ import annotations
 
 import argparse
 import logging
-import pickle
-from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 
 from rad_hydro_sim.verification import imc_vs_diffusion as ivd
 
+from rad_hydro_sim.verification.bath_calibration import (  # noqa: E402  (shared with the current comparison)
+    SIM_OUT, TIMES, figure_name, omega_label, profile_score, register_omega_case, sim_fronts, solver_for)
+
 OUT = ivd.REPO / "results" / "patching_poc"
-SIM_OUT = ivd.DEFAULT_OUT
-TIMES = np.array([0.5, 1.0, 1.5, 2.0]) * 1e-9
 PATCHINGS = ("original", "C_pressure", "C_impulse")
 # simulation runs per bath (imc_vs_diffusion --bath), and their figure folders
 BATHS = {"paper": ("paper_bath", SIM_OUT),
@@ -42,58 +37,12 @@ BATH_TEXT = {"paper": "paper bath", "calibrated": "bath calibrated to the surfac
 # analytic method per figure folder: (patching, what the figure calls it)
 METHODS = {"original_patch": ("original", "original patch"),
            "impulse_patch": ("C_impulse", "impulse-matched patch")}
-FIG = ivd.REPO / "md" / "phase_c" / "figures"
-
-
-def omega_label(omega: float) -> str:
-    return f"omega{omega:+.2f}".replace("+", "p").replace("-", "m").replace(".", "")
-
-
-def register_omega_case(omega: float, N: int = 400) -> str:
-    """A Test 4 twin with another omega: preset + HydroCase registered at run time."""
-    from rad_hydro_sim.problems import presets_config as P
-
-    label = omega_label(omega) + ("" if N == 400 else f"_n{N}")
-    key = f"POC_{label.upper()}"
-    if label in ivd.HYDRO_CASES:
-        return label
-    base = P.PRESET_TEST_CASES[P.CONSTANT_TEMPERATURE_OMEGA_MINUS_0_5_FULL]
-    case = replace(base, omega=omega, title=rf"Au, $\omega={omega:+.2f}$")
-    solver = _solver_for_case(case, omega_label(omega))
-    m_s = float(np.ravel(solver.shock_solver.shocked_mass(time=base.t_sec_end))[0])
-    # a 15% margin in mass beyond the analytic shock at t_end
-    x_max = float(solver.shock_solver.initial_position(mass=1.15 * m_s))
-    P.PRESET_TEST_CASES[key] = replace(case, x_max=x_max)
-    setattr(P, key, key)
-    ivd.HYDRO_CASES[label] = ivd.HydroCase(key, rf"Au, $\omega={omega:+.2f}$", N=N, store_every=40,
-                                           config=(("mesh", "uniform_mass"),),
-                                           imc=ivd.HYDRO_CASES["test4_full"].imc)
-    return label
-
-
-def _solver_for_case(case, label: str):
-    from menahem_new.ablation_solver_og import AblationSolver
-    from rad_hydro_sim.verification.menahem_comparison import _ablation_kwargs_from_case
-
-    path = OUT / f"solver_{label}.pkl"
-    if path.exists():
-        with open(path, "rb") as f:
-            return pickle.load(f)
-    solver = AblationSolver(**_ablation_kwargs_from_case(case))
-    OUT.mkdir(parents=True, exist_ok=True)
-    with open(path, "wb") as f:
-        pickle.dump(solver, f)
-    return solver
-
-
-def solver_for(label: str):
-    # the omega-scan cases at other N share their omega's solver
-    return _solver_for_case(ivd._hydro_case(ivd.HYDRO_CASES[label]), label.split("_n")[0])
+FIG = ivd.REPO / "md" / "phase_c" / "figures" / "legacy" / "impulse_patch"
 
 
 def patched_solvers(label: str):
     """{patching: object with front_values(t) and solve(mass, time)} for one case."""
-    from menahem_new.ablation_patching import MatchedPistonPatch
+    from menahem_new.legacy.matched_piston_patch import MatchedPistonPatch
 
     base = solver_for(label)
     hs, ps = base.heat_solver, base.shock_solver
@@ -113,17 +62,6 @@ def patched_solvers(label: str):
             "C_impulse": MatchedPistonPatch(base, front="massless", match="impulse", t_end=TIMES[-1])}
 
 
-def sim_fronts(label: str, out: Path = SIM_OUT):
-    """{run name: {t: front values}} of the cached diffusion / IMC runs."""
-    runs = {}
-    for tag in ["diffusion", "imc1", "imc2", "imc3"]:
-        path = out / f"{label}_{tag}.npz"
-        if path.exists():
-            run = np.load(path)
-            runs[tag] = {t: ivd.front_values(run, label, t) for t in TIMES}
-    return runs
-
-
 def table(label: str, solvers, sims, patchings=PATCHINGS, title=None) -> str:
     rows = [f"### {title or label}", "",
             "| t [ns] | quantity | diffusion | IMC | " + " | ".join(patchings) + " |",
@@ -139,10 +77,6 @@ def table(label: str, solvers, sims, patchings=PATCHINGS, title=None) -> str:
     rows.append("")
     rows.append("(m in mg/cm^2, p in Mbar; the % is diffusion vs. that patching)")
     return "\n".join(rows)
-
-
-def figure_name(label: str) -> str:
-    return ivd.FIGURE_NAMES[label][0] if label in ivd.FIGURE_NAMES else f"{label}_profiles.png"
 
 
 def plot_profile_set(labels, baths=tuple(BATHS)):
@@ -174,19 +108,6 @@ METHOD_STYLE = {"original_patch": "--", "impulse_patch": "-"}
 INK, MUTED, GRID = "#1f1f1d", "#6b6a64", "#e4e3dd"
 FIELDS = (("rho", "density", r"$\rho$ [g/cm$^3$]", 1.0), ("p", "pressure", r"$P$ [Mbar]", 1e-12),
           ("u", "velocity", r"$u$ [km/s]", 1e-5), ("T_material", "temperature", r"$T$ [HeV]", 1.0 / ivd.K_PER_HEV))
-
-
-def profile_score(run, k, analytic, t):
-    """Mass-weighted L1 distance between a run's profile at frame k and an analytic one,
-    sum |f_run - f_an| dm / sum |f_an| dm, averaged over rho, p, u, T."""
-    m = run["m"][k]
-    dm = np.diff(m, prepend=0.0)
-    sol = analytic.solve(mass=m - 0.5 * dm, time=t)
-    errs = []
-    for key, ref, _, _ in FIELDS:
-        an = np.nan_to_num(np.asarray(sol[ref], dtype=float))
-        errs.append(np.sum(np.abs(run[key][k] - an) * dm) / np.sum(np.abs(an) * dm))
-    return float(np.mean(errs))
 
 
 def plot_overlay(label: str, path: Path, t: float = 2e-9):

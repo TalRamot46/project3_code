@@ -46,11 +46,11 @@ Energy is conserved to round-off in every run: diffusion 10⁻¹⁴–10⁻¹³;
 | 5 (Cu) | 1000 | 3 | −2.3% / −2.5% / −1.8% / −4.1% | +3.8% / −0.2% / −1.8% / −2.2% | 3.3 | 0.956 |
 | 6 (Al) | 400 | 3 | −4.5% / −3.3% / −4.0% / −5.2% | +2.3% / −2.9% / −2.8% / −2.3% | 2.6 | 0.974 |
 
-With the flux-matched bath, copper and aluminum lie within ~4% of the solver on every quantity, and IMC still agrees with diffusion as it did with the paper's bath. The IMC-vs-diffusion difference is a property of the material, not of the bath. Profiles: `md/phase_c/figures/calibrated_flux_bath/original_patch/`.
+With the flux-matched bath, copper and aluminum lie within ~4% of the solver on every quantity, and IMC still agrees with diffusion as it did with the paper's bath. The IMC-vs-diffusion difference is a property of the material, not of the bath. Profiles: `md/phase_c/figures/calibrated_flux_bath/`.
 
 ## 2. Figures
 
-In `md/phase_c/figures/` (layout: `figures/README.md`); the profiles of this page are the original patch with the paper bath, `paper_bath/original_patch/`, the others are under `legacy/non_profile/`:
+In `md/phase_c/figures/` (layout: `figures/README.md`); the profiles of this page are in `paper_bath/`, the others are under `legacy/non_profile/`:
 - `testN_full_profiles.png`: ρ, p, u, T at 1, 1.5 and 2 ns in the style of `results/ictt/const_T/dimensional_verification/const_T_fully_patched_comparison.png`. Diffusion is drawn per time (blue, orange, red), the solver in black, IMC dashed green, with zoom insets on the ablation layer and the shocked region. Test 3 uses a log mass axis: its ablated layer, 1.5 mg/cm², sits on a 300 mg/cm² domain. Each figure's subtitle gives the hot plasma's 𝒯, the share of its mass in cells with τ < 1, and the surface temperature against the solver's.
 - `testN_full_fronts.png`: the heat and shock fronts, ablation pressure and energy delivered vs. time, against the self-similar laws.
 - `opacity_summary.png`: 𝒯 per test, next to the IMC-vs-diffusion and diffusion-vs-solver differences.
@@ -87,7 +87,7 @@ With ω = −0.5 the ablated mass is 28–37% of the shocked mass, and the shock
   - **A failed first version:** an earlier version of the cap split each heavy cell into whole pieces. That left neighbours at mass ratios down to 0.52, and the hydro made density spikes at exactly those jumps, so it was replaced.
   - **IMC vs. diffusion on this mesh** (3 seeds, 2.5–8.8 h each), at 2 ns: heat front −0.6%, shock −1.0%, ablation pressure +0.1%, energy −2.2%. Energy error 7×10⁻¹⁰ (IMC), 10⁻¹³ (diffusion).
   - **The density deficit:** behind the ablation front (1–10 mg/cm²) diffusion's density is 20–25% below the solver's at equal pressure, i.e. hotter material. **IMC's density there is clearly higher than diffusion's and closer to the solver**, with the same hydro, so this is not a hydro (wall-heating) error, as first suggested here. It points at radiation. Gray diffusion without a flux limiter carries too much flux into the cold, dense material just ahead of the ablation front, preheating it, while transport limits that flux. Both stay below the solver's density, which rises steeply toward the front for ω = +0.5. This is the one visible place in Test 3 where transport and diffusion differ. The mechanism is inferred from the figure, not yet confirmed: a flux-limited diffusion run (plan M11) would test it.
-  - `paper_bath/original_patch/test3_full_profiles.png` and `legacy/non_profile/test3_full_fronts.png` show this fine mesh, with IMC.
+  - `paper_bath/test3_full_profiles.png` and `legacy/non_profile/test3_full_fronts.png` show this fine mesh, with IMC.
 - **Copper's domain is cut to 3×10⁻² g/cm²**, holding the 2.2×10⁻² g/cm² shock, so that 1000 cells resolve its ablated layer.
 
 ## 6. Reproducing

@@ -4,7 +4,7 @@
 > Lagrangian Euler equations of the target in (m, t), a 1-D hydro simulation, so any curve built
 > on it is a hybrid and cannot benchmark IMC and diffusion. It is kept as the record of what it
 > established (the massless-front closure, §2 and §5.2–5.3), which the analytic patch builds on.
-> The analytic results are in [`../analytic_patching.md`](../analytic_patching.md).
+> The analytic follow-up (also legacy) is [`analytic_patching_impulse.md`](analytic_patching_impulse.md); the current reference is [`../bath_calibration.md`](../bath_calibration.md).
 > Code: `src/menahem_new/legacy/moving_front_shock.py` and
 > `src/rad_hydro_sim/verification/legacy/patching_fix_b.py`. Figures:
 > `md/phase_c/figures/legacy/fix_B/`. Tables: `results/patching_poc/legacy/`.

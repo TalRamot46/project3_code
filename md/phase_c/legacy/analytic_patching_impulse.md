@@ -1,6 +1,8 @@
-# Analytic patching of the semi-analytic solution: the impulse-matched patch
+# LEGACY: analytic patching of the semi-analytic solution, the impulse-matched patch
 
-Follow-up to `why_the_solver_differs.md` §3.3 (fix C). Branch `feat/patching-poc`, 2026-11-05. Supersedes `legacy/patching_poc_fix_B.md` as the current result. That page used a numerical target (fix B) and is kept only as the record of how the closure below was found.
+> **Legacy, 2026-11-05.** The impulse match is not a consistent improvement. With the paper bath it lowers the whole-profile error for ω < 0 and Cu/Al, but it flips the shock error (+7 … +13% for ω ≤ −0.5), makes the front pressure worse (+23% in Test 4) and leaves a pressure step at the front. With the flux-calibrated bath it is the best option only for Al. The current reference is the original `AblationSolver` under each bath: [`../bath_calibration.md`](../bath_calibration.md). Code: `src/menahem_new/legacy/matched_piston_patch.py`, `src/rad_hydro_sim/verification/legacy/patching_poc.py`. Figures: `md/phase_c/figures/legacy/impulse_patch/`.
+
+Follow-up to `../why_the_solver_differs.md` §3.3 (fix C). Branch `feat/patching-poc`, 2026-11-05. Supersedes `patching_poc_fix_B.md` as the current result. That page used a numerical target (fix B) and is kept only as the record of how the closure below was found.
 
 **In one paragraph.** Only analytic curves are used here: the self-similar heat wave and the self-similar PistonShock, joined in different ways. The **impulse-matched patch** keeps both pieces self-similar. It changes the PistonShock amplitude so that the momentum the target carries beyond the cut equals the momentum a *massless* ablation front delivers to it. With the paper bath, it lies closer to the simulations than the original patch over the whole profile in every ω < 0 case: profile L1 33 vs. 40% at ω = −0.75, 19 vs. 25% in Test 4, 9.5 vs. 11.9% at ω = −0.25. It also does better for copper and aluminum. It ties with the original for ω > 0, and is worse in Test 1 (5.8 vs. 3.4%). It fixes the original's main defect, the shock running 12–16% ahead for ω ≤ −0.5, but overshoots the other way (+7% in Test 4, +13% at ω = −0.75). It also leaves a pressure step at the front, about 10% below p_f in Test 4. Neither patch removes the heat-side error for ω < 0, where the simulated heat front runs 6–16% ahead of the self-similar one.
 
@@ -8,7 +10,7 @@ Follow-up to `why_the_solver_differs.md` §3.3 (fix C). Branch `feat/patching-po
 
 ## 1. The patch
 
-`MatchedPistonPatch` in `src/menahem_new/ablation_patching.py`. The heat region is the rigid self-similar solution, unchanged. The shocked region is the self-similar PistonShock (piston at m = 0), unchanged in shape, with an effective amplitude p_eff(t) in place of p_f(t). At the cut m_f, the heat layer is shifted to the PistonShock position and velocity, so x and u are continuous there.
+`MatchedPistonPatch` in `src/menahem_new/legacy/matched_piston_patch.py`. The heat region is the rigid self-similar solution, unchanged. The shocked region is the self-similar PistonShock (piston at m = 0), unchanged in shape, with an effective amplitude p_eff(t) in place of p_f(t). At the cut m_f, the heat layer is shifted to the PistonShock position and velocity, so x and u are continuous there.
 
 **Why change the amplitude.** In the original patch, the slab 0 < m < m_f is shocked matter between the piston and the cut. It decelerates with the piston, which raises the pressure the target feels by ≈ m_f|du/dt|: +20% at the cut in Test 4. In effect, the original treats the ablated layer as decelerating with the front, a "massive" front. The simulations show the opposite: inside the ablated layer, the simulated pressure follows the rigid heat profile, with no inertial term. The ablated matter keeps the velocity it had when it crossed the front.
 
@@ -32,7 +34,7 @@ At early times the heat front runs ahead of any shock it could drive (m_f > m_s)
 
 ### 2.1 Every option, by whole-profile agreement (2 ns)
 
-Profile L1 is the mass-weighted |diffusion − analytic| over the domain, relative to the analytic profile, averaged over ρ, p, u and T (`patching_poc.profile_score`). It is dominated by where the shocks sit, which is the purpose here. Best per case in bold. Figures: `figures/overlay/`.
+Profile L1 is the mass-weighted |diffusion − analytic| over the domain, relative to the analytic profile, averaged over ρ, p, u and T (`patching_poc.profile_score`). It is dominated by where the shocks sit, which is the purpose here. Best per case in bold. Figures: `../figures/legacy/impulse_patch/overlay/`.
 
 | case | ω | paper, original | paper, impulse | T-calib., original | T-calib., impulse | flux-calib., original | flux-calib., impulse |
 |---|---|---|---|---|---|---|---|
@@ -68,7 +70,7 @@ The heat front is the same for both patches: the heat solution is not changed. W
 1. **The impulse-matched patch is the better analytic reference for ω < 0, and for Cu and Al with the paper bath.** Over the whole profile it is 17–25% (relative) closer to the simulations than the original patch at ω = −0.75, −0.5 and −0.25. It nearly halves the gap for Cu (9.4 → 5.4%) and Al (15.9 → 8.8%).
 2. **It is not a fix of everything.** For ω ≤ −0.5 it moves the shock error from −12 … −16% to +7 … +13%. Its front pressure is further from the simulations than the original's (+23% in Test 4), because the target starts below p_f.
 3. **For ω ≥ 0 the original patch stays.** The two patches tie for ω > 0 (m_f/m_s ≤ 2.4%). In Test 1 the original is better (3.4 vs. 5.8%).
-4. **The bath matters as much as the patch for Cu, Al and Test 4.** The flux-calibrated bath gives the best case overall for Test 4 (with the original patch, 17.8%), Cu (original, 2.6%) and Al (impulse, 5.0%). The temperature-calibrated bath is the worst option for Cu and Al (`why_the_solver_differs.md` §2.2).
+4. **The bath matters as much as the patch for Cu, Al and Test 4.** The flux-calibrated bath gives the best case overall for Test 4 (with the original patch, 17.8%), Cu (original, 2.6%) and Al (impulse, 5.0%). The temperature-calibrated bath is the worst option for Cu and Al (`../why_the_solver_differs.md` §2.2).
 5. **What limits both patches for ω < 0 is the heat side.** The simulated heat front runs ahead of the rigid self-similar one: +6% in Test 4, +16% at ω = −0.75, and more at early times. No joining of the two pieces can fix that. The likely cause is the heat solution's front condition ṽ(ξ_f) = 0, a front against an infinitely dense wall. For ω < 0, the target near the surface is light (ρ₀x^(−ω) → 0). This is untested.
 
 ## 4. Next steps (theory, all analytic)
@@ -81,16 +83,16 @@ The heat front is the same for both patches: the heat solution is not changed. W
 
 | | |
 |---|---|
-| `src/menahem_new/ablation_patching.py` | `MatchedPistonPatch` (impulse and pressure matching) |
-| `src/rad_hydro_sim/verification/patching_poc.py` | tables per bath, the ω-scan runs, `--profiles` (the partitioned figures) and `--overlay` |
-| `md/phase_c/figures/` | layout in `figures/README.md`: `<bath>/<original_patch or impulse_patch>/`, `overlay/` and `legacy/` |
-| legacy (fix B, numerical) | `src/menahem_new/legacy/moving_front_shock.py`, `src/rad_hydro_sim/verification/legacy/patching_fix_b.py`, `legacy/patching_poc_fix_B.md`, `figures/legacy/fix_B/` |
+| `src/menahem_new/legacy/matched_piston_patch.py` | `MatchedPistonPatch` (impulse and pressure matching) |
+| `src/rad_hydro_sim/verification/legacy/patching_poc.py` | tables per bath, the ω-scan runs, `--profiles` (the partitioned figures) and `--overlay` |
+| `md/phase_c/figures/` | layout in `../figures/README.md`: `<bath>/<original_patch or impulse_patch>/`, `overlay/` and `legacy/` |
+| legacy (fix B, numerical) | `src/menahem_new/legacy/moving_front_shock.py`, `src/rad_hydro_sim/verification/legacy/patching_fix_b.py`, `patching_poc_fix_B.md`, `figures/legacy/fix_B/` |
 
 ```
-uv run python -m rad_hydro_sim.verification.patching_poc --cases test1_full test4_full     # tables, every bath
-uv run python -m rad_hydro_sim.verification.patching_poc --cases test4_full --profiles      # figures/<bath>/<method>/
-uv run python -m rad_hydro_sim.verification.patching_poc --cases test4_full --overlay       # figures/overlay/
-uv run python -m rad_hydro_sim.verification.patching_poc --cases --omega-scan=-0.75 --seeds 1   # an omega-scan run
+uv run python -m rad_hydro_sim.verification.legacy.patching_poc --cases test1_full test4_full     # tables, every bath
+uv run python -m rad_hydro_sim.verification.legacy.patching_poc --cases test4_full --profiles      # figures/<bath>/<method>/
+uv run python -m rad_hydro_sim.verification.legacy.patching_poc --cases test4_full --overlay       # figures/overlay/
+uv run python -m rad_hydro_sim.verification.legacy.patching_poc --cases --omega-scan=-0.75 --seeds 1   # an omega-scan run
 ```
 
 The first `AblationSolver` construction per case takes ~20 min. Solvers are pickled to `results/patching_poc/solver_<label>.pkl`.

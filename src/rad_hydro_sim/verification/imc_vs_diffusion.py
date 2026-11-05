@@ -7,9 +7,9 @@ md/phase_c/phase_c_results.md:
     uv run python -m rad_hydro_sim.verification.imc_vs_diffusion --cases t1 test1 test2 thin100 \
         --figures-dir md/phase_b/figures
     uv run python -m rad_hydro_sim.verification.imc_vs_diffusion --cases test1_full test2_full \
-        --figures-dir md/phase_c/figures/paper_bath/original_patch
+        --figures-dir md/phase_c/figures/paper_bath
     (the fronts figures land there too; md/phase_c/figures keeps only full profiles, see its
-    README; the full partitioned set comes from rad_hydro_sim.verification.patching_poc --profiles)
+    README; the per-bath set comes from rad_hydro_sim.verification.bath_calibration --profiles)
 
 Radiation-only cases (Phase B, static mesh):
   t1       SiO2 foam (PRESET_SIO2_FOAM_RADIATION_ONLY), 100 cells, 3 ns. Outgoing flux of
@@ -560,6 +560,10 @@ def run_hydro(out: Path, label: str, seeds, rerun=False, N=None, t_end=None, imc
         idx = [int(np.argmin(np.abs(hist.t - ts))) for ts in snaps]
         fronts = np.array([fronts_of_profile(hist.m[k], hist.T_material[k], hist.rho[k], hist.p[k], hist.rho[0])
                            for k in range(hist.t.size)])
+        # the fronts' Eulerian positions: x is stored at cell centres, the fronts at cell-centre mass
+        mc = hist.m - 0.5 * np.diff(hist.m, axis=1, prepend=0.0)
+        x_front = np.array([[np.interp(fronts[k, j], mc[k], hist.x[k]) for j in (0, 1)]
+                            for k in range(hist.t.size)])
         b = meta["energy_budget"]
         keep = np.unique(np.linspace(0, len(b["t"]) - 1, 2000).astype(int))   # thin the per-step budget
         E_track = meta["imc_E_rad_track"][idx] if "imc_E_rad_track" in meta else hist.E_rad[idx]
@@ -571,6 +575,7 @@ def run_hydro(out: Path, label: str, seeds, rerun=False, N=None, t_end=None, imc
                  u=hist.u[idx], T_material=hist.T_material[idx], E_rad=hist.E_rad[idx], E_rad_track=E_track,
                  tau_cell=k_t * dx,
                  series_t=hist.t, m_heat=fronts[:, 0], m_shock=fronts[:, 1], p_abl=fronts[:, 2],
+                 x_heat=x_front[:, 0], x_shock=x_front[:, 1],
                  **{f"budget_{k}": np.asarray(b[k])[keep] for k in
                     ("t", "rad_in_left", "rad_out_right", "E_material", "E_kinetic", "E_radiation",
                      "relative_error", "max_v_over_c", "tau_v_over_c")},
@@ -707,7 +712,7 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, p
     """rho, p, u, T against mass at 1, 1.5, 2 ns, in the style of the ICTT figures.
 
     ``solver``: the analytic curve, an AblationSolver to reuse (building one takes ~20 min) or
-    any object with solve(mass=, time=), such as a patch from menahem_new.ablation_patching;
+    any object with solve(mass=, time=), such as bath_calibration.Analytic;
     labelled ``analytic_label``.  ``method``: added to the title, naming the bath and the
     analytic method.  ``patched``: extra curves, (legend label, object with solve(mass=, time=),
     plot kwargs); with any given, ``solver`` is drawn gray dashed and these on top (the legacy

@@ -1,167 +1,365 @@
-# Why the semi-analytic curve does not lie on the simulations
+# Which solutions should agree, and why: IMC, diffusion and the semi-analytic solver
 
-The black curve in every profile figure is Menahem's `AblationSolver`: the subsonic heat-wave solution patched to the piston-shock solution, evaluated directly (no fits). On the paper's gold Tests 1–3 it lies on the diffusion and IMC curves within 1–2%. On copper, aluminum and gold with ω = −0.5 (Tests 4–6) it does not, by 5–15%, and calibrating the bath (option (a)) does not fix it.
+Three solutions of the manuscript's subsonic Marshak-wave problem are compared on its six tests:
 
-The simulations are not the problem: IMC and diffusion agree with each other in every test, and the hydro code reproduces the solver's own shock exactly when given the same problem (§4.1). The black curve solves a slightly different, idealized problem. It makes **two approximations**, and each test breaks a different one:
+- **IMC**: gray transport;
+- **diffusion**: gray two-temperature diffusion;
+- **the semi-analytic solver**: Menahem's patched self-similar solution, the black curve in every figure.
 
-1. **Local thermodynamic equilibrium (LTE) at the surface.** The ablated plasma has one temperature: radiation and matter are in equilibrium, E_r = aT⁴. This fails where the hot plasma is optically thin. It costs copper and aluminum ~10%.
-2. **A rigid ablation front in the patching.** The heat-wave solution assumes the ablation front is at rest. The shock solution assumes a piston at m = 0 pushing with the ablation pressure, and it is cut at the ablated mass m_f. At the cut, the shock solution's pressure and velocity are not the piston's, so the patched profile jumps in both at the ablation front. The jump is small when the cut lies close to the piston (ablated mass ≪ shocked mass) and large when it does not (§3.1b). It costs Test 4 ~12%, and aluminum and copper a few %.
+This document derives, from the assumptions of each, which of them should agree with which, and under what conditions. It then checks each prediction against the runs, and ends with the parameters that decide the agreement and with the limits of the solver, which assumes complete thermal equilibrium between matter and radiation.
 
-The table summarizes the evidence. All values are diffusion at 2 ns, finest mesh; IMC agrees with diffusion to ≤ 2% in Tests 1, 2 and 4, and ≤ 5% in Tests 5–6.
+| Test | Material | Initial density | Drive |
+|---|---|---|---|
+| 1 | Au | uniform (ω = 0) | τ = 0 |
+| 2 | Au | uniform | τ = 158/1285 |
+| 3 | Au | ρ₀x^(−1/2) (ω = +0.5) | τ = 0 |
+| 4 | Au | ρ₀x^(+1/2) (ω = −0.5) | τ = 0 |
+| 5 | Cu | uniform | τ = 0 |
+| 6 | Al | uniform | τ = 0 |
 
-| Test | T_rad / T_mat at the surface | Shocked-matter velocity | m_f / m_s | Shock vs. solver: paper bath / calibrated | Energy in vs. solver: paper / calibrated | What breaks |
-|---|---|---|---|---|---|---|
-| 1 (Au, ω = 0) | 1.003 | 3.8 km/s | 7% | +0.6% / +1.8% | −2.0% / 0.0% | nothing beyond resolution |
-| 2 (Au, ω = 0, τ > 0) | — | — | 8% | +2.0% / +3.5% | −0.9% / +1.5% | nothing beyond resolution |
-| 3 (Au, ω = +0.5) | — | — | 0.5% | −2.1% / — | −1.8% / — | nothing beyond resolution |
-| 4 (Au, ω = −0.5) | 1.007 | 14.4 km/s | 28% | −12.5% / −10.9% | −10.7% / −8.1% | **2: the patching** |
-| 5 (Cu) | **1.065** | 7.9 km/s | 8% | −4.7% / +13.2% | −10.0% / **+23.8%** | **1: surface LTE**, plus some of 2 |
-| 6 (Al) | **1.047** | 15.2 km/s | 16% | −7.8% / +6.6% | −11.2% / **+15.4%** | **1 and 2** |
+All drives have T_s = 1 HeV at 1 ns (Test 2 rises as t^τ).
 
-(— : not computed for that test, or no calibrated run.)
+Results: `md/phase_c/phase_c_results.md` (Tests 1–2), `md/phase_c/phase_c_tests3to6_results.md` (all six), figures in `md/phase_c/figures/`. Every number here comes from the runs in `results/imc_vs_diffusion*/` or from the solver itself, at t = 2 ns unless stated. The scripts are in `rad_hydro_sim.verification.imc_vs_diffusion`; a few one-off checks are listed in §6. Statements that are inferences, not measurements, are marked as such.
+
+## Contents
+
+0. The answer in brief
+1. The three solutions and what each one assumes
+2. The hierarchy of approximations, and what each comparison isolates
+3. Predictions for the six tests, from the assumptions alone
+4. Numerical validation
+5. Conclusions: the determining parameters, and the limits of the equilibrium solver
+6. Data and reproduction
 
 ---
 
-## 1. What the black curve is
+## 0. The answer in brief
 
-`AblationSolver` builds the solution of the manuscript's §2 from two self-similar pieces:
+- **IMC vs. diffusion** differ only in how radiation propagates: transport vs. the P1/Fick closure. Theory says they agree where the hot ablated plasma is optically thick, and the runs confirm it. The order follows the optical depth 𝒯 of that plasma: gold (𝒯 ≈ 8–10) ≤ 2.3%, copper (3.2) ≤ 4.2%, aluminum (2.3) ≤ 5.3%. Neither code assumes equilibrium between radiation and matter, so their agreement does **not** test the solver's equilibrium assumption.
+- **The solver vs. both codes** adds two approximations of its own.
+  1. *One temperature (complete equilibrium)*, imposed at the surface as T = T_s. This needs an opaque surface layer. It holds in gold (surface T_rad/T_mat = 1.005–1.007) and fails in copper and aluminum (1.047–1.065). There the manuscript's bath delivers ~10% too little energy, and no bath can reproduce both the solver's surface temperature and its energy flux.
+  2. *The patching*, which cuts a piston-at-m = 0 shock solution at the ablated mass m_f. At the cut its pressure exceeds the ablation pressure by about m_f·|du/dt|, the inertia of the ablated slab, which the real flow does not have. The excess is ≤ 3% in every test except Test 4 (ω = −0.5), where it is 20% and the shock misses by 6–13%.
+- **The deciding parameters** are:
+  - for the equilibrium assumption, the solver's own lower-bound optical depth 𝒯_lb = m_f κ_R(T_s, ρ_s), computable without any simulation. It is ≥ 2.3 for gold, 0.56 for copper, 0.46 for aluminum;
+  - for the patching, the pressure step at the cut, Δp/p_f;
+  - then mesh resolution of the ablated layer and of the shocked region.
 
-- **The ablated region (0 < m < m_f).** The subsonic heat wave of Eqs. `cont/mom/energy_lagrange_heat`. The radiation enters only as a heat flux, s = −(c/3κ_R) ∂(aT⁴)/∂m: **equilibrium (one-temperature) diffusion**, with no separate radiation field. Its boundary conditions:
-  - at the surface m = 0: T = T_s(t) (1 HeV, × t^τ in Test 2) and p = 0;
-  - at the ablation front m = m_f(t): **ṽ = 0 and ũ = 0** (manuscript §"The energy in the system": "using the boundary conditions p̃(0) = 0, ṽ(ξ_f) = 0, and ũ(ξ_f) = 0"). The front is an infinitely dense wall at rest.
-- **The shocked region (m > m_f).** The `PistonShock` solution: a piston at **m = 0**, pushing into ρ₀x^(−ω) with pressure p_f(t) = p₀ₛ t^(c₃), the ablated region's pressure at its front.
-- **The patch.** The shock solution is evaluated at the true mass coordinates m > m_f. The heat-region positions are shifted to sit at the shock solution's position of mass m_f. The shock solution's piston pressure is set to the heat region's ablation pressure p_f, but at the piston (m = 0), not at the cut m_f. At m_f both pressure and velocity jump (§3.1a–b).
+---
 
-The simulations solve the full problem: two temperatures (matter T, radiation E_r), a Marshak bath, and one continuous Lagrangian flow with no patch. Every difference between the black curve and the simulations therefore comes from one of these idealizations, or from mesh resolution.
+## 1. The three solutions and what each one assumes
 
-## 2. Approximation 1: equilibrium at the surface (Tests 5 and 6)
+### 1.1 IMC (`src/imc/`, coupled through `src/imc/coupling/rad_hydro.py`)
 
-### 2.1 What happens
+IMC solves the gray radiation transport equation of the manuscript's §"Transport setup" (Eq. `Treq`), coupled to the material energy equation (Eq. `tr_mat`), by Monte Carlo. Its assumptions:
 
-The solver imposes "the surface is at 1 HeV". In LTE that sentence has one meaning. Out of LTE it has two: the matter at 1 HeV, or the radiation at 1 HeV. They are different statements, and they give different energy fluxes.
+1. **Gray transport, angle-resolved.** The intensity I(x, μ, t) is followed in angle; there is no closure. Absorption opacity k_a = χρκ_R, physical scattering (1 − χ)ρκ_R; χ = 1 in all six tests, so pure absorption.
+2. **Two temperatures.** The radiation field and the matter exchange energy at the rate c k_a (E_r − aT⁴); they are not forced to equilibrium.
+3. **Fleck–Cummings time linearization**, O(Δt): emission from Tⁿ with the Fleck factor, the "effective scattering". This is the standard IMC approximation, shared with diffusion (§1.2).
+4. **Monte Carlo noise.** 3 seeds; the standard errors on fronts are ~0.01–0.1%, much smaller than any difference discussed here.
+5. **Boundaries.** An isotropic blackbody bath at T_bath(t) enters at the surface, the manuscript's Eq. `Ibath_tr`, integrated exactly over each step. The right face is a vacuum.
+6. **The same hydro as diffusion:**
+   - Lagrangian, compatible (energy-conserving) scheme;
+   - ideal gas p = rρe, with the material energy e = fT^βρ^−μ;
+   - artificial viscosity;
+   - radiation carried per unit mass through the hydro step, with no radiation pressure (the manuscript's equations);
+   - same mesh and same time steps.
 
-At the copper and aluminum surfaces the radiation is measurably hotter than the matter. The hot ablated plasma is only marginally opaque: its optical depth is 𝒯 ≈ 3.2 (Cu) and 2.3 (Al), against 8–10 in gold (`opacity_summary.png`). The table's T_rad/T_mat column shows it: copper 1.065, aluminum 1.047, gold 1.003–1.007.
+### 1.2 Diffusion (`src/rad_hydro_sim/simulation/radiation_step.py`)
 
-### 2.2 Why no bath fixes it, and why calibration overshot
+Diffusion solves the manuscript's gray diffusion equations (Eqs. `gray_diff`, `gray_diff_mat`) with backward Euler and the same Fleck–Cummings linearization. Its assumptions differ from IMC's in exactly two places:
 
-- **The paper's bath** follows from the Marshak relation between T_bath and the solver's surface flux, a relation derived assuming LTE. In copper, it brings the *radiation* at the surface to 1.003 HeV, but the *matter* settles at 0.942 HeV. The matter's temperature sets the ablation pressure and the heat front, so the shock lags (−4.7%) and the energy in falls short (−10%).
-- **The calibrated bath (option (a))** raises T_bath until the *matter* at the surface is at 1.000 HeV. The radiation there is then 1.063 HeV, and the flux into the slab follows the radiation (F ∝ T_bath⁴ − T_rad⁴ through the Marshak face). The energy in overshoots (+24%) and so does the shock (+13%).
+1. **The P1/Fick closure.** The flux is F = −(c/3ρκ_R) ∂E_r/∂x. This is exact only when the radiation is nearly isotropic, i.e. when the photon mean free path λ = 1/(ρκ_R) is short compared with the length L_E over which E_r changes. There is **no flux limiter**, so the flux is not bounded by cE_r where gradients are steep.
+2. **A Marshak boundary with the cell-centre value**: F = (c/2)(E_bath − E₀). This is the P1 form of the incident half-range current; it uses the first cell's E₀, with no half-cell resistance (`md/phase_b/phase_b_diffusion_changes.md` §5.3).
 
-The solver's single-temperature surface sits between these two. No bath reproduces both its surface temperature and its energy flux, because in copper and aluminum the true surface is not in equilibrium. In gold the two temperatures agree to 0.3–0.7%, so both baths give the same answer within 2%.
+Everything else (two temperatures, linearization, hydro, mesh, time steps, EOS) is the same as IMC's. **Diffusion does not assume equilibrium either:** it carries E_r separately from aT⁴.
 
-So for copper and aluminum the disagreement is real physics. The paper's LTE solution is the right reference only where the ablated plasma is thick, and these drives make it marginal.
+### 1.3 The semi-analytic solver (`src/menahem_new/ablation_solver_og.py`, `subsonic_heat_wave_og.py`, `piston_shock_og.py`)
 
-### 2.3 What can be done
+The solver builds the solution of the manuscript's §2 from two self-similar solutions.
 
-- **(i) Calibrate to the energy flux instead of the matter temperature: done, and it works.** The bath is chosen so that the net flux into the slab equals the solver's s(0, t) (`bath_drive="calibrated_flux"`, `--calibrate-bath --calibrate-target flux`). The total energy then matches the solver's closed form E(t) = −s(0,t)·t/(2c_u + c_m), and what remains is the non-equilibrium redistribution inside the slab. Diffusion vs. the solver at 2 ns:
+**The ablated region, 0 < m < m_f(t): `SubsonicHeatWave`.** It solves Eqs. `cont/mom/energy_lagrange_heat`, where radiation enters only as the heat flux s = −(c/3κ_R) ∂(aT⁴)/∂m. Its assumptions:
+1. **Complete thermal equilibrium.** E_r = aT⁴ at every point: one temperature, the radiation's angular structure and its departure from the matter both ignored (equilibrium diffusion, manuscript Eq. `lte_diff_m`).
+2. **No separate radiation energy.** The radiation's energy is not a variable; Rosen's e is read as the total energy of matter plus radiation (Eq. `um_def`). The codes carry E_r as well, which is the same thing only if E_r ≪ ρe.
+3. **A Dirichlet surface:** T(m = 0, t) = T_s(t) exactly, with p = 0 at the surface.
+4. **A rigid front:** at m_f, ṽ = 0 and ũ = 0. The front is an infinitely dense wall at rest.
+5. **Self-similarity:** power-law material and drive, a cold semi-infinite target, no length scale.
 
-  | | heat front | shock | ablation p | energy in | matter surface T |
-  |---|---|---|---|---|---|
-  | Cu, paper bath | −1.5% | −4.7% | −5.1% | −10.0% | 0.942 |
-  | Cu, matter T matched | +20.3% | +13.2% | +8.6% | +23.8% | 1.000 |
-  | **Cu, energy flux matched** | **+3.8%** | **−0.2%** | **−1.8%** | **−2.2%** | 0.956 |
-  | Al, paper bath | −4.1% | −7.8% | −8.5% | −11.2% | 0.959 |
-  | Al, matter T matched | +14.3% | +6.6% | +2.8% | +15.4% | 1.000 |
-  | **Al, energy flux matched** | **+2.3%** | **−2.9%** | **−2.8%** | **−2.3%** | 0.974 |
-  | Au (Test 1), all three | within 2.2% | within 1.8% | −2.1 … −2.2% | −2.0 … 0.0% | 0.997–1.000 |
+**The shocked region, m > m_f: `PistonShock`.** A strong shock driven by a piston at **m = 0**, with pressure p_f(t) = p₀ₛ t^(c₃) equal to the ablated region's front pressure, into a cold target ρ₀x^−ω.
 
-  The matter at the surface settles between the two extremes, as expected where it is not in equilibrium with the radiation. The remaining 2–4% is not decomposed. Likely contributors are the energy delivered before 0.2 ns, where the calibration does not act because the first cell does not yet resolve the heated layer, and the patching's share in aluminum (§3). Figure: `figures/bath_comparison.png`.
-- **(ii) Report Tests 5–6 as the limit of the LTE solution.** State 𝒯 of the hot plasma next to each test (the figures now show it). Say that for 𝒯 ≲ 3 the LTE semi-analytic solution has a ~10% systematic error in the delivered energy, which both transport (IMC) and non-equilibrium diffusion see. This is a physics result, and the agreement between IMC and diffusion shows it is not a code artifact.
-- **(iii) Choose drives where 𝒯 is larger** (a higher density, a longer pulse, or a lower T_s for the light materials), if Tests 5–6 must agree with the solver to a few %.
+**The patch, `AblationSolver.solve`:**
+- `mass_shock = [ablated_mass, *mass[mass > ablated_mass]]`; the shock solution is evaluated only at m ≥ m_f.
+- `heat_position = result_shock["position"][0]` is one number: where the *shock* solution places the tracer of mass m_f. That is not the piston: in the shock solution the slab 0 < m < m_f is shocked material in front of the piston.
+- `result_heat["position"] += heat_position` moves the whole ablated layer so that its front sits there. Positions are continuous at m_f.
+- Velocities and pressures are **not** adjusted. The heat region's front is at rest with pressure p_f. The shock solution at m_f has a pressure p(m_f) and a velocity u(m_f) that are not the piston's (§4.3).
 
-## 3. Approximation 2: the rigid front of the patching (Test 4, partly Tests 5–6)
+So the solver adds five approximations to the codes' physics:
+- three about radiation: equilibrium; radiation energy folded into e; a Dirichlet surface;
+- one about its construction: the rigid-front patch;
+- one about the domain: a semi-infinite target with no discretization.
 
-### 3.1 What happens
+---
 
-The heat-wave solution ends at a front with ũ = 0: in its own solution the ablation front does not move. The shock solution, at the same mass, has the piston moving into the target at u_p > 0. The patch keeps both, so the black velocity curve **jumps** at m_f. The jump is visible in the velocity panels: small in gold Test 1, large in Test 4 (black curve, m ≈ 1–1.5 mg/cm²). In the simulation the velocity is continuous. The ablation front is carried forward with the shocked matter, which changes the ablated flow and the pressure history the shock receives.
+## 2. The hierarchy of approximations, and what each comparison isolates
 
-The same assumption shows up in mass: the shock solution counts the ablated mass m_f as part of a slab pushed from m = 0. That is harmless while m_f ≪ m_s.
+The three solutions are nested, each step adding approximations:
 
-Two numbers measure how wrong the rigid front is:
-- the shocked-matter velocity u_p, against the ablated flow speeds (~100 km/s);
-- the ratio m_f/m_s.
+```
+gray transport (IMC)
+   |  P1/Fick closure: photon mean free path << radiation gradient length; Marshak face
+   v
+two-temperature gray diffusion (diffusion)
+   |  complete equilibrium E_r = aT^4 (fast coupling, opaque surface layer);
+   |  radiation energy << matter energy; surface held at T_s instead of a bath
+   v
+one-temperature equilibrium diffusion + hydro (the problem the solver solves)
+   |  self-similar solution with the rigid-front patch (small step at the cut);
+   |  continuous, semi-infinite
+   v
+the patched semi-analytic solver (the black curve)
+```
 
-| | Test 1 | Test 5 (Cu) | Test 6 (Al) | Test 4 (ω = −0.5) |
-|---|---|---|---|---|
-| u_p | 3.8 km/s | 7.9 km/s | 15.2 km/s | 14.4 km/s |
-| m_f/m_s at 2 ns | 7% | 8% | 16% | 28% (37% at 1 ns) |
-| shock vs. solver | +0.6% | (mixed with §2) | (mixed with §2) | −12.5% |
+All three share the ideal-gas EOS, the material model, the gray opacity and the planar geometry. The two codes also share the hydro scheme, the mesh, the time steps and the time linearization.
 
-In Test 4 the shocked region is ρ ∝ x^(+0.5): light and easily pushed, so the piston moves fast and the shock sweeps little mass. In Test 3 (ω = +0.5) the target is dense and m_f/m_s = 0.5%, so the patching is nearly exact there.
-
-### 3.1a The patch in the code, line by line
-
-`AblationSolver.solve` (`src/menahem_new/ablation_solver_og.py`; `ablation_solver.py` has the same `solve`):
-
-1. **The shock region.** `mass_shock = [ablated_mass, *mass[mass > ablated_mass]]`, then `result_shock = self.shock_solver.solve(mass=mass_shock, time=time)`. `PistonShock` is the solution with the piston at **m = 0**: it started at x = 0 and is now at `piston_position(t)` > 0. It is evaluated only at m ≥ m_f.
-2. **`heat_position = result_shock["position"][0]`** is one number: the Eulerian position that the *shock* solution gives the tracer of mass m_f. It is not the piston. In the shock solution the slab 0 < m < m_f is shocked material in front of the piston, so `heat_position` > `piston_position`. At 2 ns: Test 1 8.74 vs 8.01 µm; Test 4 49.4 vs 33.7 µm; Cu 18.5 vs 16.5 µm; Al 38.5 vs 33.9 µm.
-3. **The heat region.** `SubsonicHeatWave.solve` returns positions measured from its own ablation front: `get_position_self_similar_factor` is 0 at ξ ≥ ξ_f, negative inside, and the surface is at `boundary_position(t)` = x_b < 0. `result_heat["position"] += heat_position` moves the whole ablated layer so that its front sits on the shock solution's tracer m_f. Positions are continuous at m_f.
-4. **Velocities are not shifted.** The heat region keeps its own velocities, in which the front is at rest (ũ(ξ_f) = 0). The shock region at m_f moves at about the piston velocity. Hence the jump in the black velocity curve, at 2 ns:
-
-| | u just behind m_f | u just ahead | jump | piston u |
-|---|---|---|---|---|
-| Test 1 (Au) | −0.9 km/s | +3.2 km/s | 4.1 | 3.1 |
-| Test 4 (Au, ω = −0.5) | −1.1 km/s | +13.5 km/s | 14.6 | 10.5 |
-| Test 5 (Cu) | −4.9 km/s | +6.8 km/s | 11.7 | 6.5 |
-| Test 6 (Al) | −8.8 km/s | +14.2 km/s | 22.9 | 13.4 |
-
-The mass 0 < m < m_f is described twice: as shocked material pushed by a piston at m = 0 (shock solution, then discarded), and as ablated plasma flowing back (heat solution, kept). The patch hides the overlap in position, but not in velocity.
-
-### 3.1b Why the ablated-to-shocked mass ratio matters: what the cut does
-
-The patch keeps the shock solution only for m > m_f. The pieces it keeps are a solution of a different problem, though: a piston at **m = 0** pushing with p_f(t). In that problem the slab 0 < m < m_f is shocked material between the piston and the cut. It carries the push forward, and its inertia shapes the profile beyond it. At the cut the shock solution therefore no longer has the piston's values. Its pressure and velocity there are those a fraction m_f/m_s of the way into the shocked slab, where the pressure has already built up.
-
-The shock solution's pressure and velocity at the cut m_f, against the piston's, at 2 ns (`PistonShock.solve`):
-
-| Test | m_f/m_s | p(m_f) / p_f | u(m_f) / u_piston |
+| Comparison | What differs | Controlling parameter | Measured by |
 |---|---|---|---|
-| 3 (Au, ω = +0.5) | 0.5% | 1.000 | 1.000 |
-| 1 (Au, ω = 0) | 7.0% | 1.027 | 1.043 |
-| 5 (Cu) | 8.2% | 1.030 | 1.046 |
-| 6 (Al) | 16.1% | 1.059 | 1.058 |
-| 4 (Au, ω = −0.5) | 28.0% | **1.201** | **1.291** |
+| IMC vs. diffusion | angular closure; boundary treatment | optical depth 𝒯 of the hot plasma, i.e. λ/L_E | front, pressure and energy differences (§4.1) |
+| diffusion vs. the equilibrium problem | two temperatures vs. one; bath vs. Dirichlet surface; radiation energy | opacity of the surface layer; E_r/(ρe) | T_rad/T_mat; surface temperature deficit; energy delivered (§4.2) |
+| equilibrium problem vs. the black curve | the patch | the pressure step Δp/p_f at the cut (∝ m_f/m_s) | the piston check; the shock gap once the drive is removed (§4.3) |
+| any code vs. its limit | discretization | cells across the ablated layer and the shocked region | mesh refinement (§4.4) |
 
-So the patched profile is discontinuous at the ablation front **in pressure as well as velocity**. The heat region ends at p_f, while the shock region starts at p(m_f), 20% higher in Test 4. That step is visible in the black pressure curve of `test4_full_profiles.png`.
-A real flow cannot carry a pressure jump across the ablation front. In the simulations the shocked material beyond the front is pushed by a pressure between p_f and p(m_f), weaker than the shock solution assumes. The size and sign fit Test 4: the simulations' ablation pressure is +9 … +10% of p_f, between 1 and 1.20, and their shock lags the black curve by 12.5%. With m_f/m_s ≲ 8% (Tests 1, 3, 5) the step is ≤ 3%. That is why the mass ratio, which is the depth of the cut into the shocked slab, sets the size of the patching error.
+Two consequences shape everything below:
+- **IMC agreeing with diffusion says nothing about equilibrium.** Both codes allow T_rad ≠ T_mat, so they can agree with each other while both differ from the equilibrium solver.
+- **When IMC and diffusion agree with each other but both differ from the black curve, the difference lies in the solver's own approximations:** the equilibrium surface or the patch. Neither code can be the cause.
 
-**The jump is a symptom, not the cause of the shock error.** The patch is one-way: the shock region sees the heat region only through p_f(t). Adding u_piston to the heat-region velocities would remove the visible jump but leave the shock where it is. The bookkeeping fix of putting the piston at m_f (m_s → m_f + m_s(PistonShock)) moves Test 4's analytic shock *further ahead* (5.2 → 6.7 mg/cm²), while the simulations' shock is 12% *behind* it. The error is dynamical: the real piston, the ablation front, has its own velocity and deceleration, and, for ω = −0.5, denser material directly ahead of it than the piston-at-m = 0 solution assumes. None of that is in the patch. Removing it requires solving the two regions together: fix (B) numerically, or (C) in theory.
+---
 
-### 3.2 Evidence that the codes are right and the patching is the cause
+## 3. Predictions for the six tests, from the assumptions alone
 
-1. **The piston check** (scratch script, recorded here). A pure-hydro run with the same code, ρ₀x^(−ω) and a piston at m = 0 driven by the solver's own p_f(t) = p₀ₛ t^(c₃), reproduces the solver's shock: −0.17% at 1 ns and −0.07% at 2 ns for ω = −0.5; −0.18% / −0.11% for ω = 0. Energy is conserved to 10⁻¹². So the hydro solver and `PistonShock` agree when they solve the same problem.
-2. **Test 4 is not the drive and not the mesh.** On the uniform-mass mesh the surface is at 0.994 HeV (1.000 calibrated), and two different meshes give the same −12.5% / −13.3%. Calibration moves the shock only from −12.5% to −10.9%.
-3. **Transport is not involved.** IMC and diffusion agree to 0.6–2.2% in Test 4.
-4. **The size of the error follows m_f/m_s and u_p.** Among the opaque gold tests: 0.5% → ~2% (Test 3, at a coarser mesh); 7–8% → ~1% (Tests 1–2); 28% → 12.5% (Test 4).
+The controlling parameters can be computed from the solver alone, with no simulation:
 
-What is not proven is the exact split between the velocity mismatch and the mass mismatch; both come from the same rigid-front assumption.
+- **𝒯_lb = m_f κ_R(T_s, ρ_s)**, the manuscript's lower-bound optical depth of the ablated layer (§"Gray diffusion setup", Eq. `T_lower_bound`), with ρ_s the solver's surface density;
+- **𝒯_hot**, the solver's optical depth of its hot plasma, T > T_s/2: the region the drive's radiation crosses;
+- **m_f/m_s** and **Δp/p_f**, the shock solution's pressure step at the cut.
 
-### 3.3 Suggested fixes
+| Test | 𝒯_lb | 𝒯_hot (solver) | m_f/m_s | Δp/p_f |
+|---|---|---|---|---|
+| 1 Au, ω = 0 | 2.59 | 8.48 | 7.0% | 2.7% |
+| 2 Au, τ > 0 | 2.28 | 7.78 | 8.1% | 0.6% |
+| 3 Au, ω = +0.5 | 2.56 | 8.70 | 0.5% | 0.0% |
+| 4 Au, ω = −0.5 | 2.61 | 8.74 | 28.0% | **20.1%** |
+| 5 Cu | **0.56** | 2.84 | 8.2% | 3.0% |
+| 6 Al | **0.46** | 2.16 | 16.1% | 5.9% |
 
-- **(A) For the paper now: state the validity condition.** The patched solution assumes a rigid ablation front, which holds when m_f/m_s ≪ 1 and u_p is small against the ablation flow. Report m_f/m_s next to each test. Test 4 then reads as "at m_f/m_s = 28% the patched solution's shock is 12% ahead of the full solution". Because m_f/m_s ∝ t^(−0.42) for ω = −0.5, the error shrinks with time; a longer t_end (or a drive with a slower heat wave) brings Test 4 into the regime where it agrees.
-- **(B) A better reference for Test 4: a numerical shock region.** Keep the self-similar heat solution, but replace `PistonShock` with a 1-D Lagrangian hydro solution of the target driven at the *moving* ablation front. The piston boundary sits at the heat solution's m_f(t), with pressure p_f(t), and with the target ahead of it starting at x(m_f). This is a pure-hydro run like the piston check above, with the left boundary placed at m_f(t) instead of 0. It removes the mass mismatch exactly, and is cheap (seconds). It is no longer closed-form, so it is a reference curve, not a formula.
-- **(C) A semi-analytic correction.** Patch both pressure and velocity: put the heat solution in the frame of the moving piston, where it feels the frame's deceleration, a body force −m du_p/dt on the ablated mass. Because u_p and m_f scale with different powers of t, the corrected problem is not self-similar, but the correction can be carried to first order in m_f/m_s. This is a real piece of theory work, and it belongs with Menahem.
+What the assumptions then predict:
 
-My recommendation: (A) in the manuscript text, and (B) as the reference curve for Test 4 if a closer agreement is wanted in the figure. (C) only if the paper wants an improved closed form.
+| Test | IMC ↔ diffusion | equilibrium (solver's surface) | patch | expected agreement with the black curve |
+|---|---|---|---|---|
+| 1, 2, 3 | good (𝒯 ≈ 8) | good (𝒯_lb > 2) | small | good, to resolution |
+| 4 | good | good | **poor** (20% step) | poor, from the patch alone |
+| 5 | fair (𝒯 ≈ 3) | **poor** (𝒯_lb ≈ 0.5) | small | poor, from the surface |
+| 6 | fair (𝒯 ≈ 2) | **poor** | moderate (6% step) | poor, from the surface and partly the patch |
 
-## 4. What calibration did and did not do
+Gold's 𝒯_lb is almost the same in Tests 1–4, because the ablated region does not depend on ω. Copper and aluminum are 4–5× less opaque at the surface: κ_R at 1 HeV and 0.01 g/cm³ is 2866 (Au), 588 (Cu) and 272 cm²/g (Al), and their opacity falls faster with temperature (κ ∝ T^−α with α = 1.5, 2.21, 3.1).
 
-Option (a) changes only the drive: it makes the simulated matter surface follow the solver's T_s(t).
-- **Gold, ω ≥ 0 (Tests 1–3):** the drive was already right (T_s ≈ 0.997), so calibration changes the curves by 1–2%, within resolution.
-- **Test 4:** calibration removes the small drive deficit (−12.5% → −10.9% on the shock), but the patching error (§3) is untouched.
-- **Copper and aluminum:** calibration over-corrects, because the target "matter at 1 HeV" is not what the LTE solver means at a non-equilibrium surface (§2.2).
+---
 
-So calibration to the matter temperature is the right tool only where the surface is in LTE, and there it was barely needed. Calibration to the energy flux (§2.3(i)) is the version that makes sense for copper and aluminum, and it brings both within ~4% of the solver. For Test 4 the flux-matched bath halves the shock gap (−12.5% → −6.4%) but moves the heat front (+6% → +14%) and the ablation pressure (+10% → +15%) further off. No drive reconciles the patched solution there, which is the signature of a structural approximation, not a drive mismatch.
+## 4. Numerical validation
 
-## 5. Resolution, for completeness
+### 4.1 IMC vs. diffusion: is the P1/Fick closure good?
 
-At N = 400 the gold heat fronts sit 4–9% off the solver; at N = 1000 they are within 0.8–2.6% (`phase_c_results.md` §5). All numbers above are at the finest mesh of each test: Tests 1, 2, 4 and 5 at 1000 cells, Test 6 at 400 (at 1000 cells its differences from the solver move by ≤ 1.1 percentage points for diffusion and ≤ 0.15 for IMC), Test 3 at its graded 347-cell mesh.
+**Prediction:** agreement improving with 𝒯_hot; the largest differences in the quantity most sensitive to the surface (the energy delivered), because the two codes treat the bath face differently (exact incident current vs. cell-centre Marshak).
 
-## 6. Status of the checks behind this document
+IMC vs. diffusion at 2 ns, with the manuscript's bath, at each test's finest mesh. IMC is the mean of 3 seeds (1 seed at N = 1000 for Tests 1–2).
 
-| Check | Where | Result |
+| Test | 𝒯_hot (simulated) | heat front | shock | ablation pressure | energy delivered |
+|---|---|---|---|---|---|
+| 1 | 9.0 | −0.5% | −1.5% | +0.6% | −2.3% |
+| 2 | 8.0 | −0.5% | −1.4% | −0.5% | −2.1% |
+| 3 (coarse mesh) | 8.8 | −0.6% | −1.8% | +0.3% | −2.3% |
+| 3 (fine mesh, branch `imc/test3-fine-mesh`) | 8.8 | −0.6% | −1.0% | +0.1% | −2.2% |
+| 4 | 10.1 | −0.7% | −0.9% | −1.3% | −1.2% |
+| 5 | 3.2 | −2.5% | −2.5% | −1.6% | −4.2% |
+| 6 | 2.3 | −4.6% | −3.3% | −1.2% | −5.3% |
+
+What this shows:
+- **The predicted order holds:** the worst difference is ~2% in gold (𝒯 ≈ 8–10), 4.2% in copper (3.2), 5.3% in aluminum (2.3). Across the three materials it falls roughly like 𝒯^(−0.6). This is an empirical fit over three points, not a derived law.
+- **The energy delivered is the worst quantity in five of the six tests.** IMC takes in 1–5% less, consistent with the surface boundary layer, where the two codes' boundary conditions differ most.
+- **The fronts converge with the mesh.** In Test 1 the IMC-vs-diffusion heat-front difference goes from +0.8…+3.9% at 400 cells to −0.1…−0.9% at 1000 (`phase_c_results.md` §5, under the earlier density-based front definition). What remains at 1000 cells is transport, not resolution.
+- **The one visible local difference is in Test 3.** On the fine mesh, behind the ablation front (1–10 mg/cm²), IMC's density is clearly higher than diffusion's at the same pressure, and closer to the solver's. Diffusion's material there is hotter. The likely cause is that diffusion without a flux limiter carries too much flux into the cold dense material just ahead of the front, which transport limits. This is an inference from the profiles; a flux-limited diffusion run (plan M11) would test it.
+
+**Verdict:** diffusion reproduces transport to ~2% where 𝒯_hot ≳ 8, and to ~5% at 𝒯_hot ≈ 2–3. The P1 closure is never the dominant error against the black curve.
+
+### 4.2 Diffusion vs. the equilibrium problem: does matter–radiation equilibrium hold?
+
+**Prediction:** equilibrium holds in the interior of every test, about one mean free path inside the plasma. At the surface it holds only where the surface layer is opaque (𝒯_lb ≳ 2). Where it does not hold, the manuscript's bath, which follows from the Marshak relation derived under equilibrium, cannot produce the solver's surface.
+
+**Equilibrium measured in the diffusion runs at 2 ns:**
+
+| Test | T_rad/T_mat at the surface | one optical depth in | matter surface T vs. T_s | radiation / matter energy (hot plasma) |
+|---|---|---|---|---|
+| 1 | 1.005 | 1.002 | −0.5% | 0.9% |
+| 2 | 1.006 | 1.003 | −0.6% | 0.9% |
+| 3 | 1.005 | 1.002 | −0.5% | 1.0% |
+| 4 | 1.007 | 1.002 | −0.6% | 1.0% |
+| 5 | **1.065** | 1.019 | **−5.8%** | 0.6% |
+| 6 | **1.047** | 1.025 | **−4.1%** | 0.4% |
+
+What this shows:
+- **Interior equilibrium holds everywhere.** One optical depth in from the surface, T_rad/T_mat is within 0.2–2.5% in every test.
+- **At the surface, equilibrium holds in gold** (≤ 0.7% off) **and fails in copper and aluminum** (5–7% off), exactly as 𝒯_lb predicts: 2.3–2.6 vs. 0.46–0.56.
+- **The radiation energy is negligible everywhere** (≤ 1% of the hot plasma's energy). Assumption 2 of §1.3 holds in all tests; it reaches 5–18% only in the outermost one or two cells.
+- **Every test has a thin non-equilibrium layer at the heat front itself,** where T_rad and T_mat separate by more than 1% over the last few percent of the ablated mass. That is the structure of a steep front and does not depend on the material.
+
+**The decisive test: the three baths.** If the surface is in equilibrium, matching the solver's surface temperature and matching its energy flux should be the same thing. If it is not, they should differ. Diffusion vs. the solver at 2 ns:
+
+| | bath | heat front | shock | ablation p | energy delivered | matter surface T |
+|---|---|---|---|---|---|---|
+| Au (Test 1) | manuscript's | +1.2% | +0.6% | −2.1% | −2.0% | 0.997 |
+| | surface T matched | +2.2% | +1.8% | −2.1% | 0.0% | 1.000 |
+| | energy flux matched | +2.0% | +1.4% | −2.2% | −0.5% | 0.999 |
+| Cu | manuscript's | −1.5% | −4.7% | −5.1% | −10.0% | 0.942 |
+| | surface T matched | +20.3% | +13.2% | +8.6% | +23.8% | 1.000 |
+| | energy flux matched | +3.8% | **−0.2%** | −1.8% | −2.2% | 0.956 |
+| Al | manuscript's | −4.1% | −7.8% | −8.5% | −11.2% | 0.959 |
+| | surface T matched | +14.3% | +6.6% | +2.8% | +15.4% | 1.000 |
+| | energy flux matched | +2.3% | −2.9% | −2.8% | −2.3% | 0.974 |
+
+(Test 1 at N = 400 here, so its fronts carry ~1–2% resolution error; see §4.4.)
+
+- **In gold the three baths agree within 2%,** as expected for an equilibrium surface.
+- **In copper and aluminum they differ by 25–35% in energy.** There, "the surface is at T_s" is ambiguous. The matter at T_s means radiation hotter than T_s and too much flux; the radiation at T_s means matter cooler and too little flux. The solver's one-temperature surface lies between.
+- **Matching the energy flux brings both within ~4% of the solver,** with the matter settling between the extremes (0.956, 0.974). That is the operational meaning of the equilibrium assumption: the solver is a valid reference for a non-equilibrium material only when driven to its energy flux, not its temperature.
+
+**The a-priori predictor works.** The solver's own 𝒯_hot matches the simulated one within 1–14% in every test: 8.48 vs. 9.01, 7.78 vs. 8.00, 8.70 vs. 8.80, 8.74 vs. 10.09, 2.84 vs. 3.22, 2.16 vs. 2.29. So both 𝒯_lb and 𝒯_hot can be computed before any simulation, and they separate the equilibrium tests (gold) from the non-equilibrium ones (copper, aluminum) cleanly.
+
+**Verdict:** the equilibrium assumption holds in all four gold tests and fails at the surface in copper and aluminum, where 𝒯_lb < 1. The consequence is ~10% in the energy delivered with the manuscript's bath, which an energy-flux-calibrated bath removes.
+
+### 4.3 The equilibrium problem vs. the black curve: how good is the patch?
+
+**Prediction:**
+- The patch is exact when the cut lies at the piston (m_f/m_s → 0).
+- Otherwise, the shock solution at the cut has the pressure of a point inside its shocked slab. Momentum conservation in mass coordinates, ∂u/∂t = −∂p/∂m, gives that pressure as p(m_f) − p_f ≈ m_f·|du/dt|: the force needed to decelerate the slab between the piston and the cut. The real flow has no such slab: its ablated mass is hot plasma flowing *backwards*. So the real shocked material is pushed by less than p(m_f), and the solver's shock should run ahead of the codes', by an amount growing with Δp/p_f.
+
+**Check 1: the hydro code reproduces the solver's shock exactly, without the patch.** A pure-hydro run with a piston at m = 0, driven by the solver's own p_f(t) = p₀ₛ t^(c₃) on a 1000-cell uniform-mass mesh, reproduces `PistonShock`:
+- ω = −0.5: −0.17% at 1 ns, −0.07% at 2 ns;
+- ω = 0: −0.18% and −0.11%;
+- energy is conserved to 10⁻¹².
+
+So the hydro and the shock solution agree when they solve the same problem.
+
+**Check 2: the step at the cut, and its estimate from the slab's inertia** (`PistonShock.solve` at m_f; rigid-slab estimate m_f·|du_piston/dt| with u_piston ∝ t^k):
+
+| Test | m_f/m_s | p(m_f)/p_f − 1 | inertia estimate | u(m_f)/u_piston |
+|---|---|---|---|---|
+| 3 | 0.5% | 0.0% | — | 1.000 |
+| 2 | 8.1% | 0.6% | — | 1.002 |
+| 1 | 7.0% | 2.7% | 2.5% | 1.043 |
+| 5 | 8.2% | 3.0% | — | 1.046 |
+| 6 | 16.1% | 5.9% | — | 1.058 |
+| 4 | 28.0% | **20.1%** | 14.5% | 1.291 |
+
+- **The inertia estimate accounts for the step.** It reproduces Test 1's 2.7% and three quarters of Test 4's 20% (the slab there is not rigid: u(m_f) = 1.29 u_piston).
+- **The step is not proportional to m_f/m_s alone.** Test 2 has the same ratio as Test 1 but a 0.6% step, because its drive rises (τ > 0), so its piston barely decelerates. **Δp/p_f is the better measure.**
+- **In Test 4 the step is visible** in the black pressure curve of `test4_full_profiles.png`, at the ablation front.
+
+**Check 3: the shock gap once the drive is removed.** The flux-calibrated bath removes the drive difference of §4.2 (for gold, the manuscript's bath at 1000 cells does). What remains of the shock error should follow Δp/p_f:
+
+| Test | Δp/p_f | shock, diffusion vs. black curve |
 |---|---|---|
-| Piston at m = 0 vs. `PistonShock`, ω = −0.5 and 0 | scratch script `piston_check.py` | −0.07 … −0.18% |
-| T_rad / T_mat at the surface | diffusion runs at 2 ns | Cu 1.065, Al 1.047, Au 1.003–1.007 |
-| Paper vs. calibrated bath | `results/imc_vs_diffusion{,_calibrated}` | table above |
-| Test 4 mesh independence | graded (1397 cells) vs. uniform-mass (1000) | shock −13.3% / −12.5% |
-| IMC vs. diffusion | `phase_c_results.md`, tracker | ≤ 2.2% (Au), ≤ 5.5% (Cu, Al) |
+| 3 (fine mesh) | 0.0% | 0.0% |
+| 2 (N = 1000) | 0.6% | −0.1% |
+| 5 (flux bath) | 3.0% | −0.2% |
+| 1 (N = 1000) | 2.7% | −1.4% |
+| 6 (flux bath) | 5.9% | −2.9% |
+| 4 (flux bath) | 20.1% | −6.4% (manuscript's bath: −12.5%) |
+
+- **The ranking follows Δp/p_f.** The two lowest steps give no shock error, the 3–6% steps give 0–3%, and Test 4's 20% step gives 6–13%. The sign is always the predicted one: the codes' shock behind the black curve. (Copper's −0.2% is lower than its 3% step suggests; with six points this is a strong trend, not a law.)
+- **In Test 4 no bath reconciles the solver.** The flux bath halves the shock gap but moves the heat front (+6% → +14%) and the ablation pressure (+10% → +15%) further off. A structural approximation behaves this way; a drive mismatch does not.
+- **The simulations' ablation pressure in Test 4 (+9 … +10% of p_f) lies between p_f and p(m_f) = 1.20 p_f,** as the inertia argument predicts.
+- **The error shrinks with time:** m_f/m_s ∝ t^(−0.42) for ω = −0.5, from 37% at 1 ns to 28% at 2 ns, and the shock gap from −14.3% to −12.5%.
+
+**Verdict:** the patch is accurate to ≲ 3% in the shock where Δp/p_f ≲ 6%, and fails in Test 4 (Δp/p_f = 20%). This is an approximation of the solver's construction, independent of equilibrium: Test 4 is in equilibrium (§4.2).
+
+### 4.4 Discretization
+
+| Test | change of mesh | effect |
+|---|---|---|
+| 1 (Au) | 400 → 1000 cells (2.5×10⁻⁵ g/cm² per cell) | heat front vs. solver +5.6% → +1.7% (density-based front; temperature-based at 1000 cells: −0.5%) |
+| 3 (ω = +0.5) | 347-cell graded → 1237 cells with a 0.3 mg/cm² cap (branch `imc/test3-fine-mesh`) | shock vs. solver −2.1% → 0.0%; heat front (−1.0%) and ablation pressure (−4.5%) unchanged |
+| 4 (ω = −0.5) | 1397-cell graded → 1000-cell uniform-mass | surface 0.934 → 0.994 HeV; energy error 10⁻¹¹ → 10⁻¹⁴; shock −13.3% → −12.5% |
+| 6 (Al) | 400 → 1000 cells | ≤ 1.1 percentage points (diffusion), ≤ 0.15 (IMC) |
+
+- **The mesh matters at the few-% level,** most in the fronts and the shock position.
+- **It does not explain the differences of §§4.2–4.3:** those survive refinement (Test 4's shock, Test 6's surface).
+- **The resolution needed:** ≳ 50 cells across the ablated layer, and shocked-region cells ≲ 10⁻³ m_s.
+- **The graded meshes for ω ≠ 0 had to be replaced or capped.** They crowd cells at the surface: Test 4 had 628 cells in the first 10⁻⁵ g/cm², and Test 3 had 4–12 mg/cm² cells at its shock.
+
+### 4.5 Secondary assumptions, all checked to be small
+
+| Assumption shared by all three | Check | Size |
+|---|---|---|
+| no radiation pressure | `rad_coupling="physical"` (P_rad = E/3 and its work), Tests 1, 2, 6 | ≤ 0.1% on fronts; ≤ 0.5% on the ablation pressure (Al) |
+| no O(v/c) terms | max v/c; Σ τ·v/c over the heated cells | v/c ≤ 1×10⁻³ everywhere; τv/c ≤ 3×10⁻² in gold, **0.25 in aluminum** (marginal, see §5.2) |
+| radiation energy ≪ matter energy | §4.2 | ≤ 1% |
+| Fleck–Cummings O(Δt) | shared by both codes, so it cancels in IMC vs. diffusion | not separated from the solver comparison |
+| IMC noise | 3 seeds | s.e. 0.01–0.1% on fronts |
+
+---
+
+## 5. Conclusions
+
+### 5.1 The parameters that decide whether the curves match
+
+In order of their effect on these six tests:
+
+1. **The opacity of the hot ablated plasma, at the surface:** 𝒯_lb = m_f κ_R(T_s, ρ_s), or the solver's 𝒯_hot. It decides both whether IMC matches diffusion and whether the solver's equilibrium surface exists.
+   - 𝒯_lb ≈ 2.3–2.6 (𝒯_hot ≈ 8–9), gold: IMC ≈ diffusion to ~2%, surface equilibrium to < 1%, energy delivered within 2–3% of the solver.
+   - 𝒯_lb ≈ 0.5 (𝒯_hot ≈ 2–3), copper and aluminum: IMC ≈ diffusion to 4–5%, surface 5–7% out of equilibrium, energy 10–11% short with the manuscript's bath.
+   - The materials' opacity (κ_R at 1 HeV: Au 2866, Cu 588, Al 272 cm²/g) and its steepness in T (α = 1.5, 2.21, 3.1) set it. Aluminum is the least opaque and the most sensitive.
+2. **The pressure step of the patch, Δp/p_f ≈ m_f·|du/dt| / p_f:** computable from the solver alone.
+   - ≲ 3% (Tests 1, 2, 3, 5): the patch costs ≲ 1–2% in the shock;
+   - ≈ 6% (Test 6): ~3%;
+   - ≈ 20% (Test 4): 6–13%.
+   - It is large when the ablated layer is a sizeable fraction of a light, fast, decelerating shocked shell: ω < 0, low density near the surface.
+3. **Mesh resolution of the ablated layer and of the shocked region:** a few % on fronts and shock until ≳ 50 cells span the ablated layer and the shock is resolved to ≲ 10⁻³ m_s.
+4. **Second order everywhere here:** radiation energy (≤ 1%), radiation pressure (≤ 0.5%), O(v/c) (≤ 3% in gold; marginal in aluminum), Monte Carlo noise (≤ 0.1%).
+
+### 5.2 The limits of the equilibrium (one-temperature) solver
+
+The solver is the exact self-similar solution of one-temperature equilibrium diffusion with hydro. From the analysis above, it is a valid reference for the full (transport, two-temperature) problem when all of the following hold. Each comes with its measured threshold.
+
+1. **The hot plasma is optically thick at the surface: 𝒯_lb ≳ 2.** Below that the surface is out of equilibrium. At 𝒯_lb ≈ 0.5 the radiation is 5–7% hotter than the matter, and the delivered energy is ill-defined by ~25–35% between temperature- and flux-matched drives. The manuscript's own check uses 𝒯 > 1 with the lower bound 𝒯_lb. **These runs suggest 𝒯_lb > 1 is necessary but not sufficient for ~1% agreement: gold, at 𝒯_lb ≈ 2.5, is in equilibrium within 1%, while copper and aluminum (0.5) are not.** Where the threshold lies between 0.5 and 2.5 is not resolved by these six tests.
+2. **The drive is specified the way the solver specifies it.** The manuscript's bath law T_bath(t) is the solver's surface flux turned into a bath temperature through the equilibrium Marshak relation. It reproduces the solver's surface only in the equilibrium limit. Outside it, the solver is matched by the energy flux (`bath_drive="calibrated_flux"`), not by the bath law or by the surface temperature.
+3. **Radiation energy ≪ matter energy in the hot plasma.** It is ≤ 1% in all six tests. This condition depends on density, not opacity: a hotter or more rarefied plasma could break it while still opaque.
+4. **Transport is close to diffusion: 𝒯_hot ≳ 8 for ~2%.** This is not an equilibrium condition, since the solver also assumes diffusion. It is a separate limit, and it degrades together with 1 because both follow from the opacity.
+5. **Dynamic diffusion is negligible: Σ τ·v/c ≪ 1.** The solver, like the codes, has no O(v/c) terms. In gold it is ≤ 0.03; in aluminum it reaches 0.25, where mixed-frame corrections start to matter at the percent level (plan A9).
+
+Independent of equilibrium, the *patched* solver also needs:
+
+6. **A small pressure step at the cut: Δp/p_f ≲ 5%.** This fails for ω = −0.5 (20%) and improves with time as m_f/m_s ∝ t^(−0.42).
+
+### 5.3 What this means for the paper
+
+- **Tests 1–3 (gold, ω ≥ 0):** the black curve is verified by both codes within ~1–2% at the paper's resolution. The equilibrium solver is appropriate.
+- **Test 4 (ω = −0.5):** both codes agree with each other (≤ 2%) and are in equilibrium. The 6–13% gap to the black curve is the patch (Δp/p_f = 20%). Options:
+  - state the validity condition and report Δp/p_f with the test;
+  - use a reference with a numerical shock region driven at the moving ablation front;
+  - improve the patching to match pressure and velocity at m_f, a theory question for Menahem.
+- **Tests 5–6 (copper, aluminum):** with 𝒯_lb ≈ 0.5 the solver's equilibrium surface does not exist. Compared with the energy-flux-matched drive, diffusion lies within ~4% of it, and IMC within 4–5% of diffusion. Present these two tests as the edge of the equilibrium solution's validity, with 𝒯_lb next to each, rather than as verifications of it.
+- **Report 𝒯_lb and Δp/p_f for every test.** Both come from the solver alone and predict, before any simulation, how well it will agree.
+
+---
+
+## 6. Data and reproduction
+
+- **Comparison runs:** `uv run python -m rad_hydro_sim.verification.imc_vs_diffusion --cases test1_full … test6_full`:
+  - `--bath paper|calibrated|calibrated_flux` (results in `results/imc_vs_diffusion[_<bath>]/`);
+  - `--calibrate-bath --calibrate-target temperature|flux` (tables in `src/rad_hydro_sim/data/bath_correction/`).
+- **At 1000 cells** for Tests 1–2: `--hydro-n 1000 --out results/imc_vs_diffusion_n1000`.
+- **Test 3's fine mesh** (`test3_smooth`, `max_cell_mass`) is on the branch `imc/test3-fine-mesh`.
+- **One-off checks** (scripts in the session scratchpad, numbers recorded here):
+  - the pure-hydro piston run against `PistonShock` (§4.3, check 1);
+  - `PistonShock.solve` at m_f for p(m_f) and u(m_f) (check 2);
+  - T_rad/T_mat, the radiation-to-matter energy and 𝒯 from the stored diffusion profiles (§4.2);
+  - the solver's 𝒯_lb and 𝒯_hot from `AblationSolver.solve` on a dense mass grid (§3).
+- **Run tracker:** https://claude.ai/artifact/22cVx9Mpve9F8FHj65H2iw (private until shared).

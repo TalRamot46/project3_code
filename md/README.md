@@ -37,9 +37,14 @@ Figures: `phase_b/figures/`.
 | [phase_c_changes.md](phase_c/phase_c_changes.md) | **Every Phase C code change** (census carried with the mesh, per-step ledger, radiation pressure M5b, the A9 v/c diagnostic, the paper presets), the decisions taken, and findings left unchanged |
 | [phase_c_results.md](phase_c/phase_c_results.md) | IMC vs. diffusion vs. the semi-analytic solution on the paper's full rad-hydro Tests 1 and 2 |
 | [phase_c_tests3to6_results.md](phase_c/phase_c_tests3to6_results.md) | Phase C½: the same comparison on all six paper tests (Au ω = 0, ±0.5; Cu; Al), which materials lose IMC–diffusion consistency, the bath options |
-| [why_the_solver_differs.md](phase_c/why_the_solver_differs.md) | Why the semi-analytic curve misses Tests 4–6: surface non-equilibrium (Cu, Al) and the rigid-front patching (Test 4), with the code walk-through and suggested fixes |
+| [why_the_solver_differs.md](phase_c/why_the_solver_differs.md) | **Which solutions should agree, and why:** the assumptions of IMC, diffusion and the semi-analytic solver, predictions per test, their numerical validation, the deciding parameters (𝒯_lb, the patch's pressure step) and the limits of the equilibrium solver |
 
 Figures: `phase_c/figures/`.
+
+## Tools for this work
+- **Run tracker:** the private Artifact https://claude.ai/artifact/22cVx9Mpve9F8FHj65H2iw, with the status, cost and energy error of every comparison run, and the agreement at 2 ns.
+- **Topic agent:** `.claude/agents/imc-verification.md`, a Claude Code subagent with this work's file map, conventions and findings. Ask for it by name ("use the imc-verification agent to …").
+- **Branches:** `imc/phase-c` holds the IMC implementation and the six-test comparison; `imc/test3-fine-mesh` builds on it with the Test 3 mesh refinement (`max_cell_mass`).
 
 ## Where to start
 - **New to the IMC:** `theory/imc_mc_derivation.md` §1, then `imc_code/imc_core.md`.

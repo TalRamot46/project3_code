@@ -700,13 +700,13 @@ def optical_depth_line(run) -> str:
     return "optical depth of the hot plasma, T > T_s/2 (diffusion run): " + "; ".join(parts)
 
 
-def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, patched=()):
+def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, patched=(), log_axis=None):
     """rho, p, u, T against mass at 1, 1.5, 2 ns, in the style of the ICTT figures.
 
     ``solver``: an AblationSolver to reuse (building one takes ~20 min).  ``patched``: extra
     semi-analytic curves, (legend label, object with solve(mass=, time=), plot kwargs); with
     any given, the original AblationSolver is drawn gray dashed and these on top
-    (md/phase_c/patching_poc.md).
+    (md/phase_c/patching_poc.md).  ``log_axis``: overrides the case's log_mass_axis.
 
     Matches results/ictt/const_T/dimensional_verification/const_T_fully_patched_comparison.png
     (src/ictt29/full_fitting.py, plot_fully_patched_comparison): a 2x2 grid on a linear mass axis
@@ -768,7 +768,8 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, p
 
     titles = {"rho": "Density", "p": "Pressure", "u": "Velocity", "T_material": "Temperature"}
     ylabels = {"rho": r"$\rho$ [g/cm³]", "p": r"$P$ [MBar]", "u": r"$u$ [km/s]", "T_material": r"$T$ [HeV]"}
-    log_axis = HYDRO_CASES[label].log_mass_axis
+    if log_axis is None:
+        log_axis = HYDRO_CASES[label].log_mass_axis
     x_min = 0.5e3 * float(np.min(d["m"][snaps[-1]]))
     for key, ax in panels.items():
         if log_axis:      # a thin ablated layer on a wide domain: both in view at once

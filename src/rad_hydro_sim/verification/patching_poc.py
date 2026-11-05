@@ -311,7 +311,7 @@ class _AtSnapshot:
         return self.obj.solve(mass=mass, time=t)
 
 
-def plot_patched_profiles(label: str, path: Path):
+def plot_patched_profiles(label: str, path: Path, log_axis=None):
     """imc_vs_diffusion's <label>_profiles figure (rho, p, u, T at 1, 1.5, 2 ns: diffusion,
     IMC) with the corrected patchings on top: B massless (black) and C impulse (dotted);
     the original AblationSolver gray dashed."""
@@ -323,7 +323,8 @@ def plot_patched_profiles(label: str, path: Path):
                 dict(color="black", lw=2.0)),
                ("Analytic, C: impulse-matched", _AtSnapshot(solvers["C_impulse"]),
                 dict(color="black", lw=1.6, linestyle=":"))]
-    ivd.plot_hydro_profiles(SIM_OUT, label, (1, 2, 3), path, solver=solver_for(label), patched=patched)
+    ivd.plot_hydro_profiles(SIM_OUT, label, (1, 2, 3), path, solver=solver_for(label), patched=patched,
+                            log_axis=log_axis)
     print(f"  wrote {path}", flush=True)
 
 
@@ -338,6 +339,7 @@ def main(argv=None):
     ap.add_argument("--figures", action="store_true", help="the omega-scan and Test 4 profile figures")
     ap.add_argument("--profiles", action="store_true",
                     help="each case's profile figure with the corrected patchings, md/phase_c/figures/patched/")
+    ap.add_argument("--linear", action="store_true", help="--profiles on a linear mass axis (<label>_profiles_linear.png)")
     ap.add_argument("--run-only", action="store_true", help="only run the omega-scan simulations")
     args = ap.parse_args(argv)
     labels = list(args.cases)
@@ -353,7 +355,9 @@ def main(argv=None):
         return
     if args.profiles:
         for label in labels:
-            plot_patched_profiles(label, ivd.REPO / "md" / "phase_c" / "figures" / "patched" / f"{label}_profiles.png")
+            name = f"{label}_profiles{'_linear' if args.linear else ''}.png"
+            plot_patched_profiles(label, ivd.REPO / "md" / "phase_c" / "figures" / "patched" / name,
+                                  log_axis=False if args.linear else None)
         return
     if args.figures:
         FIG = ivd.REPO / "md" / "phase_c" / "figures"

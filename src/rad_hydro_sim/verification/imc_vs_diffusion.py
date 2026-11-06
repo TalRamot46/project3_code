@@ -718,29 +718,58 @@ def label_short_log_axes(ax):
             axis.set_minor_formatter(FuncFormatter(lambda v, _: ""))
 
 
+VIEW_SCALE_TEXT = {"linear": "linear", "semilogx": "semi-log (log mass)", "semilogy": "semi-log (log fields)",
+                   "loglog": "log-log"}
+# profile figures: ink and muted text, a recessive grid; diffusion per time on an ordered blue ramp
+# (light to dark, 1 -> 2 ns), IMC in one contrasting hue
+INK, MUTED, GRID = "#1f1f1d", "#6b6a64", "#e4e3dd"
+SIM_COLORS = ("#6da7ec", "#256abf", "#0d366b")
+IMC_COLOR = "#eb6834"
+
+
+def short_case_name(label: str) -> str:
+    """'Test 4' from the case title; the title itself (e.g. 'Au, omega=-0.25') for cases without a number."""
+    import re
+
+    title = HYDRO_CASES[label].title
+    match = re.match(r"Test \d+", title)
+    return match.group(0) if match else title
+
+
+def style_axes(ax, labelsize=10.5):
+    """Recessive frame: light grid under the data, no top/right spines, muted ticks."""
+    ax.grid(True, color=GRID, lw=0.8)
+    ax.set_axisbelow(True)
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    for side in ("left", "bottom"):
+        ax.spines[side].set_color(MUTED)
+    ax.tick_params(which="both", top=False, right=False, colors=MUTED, labelcolor=INK, labelsize=labelsize)
+
+
 def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, patched=(), log_axis=None,
                         analytic_label="Analytic", method=None, region="full", scale=None):
     """rho, p, u, T against mass at 1, 1.5, 2 ns, in the style of the ICTT figures.
 
     ``region``: "full" (the domain), "heat" (the ablated layer, up to 1.3 m_heat) or "shock"
     (from 0.85 m_heat to 1.1 m_shock); the y limits come from the simulations inside it.
-    ``scale``: "linear", "logx" (log mass axis) or "loglog" (log mass and log rho, p, T; u, which
-    changes sign, on a symmetric-log axis); None keeps the case's log_mass_axis (or ``log_axis``).
+    ``scale``: "linear"; "semilogx" (log mass, linear fields); "semilogy" (linear mass, log rho, p,
+    T); "loglog" (log mass, log rho, p, T).  On a log field axis u, which changes sign, goes on a
+    symmetric-log axis.  None keeps the case's log_mass_axis (or ``log_axis``).
 
     ``solver``: the analytic curve, an AblationSolver to reuse (building one takes ~20 min) or
     any object with solve(mass=, time=), such as bath_calibration.Analytic;
-    labelled ``analytic_label``.  ``method``: added to the title, naming the bath and the
-    analytic method.  ``patched``: extra curves, (legend label, object with solve(mass=, time=),
-    plot kwargs); with any given, ``solver`` is drawn gray dashed and these on top (the legacy
-    fix-B figures, md/phase_c/legacy/patching_poc_fix_B.md).  ``log_axis``: overrides the
-    case's log_mass_axis.
+    labelled ``analytic_label``.  ``method``: the bath (e.g. "paper bath"), in the title.
+    ``patched``: extra curves, (legend label, object with solve(mass=, time=), plot kwargs); with
+    any given, ``solver`` is drawn gray dashed and these on top (the legacy fix-B figures,
+    md/phase_c/legacy/patching_poc_fix_B.md).  ``log_axis``: overrides the case's log_mass_axis.
 
-    Matches results/ictt/const_T/dimensional_verification/const_T_fully_patched_comparison.png
-    (src/ictt29/full_fitting.py, plot_fully_patched_comparison): a 2x2 grid on a linear mass axis
-    in mg/cm^2; diffusion in royalblue / darkorange / crimson per time; the patched semi-analytic
-    AblationSolver in black on a dense mass grid; IMC (mean of the seeds) dashed forestgreen at
-    every time; zoom insets on the ablation layer (velocity) and on the shocked region
-    (temperature), placed from this case's fronts.
+    The layout of results/ictt/const_T/dimensional_verification/const_T_fully_patched_comparison.png
+    (src/ictt29/full_fitting.py): a 2x2 grid against mass in mg/cm^2; diffusion per time on an
+    ordered light-to-dark blue ramp; the semi-analytic AblationSolver in ink on a dense mass grid;
+    IMC (mean of the seeds) solid orange at every time; on the linear full-domain view, zoom
+    insets on the ablation layer (velocity) and on the shocked region (temperature).  One title
+    line: the test, the region, the bath, the scale; the legend in a row under it, off the data.
     """
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
@@ -754,12 +783,13 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, p
     if solver is None:
         solver = AblationSolver(**_ablation_kwargs_from_case(case))
     snaps = [k for k, t in enumerate(d["t"]) if t * 1e9 >= 0.99][-3:]
-    original = dict(color="black", lw=2.0) if not patched else dict(color="gray", lw=1.5, linestyle="--")
-    sim_colors = ["royalblue", "darkorange", "crimson"]
+    original = dict(color=INK, lw=1.7, zorder=4) if not patched else dict(color="gray", lw=1.5, linestyle="--")
+    sim_colors = SIM_COLORS
+    imc_style = dict(color=IMC_COLOR, lw=1.4, linestyle="-", zorder=3)
     scales = {"rho": 1.0, "p": 1e-12, "u": 1e-5, "T_material": 1.0 / K_PER_HEV}
     ref_keys = {"rho": "density", "p": "pressure", "u": "velocity", "T_material": "temperature"}
 
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig, axes = plt.subplots(2, 2, figsize=(14, 9.6))
     panels = {"rho": axes[0, 0], "p": axes[0, 1], "u": axes[1, 0], "T_material": axes[1, 1]}
     m_heat, m_shock, T_shocked = [], [], []
     m_layer = 1.5 * front_values(d, label, float(d["t"][snaps[-1]]))["m_heat"]
@@ -774,23 +804,22 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, p
         mean = {key: np.mean([r[key][k] for r in imc], axis=0) for key in scales} if imc else None
         for key, ax in panels.items():
             ref = np.asarray(exact[ref_keys[key]], dtype=float)
-            ax.plot(m_sim * 1e3, d[key][k] * scales[key], "-", color=col, alpha=0.8)
+            ax.plot(m_sim * 1e3, d[key][k] * scales[key], "-", color=col, lw=1.7, zorder=2)
             ax.plot(mass * 1e3, ref * scales[key], **original)
             for _, obj, style in patched:
                 sol = obj.solve(mass=mass, time=t)
                 ax.plot(mass * 1e3, np.asarray(sol[ref_keys[key]], dtype=float) * scales[key], **style)
             if mean is not None:
-                ax.plot(imc[0]["m"][k] * 1e3, mean[key] * scales[key], "--", color="forestgreen", lw=1.8)
+                ax.plot(imc[0]["m"][k] * 1e3, mean[key] * scales[key], **imc_style)
         fv = front_values(d, label, t)
         m_heat.append(fv["m_heat"])
         m_shock.append(fv["m_shock"])
         behind = (m_sim > 0.5 * m_shock[-1]) & (m_sim < m_shock[-1])          # the shocked plateau
         T_shocked.append(float(np.max(d["T_material"][k][behind])) / K_PER_HEV if behind.any() else 0.0)
 
-    explicit_view = scale is not None or region != "full"
     if scale is None:
-        scale = "logx" if (HYDRO_CASES[label].log_mass_axis if log_axis is None else log_axis) else "linear"
-    log_x = scale in ("logx", "loglog")
+        scale = "semilogx" if (HYDRO_CASES[label].log_mass_axis if log_axis is None else log_axis) else "linear"
+    log_x, log_y = scale in ("semilogx", "loglog"), scale in ("semilogy", "loglog")
     # the mass window [mg/cm^2]
     x_max = 1e3 * float(d["m"][snaps[-1]][-1])
     x_first = 0.5e3 * float(np.min(d["m"][snaps[-1]]))
@@ -802,11 +831,11 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, p
                                 for k in snaps]) for key in scales}
     for key, ax in panels.items():
         v = sim[key]
-        if scale == "loglog" and key != "u":
+        if log_y and key != "u":
             pos = v[v > 0]
             ax.set_yscale("log")
             ax.set_ylim(0.7 * max(pos.min(), 1e-9 * pos.max()), 1.6 * pos.max())
-        elif scale == "loglog":       # u changes sign: symmetric log, linear within 1 km/s
+        elif log_y:                   # u changes sign: symmetric log, linear within 1 km/s
             ax.set_yscale("symlog", linthresh=1.0)
             ax.set_ylim(1.5 * min(v.min(), -1.0), 1.5 * max(v.max(), 1.0))
         elif region == "full":        # as in the reference figure
@@ -820,29 +849,17 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, p
             ax.set_ylim(v.min() - 0.06 * span, v.max() + 0.12 * span)
 
     titles = {"rho": "Density", "p": "Pressure", "u": "Velocity", "T_material": "Temperature"}
-    ylabels = {"rho": r"$\rho$ [g/cm³]", "p": r"$P$ [MBar]", "u": r"$u$ [km/s]", "T_material": r"$T$ [HeV]"}
+    ylabels = {"rho": r"$\rho$ [g/cm$^3$]", "p": r"$P$ [Mbar]", "u": r"$u$ [km/s]", "T_material": r"$T$ [HeV]"}
     for key, ax in panels.items():
         if log_x:         # a thin ablated layer on a wide domain: both in view at once
             ax.set_xscale("log")
         ax.set_xlim(lo, hi)
         label_short_log_axes(ax)
-        ax.grid(True, alpha=0.3)
-        ax.set_title(titles[key], fontsize=14, fontweight="bold")
-        ax.set_ylabel(ylabels[key], fontsize=13)
-        ax.set_xlabel("Lagrangian Mass Coordinate $m$ [mg/cm²]", fontsize=13)
-        ax.tick_params(labelsize=11)
-    legend = [Line2D([0], [0], color=c, lw=2, label=f"Diffusion ({d['t'][k] * 1e9:.1f} ns)")
-              for c, k in zip(sim_colors, snaps)]
-    legend += [Line2D([0], [0], label="Analytic (original patch)" if patched else analytic_label, **original)]
-    legend += [Line2D([0], [0], label=name, **style) for name, _, style in patched]
-    legend += [Line2D([0], [0], color="forestgreen", lw=1.8, linestyle="--",
-                      label=f"IMC ({len(imc)} seed{'s' if len(imc) > 1 else ''})" if imc
-                      else ("IMC (not run)" if patched else "IMC (still running)"))]
-    if patched:   # more curves: one row under the title, off the data
-        fig.legend(handles=legend, loc="upper center", bbox_to_anchor=(0.5, 0.905), ncol=4, fontsize=11.5,
-                   frameon=False)
-    else:
-        panels["rho"].legend(handles=legend, loc="upper left", fontsize=12)
+        style_axes(ax)
+        ax.set_title(titles[key], color=INK, fontsize=13.5, loc="left", fontweight="bold", pad=8)
+        ax.set_ylabel(ylabels[key], color=INK, fontsize=12.5)
+        if key in ("u", "T_material"):
+            ax.set_xlabel(r"Lagrangian mass $m$ [mg/cm$^2$]", color=INK, fontsize=12.5)
 
     # Zoom insets: the ablation layer's velocity, the shocked region's temperature.
     u_layer = np.concatenate([d["u"][k][d["m"][k] < 2.0 * max(m_heat)] for k in snaps]) * scales["u"]
@@ -856,24 +873,37 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, p
         ins = ax.inset_axes(list(pos))
         for line in ax.get_lines():
             ins.plot(line.get_xdata(), line.get_ydata(), color=line.get_color(), linestyle=line.get_linestyle(),
-                     linewidth=line.get_linewidth(), alpha=line.get_alpha() if line.get_alpha() is not None else 1.0)
+                     linewidth=0.85 * line.get_linewidth(), zorder=line.get_zorder(),
+                     alpha=line.get_alpha() if line.get_alpha() is not None else 1.0)
         ins.set_xlim(*xlim)
         ins.set_ylim(ylim[0], min(ylim[1], ax.get_ylim()[1]))   # the zoom box stays inside its panel
-        ins.grid(True, alpha=0.3)
-        ins.tick_params(labelsize=9)
-        ax.indicate_inset_zoom(ins, edgecolor="gray", alpha=0.6)
+        style_axes(ins, labelsize=9)
+        for side in ("top", "right"):    # a framed box, so it reads as a zoom and not as more data
+            ins.spines[side].set_visible(True)
+            ins.spines[side].set_color(MUTED)
+        ins.set_facecolor("white")
+        ax.indicate_inset_zoom(ins, edgecolor=MUTED, alpha=0.7)
 
-    tau, thin, T_s = layer_optical_depth(d)
-    view = ({"full": "full domain", "heat": "heat region", "shock": "shocked region"}[region] + ", "
-            + {"linear": "linear", "logx": "log mass axis", "loglog": "log-log"}[scale]) if explicit_view else ""
-    fig.suptitle(f"Patched Ablation & Shock Verification: Diffusion vs IMC\n{HYDRO_CASES[label].title}"
-                 + (f"; {method}" if method else "") + (f"; {view}" if view else ""),
-                 fontsize=16, fontweight="bold", y=0.995)
-    fig.text(0.5, 0.925, rf"hot ablated plasma ($T > T_s/2$) at {d['t'][-1] * 1e9:.1f} ns: optical depth $\mathcal{{T}}$ = {tau:.3g}, "
-             rf"{thin:.0%} of its mass in cells with $\tau$ < 1;  surface T = {T_s:.3f} HeV (solver: "
-             rf"{T_drive(label, float(d['t'][-1])):.3f})", ha="center", fontsize=12, style="italic")
-    plt.tight_layout(rect=(0, 0, 1, 0.885 if patched else 0.93))
-    fig.savefig(path, dpi=200)
+    # One title line (the test, the region, the bath, the scale), the legend in a row under it:
+    # both off the data, aligned with the panels' left edge.
+    plt.tight_layout(rect=(0, 0, 1, 0.865 if patched else 0.915), h_pad=2.2, w_pad=2.5)
+    x0 = panels["rho"].get_position().x0
+    region_text = {"full": "full domain", "heat": "heat region", "shock": "shocked region"}[region]
+    title = " · ".join(part for part in (short_case_name(label), region_text, method, VIEW_SCALE_TEXT[scale])
+                           if part)
+    fig.text(x0, 0.982, title, ha="left", va="top", fontsize=16, fontweight="bold", color=INK)
+    legend = [Line2D([0], [0], color=c, lw=2.2, label=f"Diffusion, {d['t'][k] * 1e9:.1f} ns")
+              for c, k in zip(sim_colors, snaps)]
+    legend += [Line2D([0], [0], label="Analytic (original patch)" if patched else analytic_label,
+                      **{key: v for key, v in original.items() if key != "zorder"})]
+    legend += [Line2D([0], [0], label=name, **style) for name, _, style in patched]
+    legend += [Line2D([0], [0], **{key: v for key, v in imc_style.items() if key != "zorder"},
+                      label=f"IMC, mean of {len(imc)} seed{'s' if len(imc) > 1 else ''}" if imc
+                      else ("IMC (not run)" if patched else "IMC (still running)"))]
+    fig.legend(handles=legend, loc="upper left", bbox_to_anchor=(x0, 0.94), borderaxespad=0.0, borderpad=0.0,
+               ncol=4 if patched else len(legend), fontsize=11.5, frameon=False, handlelength=2.8,
+               columnspacing=2.2, labelcolor=INK)
+    fig.savefig(path, dpi=200, facecolor="white")
     plt.close(fig)
 
 

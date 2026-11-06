@@ -158,7 +158,7 @@ def plot_profile_set(labels, baths=tuple(BATHS)):
             analytic = analytic or Analytic(label)
             path = FIG / folder / figure_name(label)
             path.parent.mkdir(parents=True, exist_ok=True)
-            ivd.plot_hydro_profiles(out, label, (1, 2, 3), path, solver=analytic, method=BATH_TEXT[bath])
+            ivd.plot_hydro_profiles(out, label, (1, 2, 3), path, solver=analytic, method=BATH_SHORT[bath])
             print(f"  wrote {path.relative_to(ivd.REPO)}", flush=True)
 
 
@@ -200,7 +200,7 @@ def _style(ax):
         ax.spines[side].set_visible(False)
     for side in ("left", "bottom"):
         ax.spines[side].set_color(MUTED)
-    ax.tick_params(colors=MUTED, labelcolor=INK, labelsize=10)
+    ax.tick_params(which="both", top=False, right=False, colors=MUTED, labelcolor=INK, labelsize=10)
 
 
 def plot_overlay(label: str, path: Path, t: float = 2e-9, region="full", scale=None):
@@ -208,7 +208,7 @@ def plot_overlay(label: str, path: Path, t: float = 2e-9, region="full", scale=N
     closest to it by profile_score drawn bold, the baths ranked beside the profiles.
 
     ``region`` / ``scale`` as in imc_vs_diffusion.plot_hydro_profiles: "full", "heat" or "shock";
-    "linear", "logx" or "loglog" (None: the case's log_mass_axis).  The ranking is always over
+    "linear", "semilogx", "semilogy" or "loglog" (None: the case's log_mass_axis).  The ranking is always over
     the full domain."""
     import matplotlib
     matplotlib.use("Agg")
@@ -240,10 +240,9 @@ def plot_overlay(label: str, path: Path, t: float = 2e-9, region="full", scale=N
     shock = max([analytic.front_values(t_an)["m_shock"]] + [fv["m_shock"] for fv in fronts])
     heat = max([analytic.front_values(t_an)["m_heat"]] + [fv["m_heat"] for fv in fronts])
     heat_min = min([analytic.front_values(t_an)["m_heat"]] + [fv["m_heat"] for fv in fronts])
-    explicit_view = scale is not None or region != "full"
     if scale is None:
-        scale = "logx" if ivd.HYDRO_CASES[label].log_mass_axis else "linear"
-    log_x = scale in ("logx", "loglog")
+        scale = "semilogx" if ivd.HYDRO_CASES[label].log_mass_axis else "linear"
+    log_x, log_y = scale in ("semilogx", "loglog"), scale in ("semilogy", "loglog")
     x_first = 0.5e3 * min(r["m"][k[b]][0] for b, r in runs.items())
     x_lo, x_hi = {"full": (x_first if log_x else 0.0, 1.15e3 * shock),
                   "heat": (x_first if log_x else 0.0, 1.3e3 * heat),
@@ -261,11 +260,11 @@ def plot_overlay(label: str, path: Path, t: float = 2e-9, region="full", scale=N
         # y limits from the simulations inside the mass window
         sim = np.concatenate([r[key][k[b]][(r["m"][k[b]] * 1e3 >= x_lo) & (r["m"][k[b]] * 1e3 <= x_hi)] * fscale
                               for b, r in runs.items()])
-        if scale == "loglog" and key != "u":
+        if log_y and key != "u":
             pos = sim[sim > 0]
             ax.set_yscale("log")
             ax.set_ylim(0.7 * max(pos.min(), 1e-9 * pos.max()), 1.6 * pos.max())
-        elif scale == "loglog":   # u changes sign: symmetric log, linear within 1 km/s
+        elif log_y:               # u changes sign: symmetric log, linear within 1 km/s
             ax.set_yscale("symlog", linthresh=1.0)
             ax.set_ylim(1.5 * min(sim.min(), -1.0), 1.5 * max(sim.max(), 1.0))
         else:
@@ -316,13 +315,11 @@ def plot_overlay(label: str, path: Path, t: float = 2e-9, region="full", scale=N
             "figures) and is left out for readability.")
     tab.text(0.0, 1.0 - h - 0.04, note, va="top", ha="left", fontsize=10, color=MUTED,
              transform=tab.transAxes, linespacing=1.5)
-    verdict = f"Closest: {BATH_SHORT[best['bath']]}"
-    if len(rows) > 1 and rows[1]["score"] - best["score"] < 1e-3:   # within 0.1 percentage point
-        verdict = f"Tie: {BATH_SHORT[best['bath']]} and {BATH_SHORT[rows[1]['bath']]}"
-    view = ({"full": "full domain", "heat": "heat region", "shock": "shocked region"}[region] + ", "
-            + {"linear": "linear", "logx": "log mass axis", "loglog": "log-log"}[scale] + ".  ") if explicit_view else ""
-    fig.suptitle(f"{ivd.HYDRO_CASES[label].title}: diffusion under each bath at {t_an * 1e9:.1f} ns; {view}{verdict}",
-                 x=0.055, ha="left", fontsize=15, fontweight="bold", color=INK, y=0.985)
+    # one modest title line, as on the per-bath figures; the closest bath is the table's first row
+    region_text = {"full": "full domain", "heat": "heat region", "shock": "shocked region"}[region]
+    fig.suptitle(" · ".join((ivd.short_case_name(label), region_text, f"all baths at {t_an * 1e9:.1f} ns",
+                                   ivd.VIEW_SCALE_TEXT[scale])),
+                 x=0.055, ha="left", fontsize=16, fontweight="bold", color=INK, y=0.985)
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=170)
     plt.close(fig)
@@ -331,7 +328,7 @@ def plot_overlay(label: str, path: Path, t: float = 2e-9, region="full", scale=N
 
 VIEW_CASES = ("test3_smooth", "test4_full")
 REGIONS = ("full", "heat", "shock")
-SCALES = ("linear", "loglog")
+SCALES = ("linear", "semilogx", "semilogy", "loglog")
 
 
 def plot_views(labels=VIEW_CASES, baths=tuple(BATHS)):
@@ -352,7 +349,7 @@ def plot_views(labels=VIEW_CASES, baths=tuple(BATHS)):
                 for scale in SCALES:
                     path = FIG / folder / stem / f"{region}_{scale}.png"
                     path.parent.mkdir(parents=True, exist_ok=True)
-                    ivd.plot_hydro_profiles(out, label, (1, 2, 3), path, solver=analytic, method=BATH_TEXT[bath],
+                    ivd.plot_hydro_profiles(out, label, (1, 2, 3), path, solver=analytic, method=BATH_SHORT[bath],
                                             region=region, scale=scale)
                     print(f"  wrote {path.relative_to(ivd.REPO)}", flush=True)
         if len(baths_of(label)) > 1:
@@ -376,7 +373,7 @@ def main(argv=None):
                     help="cases with more than one bath: one figure comparing them, md/phase_c/figures/overlay/")
     ap.add_argument("--baths", nargs="*", default=list(BATHS), choices=list(BATHS))
     ap.add_argument("--views", action="store_true",
-                    help="every region (full, heat, shock) x scale (linear, log-log) view of --cases, "
+                    help="every region (full, heat, shock) x scale (linear, semilogx, semilogy, loglog) view of --cases, "
                          "md/phase_c/figures/<folder>/<case>/")
     args = ap.parse_args(argv)
     labels = list(args.cases)

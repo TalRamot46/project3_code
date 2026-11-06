@@ -71,7 +71,7 @@ Test 2's flux calibration converged after 3 runs (0.19%), Test 3's after 3 runs 
 
 The gold ω sweep, −0.8 to +0.8 (simulated up to +0.6), with both baths and a mesh-convergence check, is in [`omega_sweep/`](omega_sweep/README.md).
 
-IMC follows diffusion under every bath (`phase_c_tests3to6_results.md` §1): within ≤ 2.3% for gold and ≤ 5.3% for Cu and Al, independent of the bath. With the flux-calibrated bath, Test 2 (3 seeds) and Test 3 (fine mesh, 1 seed) follow the same pattern: Test 3's IMC is within 1.0 point of diffusion on the fronts.
+IMC follows diffusion under every bath (`phase_c_tests3to6_results.md` §1): within ≤ 2.3% for gold and ≤ 5.3% for Cu and Al, independent of the bath. With the flux-calibrated bath, Test 2 (3 seeds) and Test 3 (fine mesh, 3 seeds) follow the same pattern: Test 3's IMC is within 0.6 points of diffusion on the heat front, the shock and the front pressure, as with the paper bath.
 
 ## 3. Conclusions
 

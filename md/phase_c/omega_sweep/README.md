@@ -43,6 +43,7 @@ Simulation vs. `AblationSolver`, in %; + means the simulation is ahead.
 | | diffusion, flux-calibrated | −8.7 | −1.2 | −0.5 | −3.2 |
 | | IMC, flux-calibrated | −10.4 | −1.9 | −1.7 | −3.5 |
 | +0.6 | diffusion, paper | not resolved | 0.0 | +6.3 | −0.1 |
+| | IMC, paper | not resolved | +0.8 | +2.6 | −1.7 |
 | | diffusion, flux-calibrated | not resolved | +0.2 | +6.7 | −0.1 |
 
 What it shows:
@@ -50,7 +51,7 @@ What it shows:
 - **The flux-calibrated bath roughly halves or thirds the shock deficit for ω < 0** (−16 → −5% at ω = −0.8). It does so by driving more energy in, so the heat front's *mass* m_f runs further ahead (+17 → +34%); its *position* x_f then lands on the solver's. For ω ≥ 0 the two baths agree within ~1%.
 - **IMC follows diffusion** within 0.1–2.1 percentage points on every quantity, under both baths; its shock is consistently slightly behind diffusion's, by 0.3–1.7 points in mass.
 - **x_f for ω > 0 is limited by the cell at the front**, while m_f agrees within ~1%. The front's position is interpolated between cell centres, and the heated cell holding it is 0.1–0.5 µm wide, against x_f = 3.3 µm (+0.2), 1.0 µm (+0.4) and 0.19 µm (+0.6). Taking the position from the dense side of the front instead (the first cold cell, stepped back to m_f) gives −2.1% at +0.2 and −7.9% at +0.4, so part of the x_f deficit there is real and part is this interpolation; for ω ≤ 0 the two definitions agree within 0.7 points. At +0.6 the heated cell (0.53 µm) is wider than x_f itself, so x_f is not resolved and is left out of the summary.
-- **ω = +0.6** (graded mesh, 1.14 million steps): the heat front's mass and the shock's mass agree with the solver to 0.1%; the shock position is +6.3% ahead, which fits the low density behind the ablation front that Test 3 shows on the same mesh (`../phase_c_tests3to6_results.md`).
+- **ω = +0.6** (graded mesh, 1.14 million steps): the heat front's mass and the shock's mass agree with the solver to 0.1%; the shock position is +6.3% ahead, which fits the low density behind the ablation front that Test 3 shows on the same mesh (`../phase_c_tests3to6_results.md`). IMC's shock position is much closer to the solver (+2.6%), as in Test 3, where IMC's density behind the front is higher than diffusion's and nearer the solver's: the likely cause is gray diffusion without a flux limiter preheating the cold dense matter ahead of the front.
 
 ## What was run, and what was skipped
 
@@ -60,7 +61,7 @@ What it shows:
 | 0 | 657, uniform in mass | 76 s | converged after 4 runs; then diffusion, 32 s | 1 seed per bath |
 | +0.2 | 1510, uniform in mass | 186 s | converged after 3 runs; then diffusion, 100 s | 1 seed per bath, 7–10 min |
 | +0.4 | 347, graded (Test 3's) | 555 s | converged after 3 runs (0.16%); then diffusion | 1 seed per bath, ~50 min |
-| +0.6 | 347, graded | ~1 h of compute, 1.14 million steps, with the first step at 10⁻¹² t_end (below) | converged after 3 runs (0.17%); then diffusion, 11 min | running |
+| +0.6 | 347, graded | ~1 h of compute, 1.14 million steps, with the first step at 10⁻¹² t_end (below) | converged after 3 runs (0.17%); then diffusion, 11 min | 1 seed, paper bath, 2.4 h (flux bath: running) |
 | +0.8 | — | **not simulated** (below); the solver exists | — | — |
 
 The uniform-mass meshes put ≥ 40 cells across the ablated layer at 2 ns (cells = 40 × 1.15 m_s/m_f, 400 to 2000). From ω = +0.4 the shocked mass is ≥ 100× the ablated one, so the graded mesh of Test 3 is used. Its shocked region has coarse cells, which costs a few % in the shock (Test 3: −2% on this mesh).

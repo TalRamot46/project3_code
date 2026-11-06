@@ -727,13 +727,20 @@ SIM_COLORS = ("#6da7ec", "#256abf", "#0d366b")
 IMC_COLOR = "#eb6834"
 
 
+# the paper's tests in a few words: the material and what sets the test apart
+TEST_DESCRIPTIONS = {1: r"Au (const $T_s$)", 2: r"Au (const $F_s$)", 3: r"Au ($\omega = +0.5$)",
+                     4: r"Au ($\omega = -0.5$)", 5: "Cu", 6: "Al"}
+
+
 def short_case_name(label: str) -> str:
-    """'Test 4' from the case title; the title itself (e.g. 'Au, omega=-0.25') for cases without a number."""
+    """'Test 4: Au (omega = -0.5)' for the paper's tests; 'Au (omega=-0.25)' for the omega-scan cases."""
     import re
 
     title = HYDRO_CASES[label].title
-    match = re.match(r"Test \d+", title)
-    return match.group(0) if match else title
+    match = re.match(r"Test (\d+)", title)
+    if match:
+        return f"Test {match.group(1)}: {TEST_DESCRIPTIONS[int(match.group(1))]}"
+    return f"Au ({title[4:]})" if title.startswith("Au, ") else title
 
 
 def style_axes(ax, labelsize=10.5):

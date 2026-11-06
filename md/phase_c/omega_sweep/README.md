@@ -29,6 +29,7 @@ Simulation vs. `AblationSolver`, in %; + means the simulation is ahead.
 | | IMC, paper | −3.5 | −0.2 | −2.4 | −2.5 |
 | | diffusion, flux-calibrated | −1.7 | +0.7 | +0.2 | 0.0 |
 | +0.2 | diffusion, paper | −4.7 | −0.5 | +0.7 | +0.5 |
+| | IMC, paper | −6.0 | −0.6 | −1.4 | −1.2 |
 | | diffusion, flux-calibrated | −4.6 | −0.2 | +1.2 | +0.9 |
 | +0.4 | diffusion, paper | −8.9 | −1.3 | −0.8 | −3.3 |
 
@@ -44,7 +45,7 @@ What it shows:
 |---|---|---|---|---|
 | −0.8 … −0.2 | 400 cells, uniform in mass | diffusion, 39–49 s | 7 runs (flux matched to 0.2–1.0%), then diffusion, 19–35 s | 1 seed, paper bath |
 | 0 | 657, uniform in mass | 76 s | converged after 4 runs; then diffusion, 32 s | 1 seed |
-| +0.2 | 1510, uniform in mass | 186 s | converged after 3 runs; then diffusion, 100 s | skipped |
+| +0.2 | 1510, uniform in mass | 186 s | converged after 3 runs; then diffusion, 100 s | 1 seed, 420 s |
 | +0.4 | 347, graded (Test 3's) | 555 s | **skipped** (7 × ~10 min) | skipped |
 | +0.6 | graded | **failed**: the hydro's compatible energy update does not converge, also with the time step capped at 0.2 ps; not pursued | — | — |
 | +0.8 | — | **no analytic solution**: Menahem's `PistonShock` finds no root for the shock (both `fsolve` and bisection fail from ω ≈ 0.75; 0.7 works) | — | — |

@@ -707,9 +707,25 @@ def optical_depth_line(run) -> str:
     return "optical depth of the hot plasma, T > T_s/2 (diffusion run): " + "; ".join(parts)
 
 
+def label_short_log_axes(ax):
+    """On a log axis spanning under ~1.5 decades matplotlib labels no tick; label the 2, 3, 5 ones."""
+    from matplotlib.ticker import FuncFormatter, LogLocator
+
+    for axis, (lo, hi) in ((ax.xaxis, ax.get_xlim()), (ax.yaxis, ax.get_ylim())):
+        if axis.get_scale() == "log" and lo > 0 and hi / lo < 30:
+            axis.set_major_locator(LogLocator(base=10, subs=(1.0, 2.0, 3.0, 5.0)))
+            axis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
+            axis.set_minor_formatter(FuncFormatter(lambda v, _: ""))
+
+
 def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, patched=(), log_axis=None,
-                        analytic_label="Analytic", method=None):
+                        analytic_label="Analytic", method=None, region="full", scale=None):
     """rho, p, u, T against mass at 1, 1.5, 2 ns, in the style of the ICTT figures.
+
+    ``region``: "full" (the domain), "heat" (the ablated layer, up to 1.3 m_heat) or "shock"
+    (from 0.85 m_heat to 1.1 m_shock); the y limits come from the simulations inside it.
+    ``scale``: "linear", "logx" (log mass axis) or "loglog" (log mass and log rho, p, T; u, which
+    changes sign, on a symmetric-log axis); None keeps the case's log_mass_axis (or ``log_axis``).
 
     ``solver``: the analytic curve, an AblationSolver to reuse (building one takes ~20 min) or
     any object with solve(mass=, time=), such as bath_calibration.Analytic;
@@ -746,12 +762,14 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, p
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     panels = {"rho": axes[0, 0], "p": axes[0, 1], "u": axes[1, 0], "T_material": axes[1, 1]}
     m_heat, m_shock, T_shocked = [], [], []
+    m_layer = 1.5 * front_values(d, label, float(d["t"][snaps[-1]]))["m_heat"]
     for col, k in zip(sim_colors, snaps):
         t = float(d["t"][k])
         m_sim = d["m"][k]
-        # dense on both a linear and a log axis (a thin ablated layer on a wide domain)
+        # dense on both a linear and a log axis (a thin ablated layer on a wide domain), and in the layer
         mass = np.unique(np.concatenate((np.linspace(1e-12, m_sim[-1], 1000),
-                                         np.geomspace(1e-4 * m_sim[0], m_sim[-1], 1500))))
+                                         np.geomspace(1e-4 * m_sim[0], m_sim[-1], 1500),
+                                         np.linspace(1e-12, min(m_layer, m_sim[-1]), 800))))
         exact = solver.solve(mass=mass, time=t)
         mean = {key: np.mean([r[key][k] for r in imc], axis=0) for key in scales} if imc else None
         for key, ax in panels.items():
@@ -769,25 +787,45 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, p
         behind = (m_sim > 0.5 * m_shock[-1]) & (m_sim < m_shock[-1])          # the shocked plateau
         T_shocked.append(float(np.max(d["T_material"][k][behind])) / K_PER_HEV if behind.any() else 0.0)
 
-    # y limits from the simulations, as in the reference (keeps the analytic singularities in bounds)
-    sim = {key: np.concatenate([d[key][k] * scales[key] for k in snaps]) for key in scales}
-    panels["rho"].set_ylim(-0.025 * sim["rho"].max(), 1.15 * sim["rho"].max())
-    panels["p"].set_ylim(-0.05 * sim["p"].max(), 1.15 * sim["p"].max())
-    panels["u"].set_ylim(1.15 * sim["u"].min() - 5.0, sim["u"].max() + 10.0)
-    panels["T_material"].set_ylim(-0.05 * sim["T_material"].max(), 1.15 * sim["T_material"].max())
+    explicit_view = scale is not None or region != "full"
+    if scale is None:
+        scale = "logx" if (HYDRO_CASES[label].log_mass_axis if log_axis is None else log_axis) else "linear"
+    log_x = scale in ("logx", "loglog")
+    # the mass window [mg/cm^2]
     x_max = 1e3 * float(d["m"][snaps[-1]][-1])
+    x_first = 0.5e3 * float(np.min(d["m"][snaps[-1]]))
+    lo, hi = {"full": (x_first if log_x else 0.0, x_max),
+              "heat": (x_first if log_x else 0.0, min(1.3e3 * max(m_heat), x_max)),
+              "shock": (0.85e3 * min(m_heat), min(1.1e3 * max(m_shock), x_max))}[region]
+    # y limits from the simulations inside the window (keeps the analytic singularities in bounds)
+    sim = {key: np.concatenate([d[key][k][(d["m"][k] * 1e3 >= lo) & (d["m"][k] * 1e3 <= hi)] * scales[key]
+                                for k in snaps]) for key in scales}
+    for key, ax in panels.items():
+        v = sim[key]
+        if scale == "loglog" and key != "u":
+            pos = v[v > 0]
+            ax.set_yscale("log")
+            ax.set_ylim(0.7 * max(pos.min(), 1e-9 * pos.max()), 1.6 * pos.max())
+        elif scale == "loglog":       # u changes sign: symmetric log, linear within 1 km/s
+            ax.set_yscale("symlog", linthresh=1.0)
+            ax.set_ylim(1.5 * min(v.min(), -1.0), 1.5 * max(v.max(), 1.0))
+        elif region == "full":        # as in the reference figure
+            top = {"rho": 1.15, "p": 1.15, "T_material": 1.15}
+            if key == "u":
+                ax.set_ylim(1.15 * v.min() - 5.0, v.max() + 10.0)
+            else:
+                ax.set_ylim(-(0.025 if key == "rho" else 0.05) * v.max(), top[key] * v.max())
+        else:
+            span = v.max() - v.min()
+            ax.set_ylim(v.min() - 0.06 * span, v.max() + 0.12 * span)
 
     titles = {"rho": "Density", "p": "Pressure", "u": "Velocity", "T_material": "Temperature"}
     ylabels = {"rho": r"$\rho$ [g/cm³]", "p": r"$P$ [MBar]", "u": r"$u$ [km/s]", "T_material": r"$T$ [HeV]"}
-    if log_axis is None:
-        log_axis = HYDRO_CASES[label].log_mass_axis
-    x_min = 0.5e3 * float(np.min(d["m"][snaps[-1]]))
     for key, ax in panels.items():
-        if log_axis:      # a thin ablated layer on a wide domain: both in view at once
+        if log_x:         # a thin ablated layer on a wide domain: both in view at once
             ax.set_xscale("log")
-            ax.set_xlim(x_min, x_max)
-        else:
-            ax.set_xlim(0.0, x_max)
+        ax.set_xlim(lo, hi)
+        label_short_log_axes(ax)
         ax.grid(True, alpha=0.3)
         ax.set_title(titles[key], fontsize=14, fontweight="bold")
         ax.set_ylabel(ylabels[key], fontsize=13)
@@ -813,7 +851,7 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, p
         "T_material": ((0.40, 0.42, 0.60, 0.50), (0.8e3 * min(m_shock), 1.05e3 * max(m_shock)),
                        (0.0, 3.5 * max(T_shocked) if max(T_shocked) > 0 else 0.15)),
     }
-    for key, (pos, xlim, ylim) in ({} if log_axis else insets).items():
+    for key, (pos, xlim, ylim) in (insets if (region == "full" and scale == "linear") else {}).items():
         ax = panels[key]
         ins = ax.inset_axes(list(pos))
         for line in ax.get_lines():
@@ -826,8 +864,11 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, p
         ax.indicate_inset_zoom(ins, edgecolor="gray", alpha=0.6)
 
     tau, thin, T_s = layer_optical_depth(d)
+    view = ({"full": "full domain", "heat": "heat region", "shock": "shocked region"}[region] + ", "
+            + {"linear": "linear", "logx": "log mass axis", "loglog": "log-log"}[scale]) if explicit_view else ""
     fig.suptitle(f"Patched Ablation & Shock Verification: Diffusion vs IMC\n{HYDRO_CASES[label].title}"
-                 + (f"; {method}" if method else ""), fontsize=16, fontweight="bold", y=0.995)
+                 + (f"; {method}" if method else "") + (f"; {view}" if view else ""),
+                 fontsize=16, fontweight="bold", y=0.995)
     fig.text(0.5, 0.925, rf"hot ablated plasma ($T > T_s/2$) at {d['t'][-1] * 1e9:.1f} ns: optical depth $\mathcal{{T}}$ = {tau:.3g}, "
              rf"{thin:.0%} of its mass in cells with $\tau$ < 1;  surface T = {T_s:.3f} HeV (solver: "
              rf"{T_drive(label, float(d['t'][-1])):.3f})", ha="center", fontsize=12, style="italic")

@@ -83,8 +83,10 @@ def register(omega: float) -> str:
                              imc=ivd.HYDRO_CASES["test4_full"].imc)
     else:   # rho ~ x^-omega piles the mass at the surface: Test 3's graded mesh and settings
         spec = replace(ivd.HYDRO_CASES["test3_full"], preset=key, title=title, log_mass_axis=False)
-        if omega >= 0.6:   # the compatible energy update fails to converge at the default 2 ps cap
-            spec = replace(spec, dt_max=2e-13)
+        if omega >= 0.6:
+            # The first step (1e-10 t_end, not CFL-limited) heats the 1e-15 cm surface cell ~2000x;
+            # its sound speed then puts c_s dt / dx ~ 6 and the compatible energy update diverges.
+            spec = replace(spec, config=tuple(spec.config) + (("dt_first_frac", 1e-12),))
     ivd.HYDRO_CASES[label] = spec
     return label
 

@@ -365,6 +365,7 @@ def compute_adaptive_dt(
     E_rad_last: np.ndarray,
     T_rad_last: np.ndarray,
     dt_ramp_max: Optional[float] = None,
+    dt_first_frac: float = 1e-10,
 ) -> float:
     """Compute adaptive timestep for hydro, radiation, or coupled rad-hydro simulation steps.
 
@@ -385,7 +386,7 @@ def compute_adaptive_dt(
         # at the origin for t > 0). Starting at 1e-6 * t_end misses ~9% of
         # the energy and leaves the heat front correspondingly short; ~10
         # decades captures it to a few tenths of a percent.
-        dt0 = 1e-10 * t_end
+        dt0 = dt_first_frac * t_end
         if t > 0.0:
             # Restarting from a seeded profile at t > 0: a self-similar wave
             # advances as r ~ t^(1/p), so the step must be small against the
@@ -669,6 +670,7 @@ def simulate_rad_hydro(
                 E_rad_last=prev_E_rad,
                 T_rad_last=prev_T_rad,
                 dt_ramp_max=getattr(simulation_config, "dt_ramp_max", None),
+                dt_first_frac=getattr(simulation_config, "dt_first_frac", 1e-10),
             )
             dt_prev = dt
 

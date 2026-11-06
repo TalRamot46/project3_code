@@ -192,9 +192,13 @@ def _style(ax):
     ax.tick_params(colors=MUTED, labelcolor=INK, labelsize=10)
 
 
-def plot_overlay(label: str, path: Path, t: float = 2e-9):
+def plot_overlay(label: str, path: Path, t: float = 2e-9, region="full", scale=None):
     """Diffusion under every bath of one case at t against the analytic solution; the bath
-    closest to it by profile_score drawn bold, the baths ranked beside the profiles."""
+    closest to it by profile_score drawn bold, the baths ranked beside the profiles.
+
+    ``region`` / ``scale`` as in imc_vs_diffusion.plot_hydro_profiles: "full", "heat" or "shock";
+    "linear", "logx" or "loglog" (None: the case's log_mass_axis).  The ranking is always over
+    the full domain."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -221,25 +225,44 @@ def plot_overlay(label: str, path: Path, t: float = 2e-9):
     m_dense = np.unique(np.concatenate((np.linspace(1e-12, m_end, 1500),
                                         np.geomspace(1e-4 * min(r["m"][k[b]][0] for b, r in runs.items()), m_end, 1500))))
     t_an = float(runs[best["bath"]]["t"][k[best["bath"]]])
+    fronts = [ivd.front_values(r, label, float(r["t"][k[b]])) for b, r in runs.items()]
+    shock = max([analytic.front_values(t_an)["m_shock"]] + [fv["m_shock"] for fv in fronts])
+    heat = max([analytic.front_values(t_an)["m_heat"]] + [fv["m_heat"] for fv in fronts])
+    heat_min = min([analytic.front_values(t_an)["m_heat"]] + [fv["m_heat"] for fv in fronts])
+    explicit_view = scale is not None or region != "full"
+    if scale is None:
+        scale = "logx" if ivd.HYDRO_CASES[label].log_mass_axis else "linear"
+    log_x = scale in ("logx", "loglog")
+    x_first = 0.5e3 * min(r["m"][k[b]][0] for b, r in runs.items())
+    x_lo, x_hi = {"full": (x_first if log_x else 0.0, 1.15e3 * shock),
+                  "heat": (x_first if log_x else 0.0, 1.3e3 * heat),
+                  "shock": (0.85e3 * heat_min, 1.1e3 * shock)}[region]
+    m_dense = np.unique(np.concatenate((m_dense, np.linspace(max(x_lo, 1e-9) * 1e-3, x_hi * 1e-3, 1500))))
     sol = analytic.solve(mass=m_dense, time=t_an)
-    shock = max([analytic.front_values(t_an)["m_shock"]] +
-                [ivd.front_values(r, label, float(r["t"][k[b]]))["m_shock"] for b, r in runs.items()])
-    log_axis = ivd.HYDRO_CASES[label].log_mass_axis
-    for key, ref, ylabel, scale in FIELDS:
+    for key, ref, ylabel, fscale in FIELDS:
         ax = axes[key]
         for b, r in runs.items():
             hl = b == best["bath"]
-            ax.plot(r["m"][k[b]] * 1e3, r[key][k[b]] * scale, color=BATH_COLOR[b], lw=2.4 if hl else 1.2,
+            ax.plot(r["m"][k[b]] * 1e3, r[key][k[b]] * fscale, color=BATH_COLOR[b], lw=2.4 if hl else 1.2,
                     alpha=1.0 if hl else 0.55, zorder=3 if hl else 2)
-        ax.plot(m_dense * 1e3, np.asarray(sol[ref], dtype=float) * scale, color=INK, ls="--", lw=1.8, zorder=4)
-        sim = np.concatenate([r[key][k[b]] * scale for b, r in runs.items()])
-        lo, hi = sim.min(), sim.max()
-        ax.set_ylim(lo - 0.06 * (hi - lo), hi + 0.12 * (hi - lo))
-        if log_axis:
-            ax.set_xscale("log")
-            ax.set_xlim(0.5e3 * min(r["m"][k[b]][0] for b, r in runs.items()), 1.15e3 * shock)
+        ax.plot(m_dense * 1e3, np.asarray(sol[ref], dtype=float) * fscale, color=INK, ls="--", lw=1.8, zorder=4)
+        # y limits from the simulations inside the mass window
+        sim = np.concatenate([r[key][k[b]][(r["m"][k[b]] * 1e3 >= x_lo) & (r["m"][k[b]] * 1e3 <= x_hi)] * fscale
+                              for b, r in runs.items()])
+        if scale == "loglog" and key != "u":
+            pos = sim[sim > 0]
+            ax.set_yscale("log")
+            ax.set_ylim(0.7 * max(pos.min(), 1e-9 * pos.max()), 1.6 * pos.max())
+        elif scale == "loglog":   # u changes sign: symmetric log, linear within 1 km/s
+            ax.set_yscale("symlog", linthresh=1.0)
+            ax.set_ylim(1.5 * min(sim.min(), -1.0), 1.5 * max(sim.max(), 1.0))
         else:
-            ax.set_xlim(0.0, 1.15e3 * shock)
+            lo, hi = sim.min(), sim.max()
+            ax.set_ylim(lo - 0.06 * (hi - lo), hi + 0.12 * (hi - lo))
+        if log_x:
+            ax.set_xscale("log")
+        ax.set_xlim(x_lo, x_hi)
+        ivd.label_short_log_axes(ax)
         ax.set_ylabel(ylabel, color=INK, fontsize=12)
         ax.set_xlabel(r"mass $m$ [mg/cm$^2$]", color=INK, fontsize=11)
         ax.set_title(ref.capitalize(), color=INK, fontsize=13, loc="left", fontweight="bold")
@@ -284,12 +307,48 @@ def plot_overlay(label: str, path: Path, t: float = 2e-9):
     verdict = f"Closest: {BATH_SHORT[best['bath']]}"
     if len(rows) > 1 and rows[1]["score"] - best["score"] < 1e-3:   # within 0.1 percentage point
         verdict = f"Tie: {BATH_SHORT[best['bath']]} and {BATH_SHORT[rows[1]['bath']]}"
-    fig.suptitle(f"{ivd.HYDRO_CASES[label].title}: diffusion under each bath at {t_an * 1e9:.1f} ns.  {verdict}",
+    view = ({"full": "full domain", "heat": "heat region", "shock": "shocked region"}[region] + ", "
+            + {"linear": "linear", "logx": "log mass axis", "loglog": "log-log"}[scale] + ".  ") if explicit_view else ""
+    fig.suptitle(f"{ivd.HYDRO_CASES[label].title}: diffusion under each bath at {t_an * 1e9:.1f} ns; {view}{verdict}",
                  x=0.055, ha="left", fontsize=15, fontweight="bold", color=INK, y=0.985)
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=170)
     plt.close(fig)
     return rows
+
+
+VIEW_CASES = ("test3_smooth", "test4_full")
+REGIONS = ("full", "heat", "shock")
+SCALES = ("linear", "loglog")
+
+
+def plot_views(labels=VIEW_CASES, baths=tuple(BATHS)):
+    """Every region x scale view of each case, in each bath folder and (cases with more than one
+    bath) in overlay/: md/phase_c/figures/<folder>/<case>/<region>_<scale>.png."""
+    import matplotlib
+    matplotlib.use("Agg")
+
+    for label in labels:
+        stem = figure_name(label).replace("_profiles.png", "")
+        analytic = None
+        for bath in baths:
+            folder, out = BATHS[bath]
+            if not (out / f"{label}_diffusion.npz").exists():
+                continue
+            analytic = analytic or Analytic(label)
+            for region in REGIONS:
+                for scale in SCALES:
+                    path = FIG / folder / stem / f"{region}_{scale}.png"
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    ivd.plot_hydro_profiles(out, label, (1, 2, 3), path, solver=analytic, method=BATH_TEXT[bath],
+                                            region=region, scale=scale)
+                    print(f"  wrote {path.relative_to(ivd.REPO)}", flush=True)
+        if len(baths_of(label)) > 1:
+            for region in REGIONS:
+                for scale in SCALES:
+                    path = FIG / "overlay" / stem / f"{region}_{scale}.png"
+                    plot_overlay(label, path, region=region, scale=scale)
+                    print(f"  wrote {path.relative_to(ivd.REPO)}", flush=True)
 
 
 def main(argv=None):
@@ -304,6 +363,9 @@ def main(argv=None):
     ap.add_argument("--overlay", action="store_true",
                     help="cases with more than one bath: one figure comparing them, md/phase_c/figures/overlay/")
     ap.add_argument("--baths", nargs="*", default=list(BATHS), choices=list(BATHS))
+    ap.add_argument("--views", action="store_true",
+                    help="every region (full, heat, shock) x scale (linear, log-log) view of --cases, "
+                         "md/phase_c/figures/<folder>/<case>/")
     args = ap.parse_args(argv)
     labels = list(args.cases)
     for w in args.omega_scan:
@@ -314,6 +376,9 @@ def main(argv=None):
         return
     if args.profiles:
         plot_profile_set(labels, args.baths)
+        return
+    if args.views:
+        plot_views(labels, args.baths)
         return
     if args.overlay:
         for label in labels:

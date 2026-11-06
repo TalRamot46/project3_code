@@ -117,6 +117,11 @@ class SimulationConfig:
     # by 1.1 per step up to this cap (s); CFL still applies with hydro.  Gives
     # identical dt sequences to the diffusion and IMC solvers.
     dt_ramp_max: Optional[float] = None
+    # First steps (step <= 2) of rad-hydro, as a fraction of t_end.  They are not CFL-limited
+    # (the drive is singular at t -> 0); a very thin, dense surface cell (rho0 x^-omega with
+    # omega >~ 0.6) needs a smaller one, or the first step's heating breaks the compatible
+    # energy update.
+    dt_first_frac: float = 1e-10
     # Radiation solver: "diffusion" (original) or "imc" (src/imc; radiation_only
     # and, since Phase C, full_rad_hydro).
     radiation_solver: str = "diffusion"

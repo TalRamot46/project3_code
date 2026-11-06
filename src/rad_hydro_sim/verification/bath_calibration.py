@@ -182,6 +182,17 @@ def profile_score(run, k, analytic, t):
     return float(np.mean(errs))
 
 
+def _label_short_log_axes(ax):
+    """On a log axis spanning under ~1.5 decades matplotlib labels no tick; label the 2, 3, 5 ones."""
+    from matplotlib.ticker import FuncFormatter, LogLocator
+
+    for axis, (lo, hi) in ((ax.xaxis, ax.get_xlim()), (ax.yaxis, ax.get_ylim())):
+        if axis.get_scale() == "log" and lo > 0 and hi / lo < 30:
+            axis.set_major_locator(LogLocator(base=10, subs=(1.0, 2.0, 3.0, 5.0)))
+            axis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}"))
+            axis.set_minor_formatter(FuncFormatter(lambda v, _: ""))
+
+
 def _style(ax):
     ax.grid(True, color=GRID, lw=0.8)
     ax.set_axisbelow(True)
@@ -243,8 +254,9 @@ def plot_overlay(label: str, path: Path, t: float = 2e-9, region="full", scale=N
         ax = axes[key]
         for b, r in runs.items():
             hl = b == best["bath"]
-            ax.plot(r["m"][k[b]] * 1e3, r[key][k[b]] * fscale, color=BATH_COLOR[b], lw=2.4 if hl else 1.2,
-                    alpha=1.0 if hl else 0.55, zorder=3 if hl else 2)
+            # the closest bath wide underneath, the others thin on top: where baths agree, all stay visible
+            ax.plot(r["m"][k[b]] * 1e3, r[key][k[b]] * fscale, color=BATH_COLOR[b], lw=3.4 if hl else 1.3,
+                    alpha=0.8 if hl else 0.95, zorder=2 if hl else 3)
         ax.plot(m_dense * 1e3, np.asarray(sol[ref], dtype=float) * fscale, color=INK, ls="--", lw=1.8, zorder=4)
         # y limits from the simulations inside the mass window
         sim = np.concatenate([r[key][k[b]][(r["m"][k[b]] * 1e3 >= x_lo) & (r["m"][k[b]] * 1e3 <= x_hi)] * fscale
@@ -262,7 +274,7 @@ def plot_overlay(label: str, path: Path, t: float = 2e-9, region="full", scale=N
         if log_x:
             ax.set_xscale("log")
         ax.set_xlim(x_lo, x_hi)
-        ivd.label_short_log_axes(ax)
+        _label_short_log_axes(ax)
         ax.set_ylabel(ylabel, color=INK, fontsize=12)
         ax.set_xlabel(r"mass $m$ [mg/cm$^2$]", color=INK, fontsize=11)
         ax.set_title(ref.capitalize(), color=INK, fontsize=13, loc="left", fontweight="bold")

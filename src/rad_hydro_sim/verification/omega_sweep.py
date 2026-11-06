@@ -108,6 +108,23 @@ def register(omega: float) -> str:
     return label
 
 
+def register_fine(omega: float) -> str:
+    """The same case on a finer mesh, label <label>_fine, sharing the preset (and its flux table):
+    2.5x the cells of the uniform-mass mesh below GRADED_FROM; above it, the graded mesh with
+    Test 3's fine-mesh cap of 0.3 mg/cm^2 per cell (test3_smooth)."""
+    label = register(omega)
+    fine = label + "_fine"
+    if fine in ivd.HYDRO_CASES:
+        return fine
+    spec = ivd.HYDRO_CASES[label]
+    if omega < GRADED_FROM:
+        spec = replace(spec, N=int(round(2.5 * spec.N)), store_every=100)   # ~1e3 frames, not ~3e3
+    else:
+        spec = replace(spec, config=tuple(spec.config) + (("max_cell_mass", 3e-4),), store_every=2000)
+    ivd.HYDRO_CASES[fine] = spec
+    return fine
+
+
 def analytic_fronts(omega: float, times):
     """{x_f, m_f, x_s, m_s} of the AblationSolver at times (the heat front sits on the shock
     solution's tracer of m_f, as in AblationSolver.solve)."""
@@ -123,26 +140,32 @@ def analytic_fronts(omega: float, times):
     return {k: np.asarray(v) for k, v in out.items()}
 
 
-def run(omega: float, flux=True, imc=False):
+def run(omega: float, flux=True, imc=False, imc_flux=False, fine=False, paper=True):
+    """Paper-bath diffusion (and IMC with imc), the flux calibration and flux-bath diffusion (and
+    IMC with imc_flux); fine: the same on register_fine's mesh, with the coarse mesh's flux table."""
     label = register(omega)
+    run_label = register_fine(omega) if fine else label
     OUT.mkdir(parents=True, exist_ok=True)
     OUT_FLUX.mkdir(parents=True, exist_ok=True)
-    ivd.run_hydro(OUT, label, seeds=(1,) if imc else (), physical=False)
+    if paper:
+        ivd.run_hydro(OUT, run_label, seeds=(1,) if imc else (), physical=False)
     if flux:
         cal = ivd.BATH_CORRECTION_DIR / f"{label.upper()}_flux.txt"
         if not cal.exists():
             print(f"[{label}] calibrating the bath to the energy flux", flush=True)
             ivd.calibrate_bath(label, target="flux")
-        ivd.run_hydro(OUT_FLUX, label, seeds=(), physical=False, bath="calibrated_flux")
+        ivd.run_hydro(OUT_FLUX, run_label, seeds=(1,) if imc_flux else (), physical=False, bath="calibrated_flux")
 
 
-def sim_series(omega: float):
-    """{run name: {t, x_f, m_f, x_s, m_s}} of the runs of this omega that exist."""
-    label = label_of(omega)
+def sim_series(omega: float, fine: bool = False):
+    """{run name: {t, x_f, m_f, x_s, m_s}} of the runs of this omega that exist (fine: on the
+    register_fine mesh)."""
+    label = label_of(omega) + ("_fine" if fine else "")
     found = {}
     for name, path in (("diffusion, paper bath", OUT / f"{label}_diffusion.npz"),
                        ("IMC, paper bath", OUT / f"{label}_imc1.npz"),
-                       ("diffusion, flux-calibrated bath", OUT_FLUX / f"{label}_diffusion.npz")):
+                       ("diffusion, flux-calibrated bath", OUT_FLUX / f"{label}_diffusion.npz"),
+                       ("IMC, flux-calibrated bath", OUT_FLUX / f"{label}_imc1.npz")):
         if path.exists():
             r = np.load(path)
             # before ~1% of t_end there is no shock yet and the front finder returns the domain edge
@@ -157,7 +180,8 @@ def sim_series(omega: float):
 # the flux-calibrated bath narrow on top, so both stay visible
 STYLE = {"diffusion, paper bath": dict(color="#2a78d6", lw=3.4, alpha=0.75),
          "IMC, paper bath": dict(color="#184f95", lw=1.4, ls=(0, (4, 2))),
-         "diffusion, flux-calibrated bath": dict(color="#1baf7a", lw=1.6)}
+         "diffusion, flux-calibrated bath": dict(color="#1baf7a", lw=1.6),
+         "IMC, flux-calibrated bath": dict(color="#127a55", lw=1.4, ls=(0, (4, 2)))}
 INK, MUTED, GRID = "#1f1f1d", "#6b6a64", "#e4e3dd"
 PANELS = (("x_f", r"heat front $x_f$ [$\mu$m]", 1e4), ("m_f", r"heat front $m_f$ [mg/cm$^2$]", 1e3),
           ("x_s", r"shock $x_s$ [$\mu$m]", 1e4), ("m_s", r"shock $m_s$ [mg/cm$^2$]", 1e3))
@@ -283,17 +307,71 @@ def plot_summary(omegas, path: Path, t: float = 2e-9):
     return rows
 
 
+def plot_convergence(omegas, path: Path, t: float = 2e-9):
+    """Deviation from the solver at t against omega on the default mesh (solid) and the
+    register_fine mesh (open markers, dotted), diffusion with each bath."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
+
+    baths = ("diffusion, paper bath", "diffusion, flux-calibrated bath")
+    rows = {}
+    for w in omegas:
+        an = analytic_fronts(w, [t])
+        coarse, fine = sim_series(w), sim_series(w, fine=True)
+        rows[w] = {b: {key: (100 * (at(coarse[b], key, t) / an[key][0] - 1),
+                             100 * (at(fine[b], key, t) / an[key][0] - 1)) for key, *_ in PANELS}
+                   for b in baths if b in coarse and b in fine}
+    fig, axes = plt.subplots(2, 2, figsize=(12.5, 8.4), sharex=True)
+    for ax, (key, ylabel, _) in zip(axes.flat, PANELS):
+        for b in baths:
+            pts = [(w, r[b][key]) for w, r in rows.items() if b in r and (w, key) not in UNRESOLVED]
+            if not pts:
+                continue
+            color = STYLE[b]["color"]
+            ws = [p[0] for p in pts]
+            ax.plot(ws, [p[1][0] for p in pts], color=color, lw=2.0, marker="o", ms=6)
+            ax.plot(ws, [p[1][1] for p in pts], color=color, lw=1.4, ls=":", marker="o", ms=7,
+                    markerfacecolor="white", markeredgecolor=color, markeredgewidth=1.6)
+        ax.axhline(0, color=MUTED, lw=1)
+        ax.margins(x=0.04, y=0.08)
+        ax.set_title(ylabel.split(" [")[0], color=INK, fontsize=12, loc="left", fontweight="bold")
+        ax.set_ylabel("simulation vs. analytic [%]", color=INK, fontsize=10.5)
+        _style(ax)
+    for ax in axes[1]:
+        ax.set_xlabel(r"$\omega$", color=INK, fontsize=12)
+        ax.set_xticks(sorted(rows))
+    handles = [Line2D([0], [0], color=STYLE[b]["color"], lw=2.0, marker="o", ms=6, label=f"{b}, default mesh")
+               for b in baths]
+    handles += [Line2D([0], [0], color=STYLE[b]["color"], lw=1.4, ls=":", marker="o", ms=7, markerfacecolor="white",
+                       markeredgecolor=STYLE[b]["color"], markeredgewidth=1.6, label=f"{b}, fine mesh") for b in baths]
+    fig.legend(handles=handles, loc="upper left", bbox_to_anchor=(0.06, 0.96), ncol=2, frameon=False,
+               fontsize=10, labelcolor=INK)
+    fig.suptitle(rf"Mesh convergence of the gold $\omega$ sweep at {t * 1e9:g} ns: default vs. fine mesh "
+                 r"(2.5$\times$ the cells; $\omega \geq 0.4$: cells $\leq$ 0.3 mg/cm$^2$)",
+                 x=0.06, ha="left", fontsize=13, fontweight="bold", color=INK, y=0.99)
+    fig.tight_layout(rect=(0, 0, 1, 0.9))
+    fig.savefig(path, dpi=160)
+    plt.close(fig)
+    return rows
+
+
 def main(argv=None):
     logging.disable(logging.INFO)
     ap = argparse.ArgumentParser()
     ap.add_argument("--run", nargs="*", type=float, default=None, help="omegas to simulate")
     ap.add_argument("--no-flux", action="store_true", help="skip the flux calibration and its run")
     ap.add_argument("--imc", action="store_true", help="also IMC (one seed, paper bath)")
+    ap.add_argument("--imc-flux", action="store_true", help="also IMC (one seed) with the flux-calibrated bath")
+    ap.add_argument("--fine", action="store_true", help="the finer mesh of register_fine")
+    ap.add_argument("--no-paper", action="store_true", help="skip the paper-bath runs")
     ap.add_argument("--figures", action="store_true")
     args = ap.parse_args(argv)
     if args.run is not None:
         for w in args.run:
-            run(w, flux=not args.no_flux, imc=args.imc)
+            run(w, flux=not args.no_flux, imc=args.imc, imc_flux=args.imc_flux, fine=args.fine,
+                paper=not args.no_paper)
     if args.figures:
         done = [w for w in OMEGAS if (OUT / f"{label_of(w)}_diffusion.npz").exists()]
         for w in done:
@@ -302,6 +380,11 @@ def main(argv=None):
             plot_omega(w, path)
             print(f"  wrote {path.relative_to(ivd.REPO)}", flush=True)
         rows = plot_summary(done, FIG / "fronts_vs_omega.png")
+        conv = plot_convergence(done, FIG / "mesh_convergence.png")
+        for w, r in conv.items():
+            print(f"  convergence omega {w:+.1f}: " + "; ".join(
+                f"{b}: " + ", ".join(f"{k} {c:+.1f} -> {fi:+.1f}%" for k, (c, fi) in d.items()) for b, d in r.items()),
+                flush=True)
         for w, r in rows.items():
             print(f"  omega {w:+.1f}: " + "; ".join(f"{n}: " + ", ".join(f"{k} {v:+.1f}%" for k, v in d.items())
                                                 for n, d in r.items()), flush=True)

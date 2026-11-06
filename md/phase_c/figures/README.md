@@ -24,12 +24,12 @@ Test 3's file is `test3_full_profiles.png` (its fine-mesh run, `test3_smooth`).
 |---|---|---|---|---|
 | `full` | the whole domain | | `linear` | linear mass, linear ρ, p, u, T |
 | `heat` | the ablated layer, up to 1.3 m_heat | | `semilogx` | log mass, linear ρ, p, u, T |
-| `shock` | from 0.85 m_heat to 1.1 m_shock | | `semilogy` | linear mass, log ρ, p, T; u on a symmetric-log axis |
+| `shock` | from 0.85 m_heat to 1.1 m_shock (simulated or analytic, whichever is further); from 1.05 m_heat when the ablated layer is thin against the shocked one (Test 3) | | `semilogy` | linear mass, log ρ, p, T; u on a symmetric-log axis |
 | | | | `loglog` | log mass, log ρ, p, T; u on a symmetric-log axis |
 
 On a log field axis u, which changes sign, goes on a symmetric-log axis, linear within ±1 km/s.
 
-The y limits come from the simulations inside the window. In the overlays the ranking table is always over the full domain. The top-level `test3_full_profiles.png` (log mass axis, linear values) and `test4_full_profiles.png` (linear) are the figures the docs link to. The gold ω sweep of the fronts against time is a separate set: `../omega_sweep/`.
+The y limits come from the simulations inside the window. In the shocked region they come from the shocked matter alone, simulations and solver together, between each one's heat front and shock, so the plateaus and their differences fill the panels. In the overlays the ranking table is always over the full domain. The top-level `test3_full_profiles.png` (log mass axis, linear values) and `test4_full_profiles.png` (linear) are the figures the docs link to. The gold ω sweep of the fronts against time is a separate set: `../omega_sweep/`.
 
 Regenerate (seconds per case once the solvers are cached in `results/patching_poc/`):
 

@@ -247,6 +247,10 @@ def plot_overlay(label: str, path: Path, t: float = 2e-9, region="full", scale=N
     x_lo, x_hi = {"full": (x_first if log_x else 0.0, 1.15e3 * shock),
                   "heat": (x_first if log_x else 0.0, 1.3e3 * heat),
                   "shock": (0.85e3 * heat_min, 1.1e3 * shock)}[region]
+    an_f = analytic.front_values(t_an)
+    shock_min = min([an_f["m_shock"]] + [fv["m_shock"] for fv in fronts])
+    if region == "shock" and ivd.isolate_shocked([heat_min, heat], [shock_min, shock]):
+        x_lo = 1.05e3 * heat            # a heat layer thin against the shocked one (Test 3): left out
     m_dense = np.unique(np.concatenate((m_dense, np.linspace(max(x_lo, 1e-9) * 1e-3, x_hi * 1e-3, 1500))))
     sol = analytic.solve(mass=m_dense, time=t_an)
     keep = ivd.front_spike_mask(m_dense, sol, analytic.front_values(t_an)["m_heat"])   # no patch spike at the front
@@ -259,9 +263,18 @@ def plot_overlay(label: str, path: Path, t: float = 2e-9, region="full", scale=N
                     alpha=0.8 if hl else 0.95, zorder=2 if hl else 3)
         ax.plot(m_dense[keep] * 1e3, np.asarray(sol[ref], dtype=float)[keep] * fscale, color=INK, ls="--", lw=1.8,
                 zorder=4)
-        # y limits from the simulations inside the mass window
+        # y limits from the simulations inside the mass window; in the shocked region from the shocked
+        # matter alone (each bath's cells between its heat front and its shock, and the solver's), so the
+        # plateaus and their differences fill the panels
         sim = np.concatenate([r[key][k[b]][(r["m"][k[b]] * 1e3 >= x_lo) & (r["m"][k[b]] * 1e3 <= x_hi)] * fscale
                               for b, r in runs.items()])
+        if region == "shock":
+            parts = [r[key][k[b]][(r["m"][k[b]] > 1.1 * fv["m_heat"]) & (r["m"][k[b]] < 0.98 * fv["m_shock"])] * fscale
+                     for (b, r), fv in zip(runs.items(), fronts)]
+            inside = (m_dense > 1.02 * an_f["m_heat"]) & (m_dense < 0.98 * an_f["m_shock"])
+            shocked = np.concatenate(parts + [np.asarray(sol[ref], dtype=float)[inside] * fscale])
+            if shocked.size:
+                sim = shocked
         if log_y and key != "u":
             pos = sim[sim > 0]
             ax.set_yscale("log")

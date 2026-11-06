@@ -17,7 +17,7 @@ The title of each figure names the test, the region, the bath and the axes. The 
 | 6 | Al | paper and flux-calibrated | full domain, linear |
 
 The regions and scales of Tests 3 and 4 are as follows.
-- **Regions:** the *full domain*; the *heat region*, from the surface to 1.3 m_f (the ablated layer); the *shocked region*, from 0.85 m_f to 1.1 m_s.
+- **Regions:** the *full domain*; the *heat region*, from the surface to 1.3 m_f (the ablated layer); the *shocked region*, from 0.85 m_f to 1.1 m_s, or from 1.05 m_f when the ablated layer is thin against the shocked one (Test 3). Its y limits come from the shocked matter alone, simulations and solver, so the plateaus and their differences fill the panels.
 - **Scales:**
   - *linear*;
   - *semi-log (log mass)*: log mass, linear fields;

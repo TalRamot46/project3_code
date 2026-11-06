@@ -749,6 +749,19 @@ def heat_front_mass(solver, t: float):
     return None if hs is None else float(hs.ablated_mass(time=t))
 
 
+def shock_front_mass(solver, t: float):
+    """m_s(t) of an AblationSolver (or of an object wrapping one as .base); None for anything else."""
+    ps = getattr(solver, "shock_solver", None) or getattr(getattr(solver, "base", None), "shock_solver", None)
+    return None if ps is None else float(np.ravel(ps.shocked_mass(time=t))[0])
+
+
+def isolate_shocked(m_heat, m_shock) -> bool:
+    """True when the shocked-region window can start past the last heat front, 1.05 max(m_heat), and
+    lose under 5% of the thinnest shocked layer: an ablated layer thin against the shocked one
+    (Test 3: m_f ~ 1.5 against m_s ~ 300 mg/cm^2), not Test 4's (m_f ~ 1.5 against m_s ~ 2-5)."""
+    return 1.05 * max(m_heat) - min(m_heat) < 0.05 * (min(m_shock) - min(m_heat))
+
+
 def front_spike_mask(mass, sol, m_f) -> np.ndarray:
     """The analytic points to draw: all but the heat solution's last sliver before its front where it
     is denser or colder than the shocked matter just past the front.
@@ -843,6 +856,8 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, p
     fig, axes = plt.subplots(2, 2, figsize=(14, 9.6))
     panels = {"rho": axes[0, 0], "p": axes[0, 1], "u": axes[1, 0], "T_material": axes[1, 1]}
     m_heat, m_shock, T_shocked = [], [], []
+    an_shocked = {key: [] for key in scales}   # the solver's shocked layer, for the shocked-region y limits
+    an_fronts = []                              # the solver's (m_heat, m_shock), for the mass windows
     m_layer = 1.5 * front_values(d, label, float(d["t"][snaps[-1]]))["m_heat"]
     for col, k in zip(sim_colors, snaps):
         t = float(d["t"][k])
@@ -853,6 +868,12 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, p
                                          np.linspace(1e-12, min(m_layer, m_sim[-1]), 800))))
         exact = solver.solve(mass=mass, time=t)
         keep = front_spike_mask(mass, exact, heat_front_mass(solver, t))   # no patch spike at the front
+        m_f_an, m_s_an = heat_front_mass(solver, t), shock_front_mass(solver, t)
+        if m_f_an is not None and m_s_an is not None:
+            an_fronts.append((m_f_an, m_s_an))
+            inside = (mass > 1.02 * m_f_an) & (mass < 0.98 * m_s_an)
+            for key in scales:
+                an_shocked[key].append(np.asarray(exact[ref_keys[key]], dtype=float)[inside] * scales[key])
         mean = {key: np.mean([r[key][k] for r in imc], axis=0) for key in scales} if imc else None
         for key, ax in panels.items():
             ref = np.asarray(exact[ref_keys[key]], dtype=float)
@@ -875,12 +896,27 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, p
     # the mass window [mg/cm^2]
     x_max = 1e3 * float(d["m"][snaps[-1]][-1])
     x_first = 0.5e3 * float(np.min(d["m"][snaps[-1]]))
+    # the fronts of the simulations and of the solver: a window holds both (Test 4: the solver's shock is
+    # 14% ahead of diffusion's at 2 ns)
+    all_heat = list(m_heat) + [f for f, _ in an_fronts]
+    all_shock = list(m_shock) + [s for _, s in an_fronts]
     lo, hi = {"full": (x_first if log_x else 0.0, x_max),
-              "heat": (x_first if log_x else 0.0, min(1.3e3 * max(m_heat), x_max)),
-              "shock": (0.85e3 * min(m_heat), min(1.1e3 * max(m_shock), x_max))}[region]
-    # y limits from the simulations inside the window (keeps the analytic singularities in bounds)
+              "heat": (x_first if log_x else 0.0, min(1.3e3 * max(all_heat), x_max)),
+              "shock": (0.85e3 * min(all_heat), min(1.1e3 * max(all_shock), x_max))}[region]
+    if region == "shock" and isolate_shocked(all_heat, all_shock):
+        lo = 1.05e3 * max(all_heat)     # a heat layer thin against the shocked one (Test 3): left out
+    # y limits from the simulations inside the window (keeps the analytic singularities in bounds); in the
+    # shocked region from the shocked matter alone, simulations and solver: each snapshot's cells between
+    # its heat front and its shock, so the plateaus and their differences fill the panels (from 1.1 m_heat:
+    # the simulated heat front's tail reaches ~1.05 m_heat, Test 3: T ~ 0.15 HeV against 0.001 behind it)
     sim = {key: np.concatenate([d[key][k][(d["m"][k] * 1e3 >= lo) & (d["m"][k] * 1e3 <= hi)] * scales[key]
                                 for k in snaps]) for key in scales}
+    if region == "shock":
+        shocked = {key: np.concatenate([d[key][k][(d["m"][k] > 1.1 * m_heat[i]) & (d["m"][k] < 0.98 * m_shock[i])]
+                                        * scales[key] for i, k in enumerate(snaps)] + an_shocked[key])
+                   for key in scales}
+        if all(v.size for v in shocked.values()):
+            sim = shocked
     for key, ax in panels.items():
         v = sim[key]
         if log_y and key != "u":

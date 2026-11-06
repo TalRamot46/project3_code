@@ -743,6 +743,20 @@ def short_case_name(label: str) -> str:
     return f"Au ({title[4:]})" if title.startswith("Au, ") else title
 
 
+def _box_is_free(ax, pos) -> bool:
+    """True if no plotted point of ax falls in the box pos = (x0, y0, width, height), in axes fractions."""
+    x0, y0, w, h = pos
+    to_axes = ax.transData + ax.transAxes.inverted()
+    for line in ax.get_lines():
+        xy = np.column_stack((line.get_xdata(), line.get_ydata())).astype(float)
+        xy = xy[np.all(np.isfinite(xy), axis=1)]
+        if len(xy):
+            a = to_axes.transform(xy)
+            if np.any((a[:, 0] >= x0) & (a[:, 0] <= x0 + w) & (a[:, 1] >= y0) & (a[:, 1] <= y0 + h)):
+                return False
+    return True
+
+
 def style_axes(ax, labelsize=10.5):
     """Recessive frame: light grid under the data, no top/right spines, muted ticks."""
     ax.grid(True, color=GRID, lw=0.8)
@@ -865,8 +879,7 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, p
         style_axes(ax)
         ax.set_title(titles[key], color=INK, fontsize=13.5, loc="left", fontweight="bold", pad=8)
         ax.set_ylabel(ylabels[key], color=INK, fontsize=12.5)
-        if key in ("u", "T_material"):
-            ax.set_xlabel(r"Lagrangian mass $m$ [mg/cm$^2$]", color=INK, fontsize=12.5)
+        ax.set_xlabel(r"Lagrangian mass $m$ [mg/cm$^2$]", color=INK, fontsize=12.5)
 
     # Zoom insets: the ablation layer's velocity, the shocked region's temperature.
     u_layer = np.concatenate([d["u"][k][d["m"][k] < 2.0 * max(m_heat)] for k in snaps]) * scales["u"]
@@ -877,6 +890,10 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, p
     }
     for key, (pos, xlim, ylim) in (insets if (region == "full" and scale == "linear") else {}).items():
         ax = panels[key]
+        # no zoom where it would cover curves (omega = -0.8: a hot shocked layer) or would not zoom
+        # (omega = -0.8: twice the heat front's mass is more than the domain)
+        if xlim[1] - xlim[0] > 0.6 * (hi - lo) or not _box_is_free(ax, pos):
+            continue
         ins = ax.inset_axes(list(pos))
         for line in ax.get_lines():
             ins.plot(line.get_xdata(), line.get_ydata(), color=line.get_color(), linestyle=line.get_linestyle(),
@@ -905,7 +922,7 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, p
                       **{key: v for key, v in original.items() if key != "zorder"})]
     legend += [Line2D([0], [0], label=name, **style) for name, _, style in patched]
     legend += [Line2D([0], [0], **{key: v for key, v in imc_style.items() if key != "zorder"},
-                      label=f"IMC, mean of {len(imc)} seed{'s' if len(imc) > 1 else ''}" if imc
+                      label=(f"IMC, mean of {len(imc)} seeds" if len(imc) > 1 else "IMC, 1 seed") if imc
                       else ("IMC (not run)" if patched else "IMC (still running)"))]
     fig.legend(handles=legend, loc="upper left", bbox_to_anchor=(x0, 0.94), borderaxespad=0.0, borderpad=0.0,
                ncol=4 if patched else len(legend), fontsize=11.5, frameon=False, handlelength=2.8,

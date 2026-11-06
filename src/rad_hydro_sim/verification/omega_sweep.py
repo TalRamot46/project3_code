@@ -248,6 +248,36 @@ def plot_omega(omega: float, path: Path):
     plt.close(fig)
 
 
+def omega_tag(omega: float) -> str:
+    """'omegam0.2' for -0.2, 'omegap0.2' for +0.2: the file names of this folder."""
+    return f"omega{omega:+.1f}".replace("+", "p").replace("-", "m")
+
+
+PROFILE_BATHS = (("paper bath", OUT, "paper_bath"), ("flux-calibrated bath", OUT_FLUX, "calibrated_flux_bath"))
+
+
+def plot_profiles(omegas):
+    """rho, p, u, T against mass at 1, 1.5 and 2 ns over the full domain, linear axes: diffusion and
+    IMC (one seed) under each bath against this omega's solver, as the per-bath figures of
+    md/phase_c/figures (imc_vs_diffusion.plot_hydro_profiles):
+    md/phase_c/omega_sweep/profiles/<bath>/omega<w>.png."""
+    import matplotlib
+    matplotlib.use("Agg")
+
+    for w in omegas:
+        label = register(w)
+        solver = solver_of(w)
+        for bath, out, folder in PROFILE_BATHS:
+            if not (out / f"{label}_diffusion.npz").exists():
+                continue
+            seeds = (1,) if (out / f"{label}_imc1.npz").exists() else ()
+            path = FIG / "profiles" / folder / f"{omega_tag(w)}.png"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            ivd.plot_hydro_profiles(out, label, seeds, path, solver=solver, method=bath, region="full",
+                                    scale="linear")
+            print(f"  wrote {path.relative_to(ivd.REPO)}", flush=True)
+
+
 NO_SIMULATION = {0.8: "no simulation: the ablated layer lies\nwithin 1e-24 cm of the surface (rho > 1e20)"}
 # quantities the mesh does not resolve: at omega = +0.6 the heated cell holding the heat front is
 # ~0.5 um wide, wider than x_f itself (0.19 um), so its position is not defined to better than that
@@ -366,17 +396,20 @@ def main(argv=None):
     ap.add_argument("--imc-flux", action="store_true", help="also IMC (one seed) with the flux-calibrated bath")
     ap.add_argument("--fine", action="store_true", help="the finer mesh of register_fine")
     ap.add_argument("--no-paper", action="store_true", help="skip the paper-bath runs")
-    ap.add_argument("--figures", action="store_true")
+    ap.add_argument("--figures", action="store_true", help="fronts, summary, convergence and full profiles")
+    ap.add_argument("--profiles", action="store_true", help="only the full profiles, profiles/<bath>/")
     args = ap.parse_args(argv)
     if args.run is not None:
         for w in args.run:
             run(w, flux=not args.no_flux, imc=args.imc, imc_flux=args.imc_flux, fine=args.fine,
                 paper=not args.no_paper)
+    done = [w for w in OMEGAS if (OUT / f"{label_of(w)}_diffusion.npz").exists()]
+    if args.profiles or args.figures:
+        plot_profiles(done)
     if args.figures:
-        done = [w for w in OMEGAS if (OUT / f"{label_of(w)}_diffusion.npz").exists()]
         for w in done:
             register(w)
-            path = FIG / f"fronts_omega{w:+.1f}.png".replace("+", "p").replace("-", "m")
+            path = FIG / f"fronts_{omega_tag(w)}.png"
             plot_omega(w, path)
             print(f"  wrote {path.relative_to(ivd.REPO)}", flush=True)
         rows = plot_summary(done, FIG / "fronts_vs_omega.png")

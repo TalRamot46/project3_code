@@ -7,6 +7,7 @@ Gold, 1 HeV, τ = 0 (Test 4's material and drive) with the density ρ₀x^(−ω
 | `fronts_omega<ω>.png` | one per ω (`m0.8` = −0.8, `p0.2` = +0.2): x_f, m_f, x_s, m_s against t, with each simulation's deviation from the solver at 2 ns |
 | `fronts_vs_omega.png` | the deviations at 2 ns against ω, one panel per quantity |
 | `mesh_convergence.png` | the same on the default and on a finer mesh (§ Mesh convergence) |
+| `profiles/<bath>/omega<ω>.png` | ρ, p, u, T against mass at 1, 1.5 and 2 ns, full domain, linear axes: diffusion and IMC (1 seed) under that bath (`paper_bath/`, `calibrated_flux_bath/`) against the solver, as the per-bath figures of `../figures/`. On the graded meshes (ω ≥ +0.4) the ablated layer is a sliver of the domain; the velocity inset shows it |
 
 ## Deviation from the solver at 2 ns
 
@@ -91,7 +92,8 @@ uv run python -m rad_hydro_sim.verification.omega_sweep --run=0.4
 uv run python -m rad_hydro_sim.verification.omega_sweep --run=0.6 --no-flux
 uv run python -m rad_hydro_sim.verification.omega_sweep --run=-0.8 --no-paper --imc-flux   # IMC with the flux bath
 uv run python -m rad_hydro_sim.verification.omega_sweep --run=-0.8 --fine                    # the finer mesh, both baths
-uv run python -m rad_hydro_sim.verification.omega_sweep --figures
+uv run python -m rad_hydro_sim.verification.omega_sweep --figures                                   # all figures
+uv run python -m rad_hydro_sim.verification.omega_sweep --profiles                                  # only profiles/
 ```
 
 Runs are cached in `results/omega_sweep{,_calibrated_flux}/`, the flux tables in `src/rad_hydro_sim/data/bath_correction/SWEEP_*_flux.txt`. The solver for each ω reuses Test 4's heat solver, which does not depend on ω, and builds only its own `PistonShock`, in about a second. At ω = −0.5 it reproduces Test 4's solver exactly.

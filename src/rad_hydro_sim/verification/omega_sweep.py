@@ -202,6 +202,9 @@ def plot_omega(omega: float, path: Path):
             ax.text(0.03, 0.95 - 0.075 * i, txt, transform=ax.transAxes, va="top", fontsize=9.5, color=col)
         ax.text(0.03, 0.95 - 0.075 * len(lines), f"vs. analytic at {t_end * 1e9:g} ns", transform=ax.transAxes,
                 va="top", fontsize=9, color=MUTED)
+        if (omega, key) in UNRESOLVED:
+            ax.text(0.97, 0.5, UNRESOLVED[(omega, key)], transform=ax.transAxes, ha="right", va="center",
+                    fontsize=9.5, color="#a33")
         ax.set_xlim(0, t_end * 1e9)
         ax.set_ylim(bottom=0)
         ax.set_xlabel("t [ns]", color=INK, fontsize=11)
@@ -221,6 +224,12 @@ def plot_omega(omega: float, path: Path):
     plt.close(fig)
 
 
+NO_SIMULATION = {0.8: "no simulation: the ablated layer lies\nwithin 1e-24 cm of the surface (rho > 1e20)"}
+# quantities the mesh does not resolve: at omega = +0.6 the heated cell holding the heat front is
+# ~0.5 um wide, wider than x_f itself (0.19 um), so its position is not defined to better than that
+UNRESOLVED = {(0.6, "x_f"): "x_f not resolved: the heated cell at the\nfront (0.5 um) is wider than x_f (0.19 um)"}
+
+
 def plot_summary(omegas, path: Path, t: float = 2e-9):
     """Deviation from the analytic solution at t against omega, one panel per front quantity."""
     import matplotlib
@@ -238,17 +247,31 @@ def plot_summary(omegas, path: Path, t: float = 2e-9):
     fig, axes = plt.subplots(2, 2, figsize=(12.5, 8.4), sharex=True)
     for ax, (key, ylabel, _) in zip(axes.flat, PANELS):
         for name in names:
-            pts = [(w, r[name][key]) for w, r in rows.items() if name in r]
+            pts = [(w, r[name][key]) for w, r in rows.items() if name in r and (w, key) not in UNRESOLVED]
             st = dict(STYLE[name])
             ax.plot(*zip(*pts), marker="o", ms=6, **st)
+        for (w, k), note in UNRESOLVED.items():
+            if k == key and w in rows:
+                ax.axvspan(w - 0.07, w + 0.07, color=GRID, alpha=0.6, lw=0)
+                ax.text(w, 0.5, note, transform=ax.get_xaxis_transform(), rotation=90, ha="center", va="center",
+                        fontsize=8.5, color=MUTED)
         ax.axhline(0, color=MUTED, lw=1)
         ax.margins(x=0.04, y=0.08)
         ax.set_title(ylabel.split(" [")[0], color=INK, fontsize=12, loc="left", fontweight="bold")
         ax.set_ylabel("simulation vs. analytic [%]", color=INK, fontsize=10.5)
         _style(ax)
+    # the omegas with no simulation, marked where they would be
+    missing = [w for w in OMEGAS if w not in rows]
+    for ax in axes.flat:
+        for w in missing:
+            ax.axvspan(w - 0.07, w + 0.07, color=GRID, alpha=0.6, lw=0)
+        ax.set_xlim(min(OMEGAS) - 0.1, max(OMEGAS) + 0.1)
+    for w in missing:
+        axes[0, 0].text(w, 0.5, NO_SIMULATION.get(w, "not run"), transform=axes[0, 0].get_xaxis_transform(),
+                        rotation=90, ha="center", va="center", fontsize=8.5, color=MUTED)
     for ax in axes[1]:
         ax.set_xlabel(r"$\omega$", color=INK, fontsize=12)
-        ax.set_xticks(list(omegas))
+        ax.set_xticks(list(OMEGAS))
     handles = [Line2D([0], [0], marker="o", ms=6, label=n, **STYLE[n]) for n in names]
     fig.legend(handles=handles, loc="upper left", bbox_to_anchor=(0.06, 0.955), ncol=len(handles), frameon=False,
                fontsize=10.5, labelcolor=INK)

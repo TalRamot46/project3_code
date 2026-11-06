@@ -159,11 +159,11 @@ def run(omega: float, flux=True, imc=False, imc_flux=False, fine=False, paper=Tr
                       bath="calibrated_flux")
 
 
-def run_parallel(omegas, seeds, jobs: int, paper=True, flux=True):
+def run_parallel(omegas, seeds, jobs: int, paper=True, flux=True, fine=False):
     """Every (omega, bath, seed) IMC run as its own process, `jobs` at a time, the slowest omegas
     first (+0.6: ~2 h a seed, +0.4: ~50 min, the rest minutes).  First, one process per omega and
-    bath for the diffusion run (a no-op when cached), which the seeds of that pair share.  Logs:
-    results/omega_sweep/logs/run_<w>_<bath>_<run>.log."""
+    bath for the diffusion run (a no-op when cached), which the seeds of that pair share.  fine: the
+    same on register_fine's mesh.  Logs: results/omega_sweep/logs/run_<w>_<bath>[_fine]_<run>.log."""
     import subprocess
     import sys
     from concurrent.futures import ThreadPoolExecutor
@@ -173,8 +173,9 @@ def run_parallel(omegas, seeds, jobs: int, paper=True, flux=True):
     baths = [b for b, on in (("paper", paper), ("flux", flux)) if on]
     only = {"paper": "--no-flux", "flux": "--no-paper"}
     imc_flag = {"paper": "--imc", "flux": "--imc-flux"}
-    diffusion = [((f"--run={w}", only[b]), f"run_{w:+.1f}_{b}_diffusion.log") for w in omegas for b in baths]
-    imc = sorted((((f"--run={w}", only[b], imc_flag[b], "--seeds", str(s)), f"run_{w:+.1f}_{b}_imc{s}.log")
+    mesh, tag = (("--fine",), "_fine") if fine else ((), "")
+    diffusion = [((f"--run={w}", only[b], *mesh), f"run_{w:+.1f}_{b}{tag}_diffusion.log") for w in omegas for b in baths]
+    imc = sorted((((f"--run={w}", only[b], imc_flag[b], "--seeds", str(s), *mesh), f"run_{w:+.1f}_{b}{tag}_imc{s}.log")
                   for w in omegas for b in baths for s in seeds), key=lambda job: -float(job[0][0][6:]))
 
     def launch(job):
@@ -468,7 +469,7 @@ def main(argv=None):
     ap.add_argument("--profiles", action="store_true", help="only the full profiles, profiles/<bath>/")
     args = ap.parse_args(argv)
     if args.run is not None and args.jobs > 0:
-        run_parallel(args.run, args.seeds, args.jobs, paper=not args.no_paper, flux=not args.no_flux)
+        run_parallel(args.run, args.seeds, args.jobs, paper=not args.no_paper, flux=not args.no_flux, fine=args.fine)
     elif args.run is not None:
         for w in args.run:
             run(w, flux=not args.no_flux, imc=args.imc, imc_flux=args.imc_flux, fine=args.fine,

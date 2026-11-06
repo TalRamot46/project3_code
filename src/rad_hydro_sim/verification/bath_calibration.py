@@ -82,8 +82,48 @@ def _solver_for_case(case, label: str):
 
 
 def solver_for(label: str):
-    # the omega-scan cases at other N share their omega's solver
-    return _solver_for_case(ivd._hydro_case(ivd.HYDRO_CASES[label]), label.split("_n")[0])
+    # the omega-scan cases at other N share their omega's solver; a test's fine mesh shares its test's
+    key = ivd.COARSE_OF[label] if label.endswith("_fine") and label in ivd.COARSE_OF else label.split("_n")[0]
+    return _solver_for_case(ivd._hydro_case(ivd.HYDRO_CASES[label]), key)
+
+
+def run_one(label: str, bath: str, seed: int):
+    """One run of a case under one bath: diffusion (seed 0) or IMC with that seed, cached by file
+    in the bath's results directory (diffusion first if missing)."""
+    out = BATHS[bath][1]
+    out.mkdir(parents=True, exist_ok=True)
+    ivd.run_hydro(out, label, seeds=() if seed == 0 else (seed,), physical=False, bath=bath)
+
+
+def run_parallel(labels, baths, seeds, jobs: int):
+    """Every (case, bath, seed) as its own single-threaded process, `jobs` at a time: first one
+    diffusion process per case and bath (shared by its seeds; a no-op when cached), then the IMC
+    runs in the order given (put the slowest cases and baths first).  Logs:
+    results/imc_vs_diffusion/logs/<label>_<bath>_<run>.log."""
+    import subprocess
+    import sys
+    from concurrent.futures import ThreadPoolExecutor
+
+    logs = SIM_OUT / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    diffusion = [(label, b, 0) for label in labels for b in baths]
+    imc = [(label, b, s) for label in labels for b in baths for s in seeds]
+
+    def launch(job):
+        label, b, s = job
+        log = logs / f"{label}_{b}_{'diffusion' if s == 0 else f'imc{s}'}.log"
+        with open(log, "w", encoding="utf-8") as f:
+            code = subprocess.run([sys.executable, "-m", "rad_hydro_sim.verification.bath_calibration",
+                                   "--run-one", label, b, str(s)], stdout=f, stderr=subprocess.STDOUT).returncode
+        print(f"  {'done  ' if code == 0 else 'FAILED'} {label} {b} {'diffusion' if s == 0 else f'imc{s}'}  "
+              f"(log {log.name})", flush=True)
+        return code
+
+    for stage in (diffusion, imc):
+        with ThreadPoolExecutor(max(1, jobs)) as pool:
+            codes = list(pool.map(launch, stage))
+        if any(codes):
+            print(f"  {sum(c != 0 for c in codes)} of {len(stage)} runs failed; see the logs", flush=True)
 
 
 class Analytic:
@@ -390,7 +430,19 @@ def main(argv=None):
     ap.add_argument("--views", action="store_true",
                     help="every region (full, heat, shock) x scale (linear, semilogx, semilogy, loglog) view of --cases, "
                          "md/phase_c/figures/<folder>/<case>/")
+    ap.add_argument("--jobs", type=int, default=0,
+                    help="run --cases under --baths, diffusion and IMC with --seeds, one process per run, this many "
+                         "at once (run_parallel)")
+    ap.add_argument("--run-one", nargs=3, metavar=("LABEL", "BATH", "SEED"),
+                    help="one run (SEED 0: diffusion); what --jobs launches")
     args = ap.parse_args(argv)
+    if args.run_one:
+        label, bath, seed = args.run_one
+        run_one(label, bath, int(seed))
+        return
+    if args.jobs > 0:
+        run_parallel(list(args.cases), list(args.baths), list(args.seeds), args.jobs)
+        return
     labels = list(args.cases)
     for w in args.omega_scan:
         label = register_omega_case(w, N=args.N)

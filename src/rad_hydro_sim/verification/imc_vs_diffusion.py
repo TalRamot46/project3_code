@@ -119,6 +119,18 @@ HYDRO_CASES = {
                             store_every=40),
     "test6_full": HydroCase("PRESET_ALUMINUM_CONST_TEMPERATURE", r"Test 6 (Al)", N=400, store_every=20),
 }
+# The meshes of the paper's figures: 2.5x the cells of each test's default mesh, the omega sweep's
+# fine-mesh rule (md/phase_c/omega_sweep/README.md, "Mesh convergence"); Test 3's is test3_smooth.
+# Frames are stored 2.5x as rarely, since the step count grows with the cells.  The IMC packet
+# counts per step stay as they are: over the run each cell then receives about the same packets.
+FINE_OF = {"test1_full": "test1_fine", "test2_full": "test2_fine", "test3_full": "test3_smooth",
+           "test4_full": "test4_fine", "test5_full": "test5_fine", "test6_full": "test6_fine"}
+for _coarse, _fine in FINE_OF.items():
+    if _fine not in HYDRO_CASES:
+        _spec = HYDRO_CASES[_coarse]
+        HYDRO_CASES[_fine] = replace(_spec, title=_spec.title + ", fine mesh", N=int(round(2.5 * _spec.N)),
+                                     store_every=int(round(2.5 * _spec.store_every)))
+COARSE_OF = {fine: coarse for coarse, fine in FINE_OF.items()}
 # Phase C configuration: the Phase B flags plus the two that full rad-hydro needs.
 HYDRO_MATCHED = dict(DIFFUSION_PHASE_B, rad_energy_per_mass=True, hydro_energy="compatible")
 HYDRO_SNAP_NS = (0.5, 1.0, 1.5, 2.0)
@@ -1182,7 +1194,9 @@ FIGURE_NAMES = {"t1": "t1_sio2_outgoing_flux.png", "test1": "test1_profiles.png"
                 "test2_full": ("test2_full_profiles.png", "test2_full_fronts.png"),
                 **{f"test{k}_full": (f"test{k}_full_profiles.png", f"test{k}_full_fronts.png") for k in range(3, 7)},
                 "test3_fine": ("test3_fine_profiles.png", "test3_fine_fronts.png"),
-                "test3_smooth": ("test3_full_profiles.png", "test3_smooth_fronts.png")}
+                "test3_smooth": ("test3_full_profiles.png", "test3_smooth_fronts.png"),
+                # the fine meshes draw the paper's figures, under the tests' own names
+                **{f"test{k}_fine": (f"test{k}_full_profiles.png", f"test{k}_fine_fronts.png") for k in (1, 2, 4, 5, 6)}}
 
 
 def main(argv=None):

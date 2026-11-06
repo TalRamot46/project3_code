@@ -23,6 +23,10 @@ from pathlib import Path
 
 import numpy as np
 
+import scipy.optimize
+
+import rad_hydro_sim.verification.menahem_comparison  # noqa: F401  (scipy shims, PistonShock patch)
+from menahem_new.piston_shock_og import PistonShock
 from rad_hydro_sim.verification import imc_vs_diffusion as ivd
 from rad_hydro_sim.verification import bath_calibration as bc
 
@@ -38,10 +42,23 @@ def label_of(omega: float) -> str:
     return "sweep_" + bc.omega_label(omega)
 
 
+class BracketedPistonShock(PistonShock):
+    """PistonShock whose shock root xi_s is found by brentq over a scanned bracket.
+
+    Menahem's find_xsi_s_fsolve starts fsolve from a fixed guess; for omega >= 0.75 (with this
+    drive) the root function is flat at -1 there and fsolve fails, although the root exists
+    (omega = 0.8: xi_s = 4.137).  For omega <= 0.7 both give the same root to 1e-6.
+    """
+
+    def find_xsi_s_fsolve(self):
+        xs = np.geomspace(0.5, 50.0, 60)
+        f = [self.fxsi_s(x) for x in xs]
+        i = next(j for j in range(len(xs) - 1) if f[j] * f[j + 1] < 0)
+        return scipy.optimize.brentq(self.fxsi_s, xs[i], xs[i + 1], xtol=1e-12)
+
+
 def solver_of(omega: float):
     """AblationSolver for gold at this omega: Test 4's heat solver with its own PistonShock."""
-    import rad_hydro_sim.verification.menahem_comparison  # noqa: F401  (scipy shims, PistonShock patch)
-    from menahem_new.piston_shock_og import PistonShock
 
     path = OUT / "solvers" / f"solver_{label_of(omega)}.pkl"
     if path.exists():
@@ -50,7 +67,7 @@ def solver_of(omega: float):
     base = bc.solver_for("test4_full")
     hs, ps = base.heat_solver, base.shock_solver
     solver = copy.copy(base)
-    solver.shock_solver = PistonShock(rho0=ps.rho0, omega=float(omega), p0=hs.Pf * hs.A**hs.a3 * hs.B**hs.b3,
+    solver.shock_solver = BracketedPistonShock(rho0=ps.rho0, omega=float(omega), p0=hs.Pf * hs.A**hs.a3 * hs.B**hs.b3,
                                       tau=hs.c3, gamma=ps.gamma)
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "wb") as f:

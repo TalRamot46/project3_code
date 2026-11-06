@@ -1,5 +1,7 @@
 # LEGACY: analytic patching of the semi-analytic solution, the impulse-matched patch
 
+> How the impulse match works and why it isn't a consistent improvement, at the level of the equations and the code: [`patching_fixes_explained.md`](patching_fixes_explained.md).
+
 > **Legacy, 2026-11-05.** The impulse match is not a consistent improvement. With the paper bath it lowers the whole-profile error for ω < 0 and Cu/Al, but it flips the shock error (+7 … +13% for ω ≤ −0.5), makes the front pressure worse (+23% in Test 4) and leaves a pressure step at the front. With the flux-calibrated bath it is the best option only for Al. The current reference is the original `AblationSolver` under each bath: [`../bath_calibration.md`](../bath_calibration.md). Code: `src/menahem_new/legacy/matched_piston_patch.py`, `src/rad_hydro_sim/verification/legacy/patching_poc.py`. Figures: `md/phase_c/figures/legacy/impulse_patch/`.
 
 Follow-up to `../why_the_solver_differs.md` §3.3 (fix C). Branch `feat/patching-poc`, 2026-11-05. Supersedes `patching_poc_fix_B.md` as the current result. That page used a numerical target (fix B) and is kept only as the record of how the closure below was found.

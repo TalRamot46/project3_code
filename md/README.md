@@ -40,7 +40,7 @@ Figures: `phase_b/figures/`.
 | [why_the_solver_differs.md](phase_c/why_the_solver_differs.md) | Why the semi-analytic curve misses Tests 4–6: surface non-equilibrium (Cu, Al) and the rigid-front patching (Test 4), with the code walk-through and suggested fixes |
 | [bath_calibration.md](phase_c/bath_calibration.md) | The three bath drives (paper, temperature-calibrated, flux-calibrated) against the semi-analytic solution on Tests 1–6: what each matches, which is closest per case, and why |
 | [omega_sweep/](phase_c/omega_sweep/README.md) | Gold, ω = −0.8 … +0.6: heat front and shock (x, m) against time, diffusion and IMC with and without the flux calibration, against the solver |
-| [legacy/](phase_c/legacy/) | Superseded attempts to improve the solver's patching: fix B (a numerical moving-front target, not an analytic benchmark) and the impulse-matched patch (analytic, not a consistent improvement) |
+| [legacy/](phase_c/legacy/) | Superseded attempts to improve the solver's patching: fix B (a numerical moving-front target, not an analytic benchmark) and the impulse-matched patch (analytic, not a consistent improvement); how both work and why they fail: [patching_fixes_explained.md](phase_c/legacy/patching_fixes_explained.md) |
 
 Figures: `phase_c/figures/`, all full-profile figures by bath, plus per-case bath overlays; layout in [phase_c/figures/README.md](phase_c/figures/README.md).
 

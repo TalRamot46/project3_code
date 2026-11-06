@@ -1,5 +1,7 @@
 # LEGACY: better patching with a numerical target (fix B), proof of concept
 
+> How B works and why it isn't a consistent improvement, at the level of the equations and the code: [`patching_fixes_explained.md`](patching_fixes_explained.md).
+
 > **Legacy, 2026-11-05.** Fix B is not an analytic model: `MovingFrontShock.run` integrates the
 > Lagrangian Euler equations of the target in (m, t), a 1-D hydro simulation, so any curve built
 > on it is a hybrid and cannot benchmark IMC and diffusion. It is kept as the record of what it

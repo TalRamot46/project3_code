@@ -234,6 +234,40 @@ def plot_overlay(label: str, path: Path, t: float = 2e-9):
     return rows
 
 
+def momentum_budget(label: str, t: float = 2e-9) -> dict:
+    """The target's momentum beyond the cut m_f at t (per cm^2), as each closure has it and as
+    the paper-bath diffusion run has it (md/phase_c/legacy/patching_fixes_explained.md, Sec. 4).
+
+    push      int_0^t p_f dt', what the front pushes with;
+    massive   the original patch: push - int_0^m_f u dm of PistonShock(p0) (the slab rides on);
+    massless  the impulse match: the momentum its march delivered beyond the cut;
+    sim       sum of u dm over the run's cells beyond the analytic m_f;
+    theta     (sim - massless) / (massive - massless): 1 = massive closure, 0 = massless.
+    """
+    from menahem_new.legacy.matched_piston_patch import MatchedPistonPatch
+
+    base = solver_for(label)
+    hs, ps0 = base.heat_solver, base.shock_solver
+    C = MatchedPistonPatch(base, front="massless", match="impulse", t_end=t)
+    p0s = hs.Pf * hs.A**hs.a3 * hs.B**hs.b3
+    m_f = float(hs.ablated_mass(time=t))
+    push = p0s * t**(1 + hs.c3) / (1 + hs.c3)
+    massive = push - C._layer_momentum(ps0, t, m_f)
+    ps = C._shock(C.amplitude(t))
+    massless = ps.p0 * t**(1 + hs.c3) / (1 + hs.c3) - C._layer_momentum(ps, t, m_f)
+    r = np.load(SIM_OUT / f"{label}_diffusion.npz")
+    k = int(np.argmin(np.abs(r["t"] - t)))
+    m = r["m"][k]
+    dm = np.diff(m, prepend=0.0)
+    beyond = (m - 0.5 * dm) > m_f
+    sim = float(np.sum(r["u"][k][beyond] * dm[beyond]))
+    p_ref = p0s * t**hs.c3
+    return dict(push=push, massive=massive, massless=massless, sim=sim,
+                theta=(sim - massless) / (massive - massless),
+                p_cut_massive=C._at_cut(ps0, t, m_f)[0] / p_ref, p_cut_massless=C._at_cut(ps, t, m_f)[0] / p_ref,
+                p_eff_over_pf=ps.p0 / ps0.p0, march=C.march)
+
+
 def main(argv=None):
     logging.disable(logging.INFO)
     ap = argparse.ArgumentParser()
@@ -247,6 +281,8 @@ def main(argv=None):
     ap.add_argument("--baths", nargs="*", default=list(BATHS), choices=list(BATHS))
     ap.add_argument("--overlay", action="store_true",
                     help="one figure per case with every bath and patch, md/phase_c/figures/overlay/")
+    ap.add_argument("--momentum", action="store_true",
+                    help="the target's momentum beyond the cut: massive / massless closures vs the run")
     args = ap.parse_args(argv)
     labels = list(args.cases)
     for w in args.omega_scan:
@@ -254,6 +290,12 @@ def main(argv=None):
         ivd.run_hydro(SIM_OUT, label, seeds=tuple(args.seeds), physical=False)
         labels.append(label)
     if args.run_only:
+        return
+    if args.momentum:
+        for label in labels:
+            b = momentum_budget(label)
+            print(f"{label}: push {b['push']:.4g}  massive {b['massive']:.4g}  massless {b['massless']:.4g}  "
+                  f"sim {b['sim']:.4g}  theta {b['theta']:.2f}  (g/cm/s per cm^2)", flush=True)
         return
     if args.profiles:
         plot_profile_set(labels, args.baths)

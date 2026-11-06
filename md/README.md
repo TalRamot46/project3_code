@@ -39,6 +39,7 @@ Figures: `phase_b/figures/`.
 | [phase_c_tests3to6_results.md](phase_c/phase_c_tests3to6_results.md) | Phase C½: the same comparison on all six paper tests (Au ω = 0, ±0.5; Cu; Al), which materials lose IMC–diffusion consistency, the bath options |
 | [why_the_solver_differs.md](phase_c/why_the_solver_differs.md) | Why the semi-analytic curve misses Tests 4–6: surface non-equilibrium (Cu, Al) and the rigid-front patching (Test 4), with the code walk-through and suggested fixes |
 | [bath_calibration.md](phase_c/bath_calibration.md) | The three bath drives (paper, temperature-calibrated, flux-calibrated) against the semi-analytic solution on Tests 1–6: what each matches, which is closest per case, and why |
+| [profile_figures.md](phase_c/profile_figures.md) | The profile figures of the six paper tests in one place: Tests 1–2 (paper bath), Tests 3–4 in every region and scale (paper bath), Tests 5–6 under the paper and the flux-calibrated bath |
 | [omega_sweep/](phase_c/omega_sweep/README.md) | Gold, ω = −0.8 … +0.6: heat front and shock (x, m) against time, diffusion and IMC with and without the flux calibration, against the solver |
 | [legacy/](phase_c/legacy/) | Superseded attempts to improve the solver's patching: fix B (a numerical moving-front target, not an analytic benchmark) and the impulse-matched patch (analytic, not a consistent improvement); how both work and why they fail: [patching_fixes_explained.md](phase_c/legacy/patching_fixes_explained.md) |
 

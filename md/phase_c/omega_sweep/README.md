@@ -43,6 +43,7 @@ Simulation vs. `AblationSolver`, in %; + means the simulation is ahead.
 | | diffusion, flux-calibrated | −8.7 | −1.2 | −0.5 | −3.2 |
 | | IMC, flux-calibrated | −10.4 | −1.9 | −1.7 | −3.5 |
 | +0.6 | diffusion, paper | not resolved | 0.0 | +6.3 | −0.1 |
+| | diffusion, flux-calibrated | not resolved | +0.2 | +6.7 | −0.1 |
 
 What it shows:
 - **The shock follows the trend of `why_the_solver_differs.md` §3.** It agrees within ~1% for ω = 0 and +0.2 and falls behind steadily as ω decreases, to −15 … −16% in mass at ω ≤ −0.6, where the ablated mass is a large fraction of the shocked mass.
@@ -59,7 +60,7 @@ What it shows:
 | 0 | 657, uniform in mass | 76 s | converged after 4 runs; then diffusion, 32 s | 1 seed per bath |
 | +0.2 | 1510, uniform in mass | 186 s | converged after 3 runs; then diffusion, 100 s | 1 seed per bath, 7–10 min |
 | +0.4 | 347, graded (Test 3's) | 555 s | converged after 3 runs (0.16%); then diffusion | 1 seed per bath, ~50 min |
-| +0.6 | 347, graded | ~1 h of compute, 1.14 million steps, with the first step at 10⁻¹² t_end (below) | skipped | skipped |
+| +0.6 | 347, graded | ~1 h of compute, 1.14 million steps, with the first step at 10⁻¹² t_end (below) | converged after 3 runs (0.17%); then diffusion, 11 min | running |
 | +0.8 | — | **not simulated** (below); the solver exists | — | — |
 
 The uniform-mass meshes put ≥ 40 cells across the ablated layer at 2 ns (cells = 40 × 1.15 m_s/m_f, 400 to 2000). From ω = +0.4 the shocked mass is ≥ 100× the ablated one, so the graded mesh of Test 3 is used. Its shocked region has coarse cells, which costs a few % in the shock (Test 3: −2% on this mesh).

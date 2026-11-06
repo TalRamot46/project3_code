@@ -638,7 +638,7 @@ def _load_hydro(out: Path, label: str, seeds):
     runs = {"diffusion": np.load(out / f"{label}_diffusion.npz")}
     # IMC runs that have finished; a figure or table without any shows diffusion vs the solver.
     runs["imc"] = [np.load(out / f"{label}_imc{s}.npz") for s in seeds if (out / f"{label}_imc{s}.npz").exists()]
-    for tag in ("diffusion_physical", f"imc_physical{seeds[0]}"):
+    for tag in ("diffusion_physical", *((f"imc_physical{seeds[0]}",) if seeds else ())):
         if (out / f"{label}_{tag}.npz").exists():
             runs[tag.rstrip("0123456789")] = np.load(out / f"{label}_{tag}.npz")
     return runs

@@ -72,7 +72,8 @@ The uniform-mass meshes put ≥ 40 cells across the ablated layer at 2 ns (cells
 `mesh_convergence.png`: every ω again on a finer mesh (`--fine`), both baths: 2.5× the cells of the uniform-mass mesh for ω ≤ +0.2 (1000 to 3775 cells), and Test 3's fine-mesh cap of 0.3 mg/cm² per cell on the graded mesh for ω ≥ +0.4. The flux tables are the default mesh's.
 - **ω ≤ −0.4:** every front moves by ≤ 0.5 points: the trend with ω is converged.
 - **ω = −0.2 … +0.2:** up to 1.3 points on the shock (ω = 0: m_s −0.8 → −2.0%; +0.2: +0.5 → −0.8%), so at small |ω| the remaining differences of 1–2% are of the order of the mesh error.
-- **ω = +0.4:** the cap moves the shock mass from −3.3% to −0.7% (the coarse shocked region was the error); x_f stays at −8.7%.
+- **What sets the mesh error on the uniform-mass meshes is the number of cells across the ablated layer**, not the cells at the shock: the shift in m_s with refinement is 0.3, 0.1, 0.1, 0.7, 1.2 and 1.3 points for 197, 130, 81, 47, 39 and 39 layer cells (ω = −0.8 … +0.2). The layer is the drive: refining it moves m_f by up to 0.7 points and the shock follows. The default rule of 40 cells per layer is therefore marginal (~1% on the shock); ≥ 80 cells keeps it ≤ 0.3%.
+- **ω = +0.4:** the cap moves the shock mass from −3.3% to −0.7% while x_s, m_f and the 127 layer cells do not change: here the error was the coarse shocked region, whose 1–12 mg/cm² cells quantize the shock's mass coordinate (−3.3% of 144 mg/cm² is ~5 mg/cm², about half a cell). In dense shocked matter a large mass offset is a tiny position offset, so x_s was right all along; x_f stays at −8.7%.
 - **ω = +0.6:** m_s −0.1 → +1.8%, x_s +6.3 → +5.6%; x_f stays unresolved, since the cap does not refine the heated cell at the front.
 
 ### ω = +0.6 and +0.8

@@ -2,7 +2,7 @@
 
 Branch `feat/patching-poc`, 2026-11-05. The reference is Menahem's semi-analytic `AblationSolver`, unchanged. The attempts to improve its patching are legacy (§4). This page compares the three ways of driving the simulations against it.
 
-**In one paragraph.** The bath is the only thing that changes between the three sets of simulations; the analytic curve is the same for all of them. For gold with ω ≥ 0 the **paper bath** is already closest (Tests 1–2), and calibrating moves the simulations 1–2% further from the solver. For copper and aluminum the **flux-calibrated bath** is clearly closest: whole-profile error 2.6% vs. 9.4% (paper) for Cu, and 7.6% vs. 15.9% for Al. The **temperature-calibrated bath** is the worst option there (26% and 16%). For Test 4 (gold, ω = −0.5) the flux-calibrated bath is also closest (17.8% vs. 25.4%). It doesn't close the gap, though: it trades the shock error (−12.5% → −6.4%) for the heat front (+6% → +14%), and what remains comes from the solver's patching (`why_the_solver_differs.md` §3).
+**In one paragraph.** The bath is the only thing that changes between the three sets of simulations; the analytic curve is the same for all of them. For gold with ω ≥ 0 the **paper bath** is already closest (Tests 1–3), and calibrating moves the simulations 0.4–2% further from the solver. For copper and aluminum the **flux-calibrated bath** is clearly closest: whole-profile error 2.6% vs. 9.4% (paper) for Cu, and 7.6% vs. 15.9% for Al. The **temperature-calibrated bath** is the worst option there (26% and 16%). For Test 4 (gold, ω = −0.5) the flux-calibrated bath is also closest (17.8% vs. 25.4%). It doesn't close the gap, though: it trades the shock error (−12.5% → −6.4%) for the heat front (+6% → +14%), and what remains comes from the solver's patching (`why_the_solver_differs.md` §3).
 
 ---
 
@@ -53,7 +53,10 @@ Profile L1 is the mass-weighted |diffusion − analytic| over the domain, relati
 | | flux-calibrated | 4.4% | +2.0% | +1.4% | −2.2% |
 | | T-calibrated | 4.9% | +2.2% | +1.8% | −2.1% |
 | Test 2 (Au, τ > 0) | **paper** | **4.8%** | +1.0% | +2.0% | −4.5% |
+| | flux-calibrated | 5.3% | +1.3% | +2.4% | −4.6% |
 | | T-calibrated | 6.6% | +2.1% | +3.5% | −4.0% |
+| Test 3 (Au, ω = +0.5, fine mesh) | **paper** | **3.4%** | −1.0% | 0.0% | −4.5% |
+| | flux-calibrated | 3.8% | −0.8% | +0.3% | −4.8% |
 | Test 4 (Au, ω = −0.5) | **flux-calibrated** | **17.8%** | +13.8% | −6.4% | +15.1% |
 | | T-calibrated | 23.4% | +8.1% | −10.9% | +11.9% |
 | | paper | 25.4% | +6.0% | −12.5% | +10.2% |
@@ -64,13 +67,15 @@ Profile L1 is the mass-weighted |diffusion − analytic| over the domain, relati
 | | T-calibrated | 15.7% | +14.3% | +6.6% | +2.8% |
 | | paper | 15.9% | −4.1% | −7.8% | −8.5% |
 
-With the paper bath only: Test 3 (Au, ω = +0.5) 3.4%, with a heat front −1.0%, shock 0.0% and front pressure −4.5%. The gold ω sweep, −0.8 to +0.6, is in [`omega_sweep/`](omega_sweep/README.md).
+Test 2's flux calibration converged after 3 runs (0.19%), Test 3's after 3 runs on the coarse mesh (0.18%; the fine-mesh runs use the same table). In both the correction factor stays within 0.999–1.004: for gold with ω ≥ 0 the paper bath already delivers the solver's energy flux to within 0.5%.
 
-IMC follows diffusion under every bath (`phase_c_tests3to6_results.md` §1): within ≤ 2.3% for gold and ≤ 5.3% for Cu and Al, independent of the bath.
+The gold ω sweep, −0.8 to +0.8 (simulated up to +0.6), with both baths and a mesh-convergence check, is in [`omega_sweep/`](omega_sweep/README.md).
+
+IMC follows diffusion under every bath (`phase_c_tests3to6_results.md` §1): within ≤ 2.3% for gold and ≤ 5.3% for Cu and Al, independent of the bath. With the flux-calibrated bath, Test 2 (3 seeds) and Test 3 (fine mesh, 1 seed) follow the same pattern: Test 3's IMC is within 1.0 point of diffusion on the fronts.
 
 ## 3. Conclusions
 
-1. **Gold with ω ≥ 0: keep the paper bath.** The surface is in LTE, so the paper relation is already right: the matter surface is at 0.997–1.000 HeV. Both calibrations move the simulations 1–2% further from the solver, which is within resolution.
+1. **Gold with ω ≥ 0: keep the paper bath.** The surface is in LTE, so the paper relation is already right: the matter surface is at 0.995–1.000 HeV. In Tests 1–3 both calibrations move the simulations 0.4–2% further from the solver over the whole profile, which is within resolution.
 2. **Cu and Al: use the flux-calibrated bath.** It brings every front within ~4% of the solver, against 5–9% with the paper bath. The T-calibrated bath is the wrong target where the surface is out of LTE: it overshoots by 13–20% on the fronts.
 3. **Test 4: the bath is not the problem.** The flux-calibrated bath has the smallest whole-profile error, but by trading the shock (−12.5% → −6.4%) for the heat front (+6% → +14%) and the front pressure (+10% → +15%). No bath reconciles the simulations with the solver there. That is the signature of the solver's rigid-front patching (`why_the_solver_differs.md` §3), not of the drive.
 4. **For the paper:** report Tests 1–3 with the paper bath, Tests 5–6 with the flux-calibrated bath (and state why: the surface optical depth), and Test 4 as the limit of the patched solution, with m_f/m_s next to it.

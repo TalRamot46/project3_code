@@ -6,7 +6,7 @@ Every figure here is a full-profile figure (ρ, p, u, T against Lagrangian mass)
 |---|---|
 | `paper_bath/` | simulations driven by the manuscript's bath relation: Tests 1–6 and the earlier ω scan (ω = −0.75, −0.5 at N = 400, −0.25, +0.25 at N = 2000) |
 | `calibrated_T_bath/` | bath calibrated so that the matter's surface temperature follows T_s(t): Tests 1, 2, 4, 5, 6 |
-| `calibrated_flux_bath/` | bath calibrated so that the net energy flux equals the solver's s(0, t): Tests 1, 4, 5, 6 |
+| `calibrated_flux_bath/` | bath calibrated so that the net energy flux equals the solver's s(0, t): Tests 1–6 (Test 3 on its fine mesh) |
 | `overlay/` | one figure per case with more than one bath, at 2 ns: diffusion under every bath against the solver, the closest (smallest profile L1) drawn bold, the baths ranked in a table with their front errors |
 | `legacy/fix_B/` | figures that involve fix B, a numerical moving-front target. **Not analytic** (`../legacy/patching_poc_fix_B.md`) |
 | `legacy/impulse_patch/` | the impulse-matched patch, per bath and overlays (`../legacy/analytic_patching_impulse.md`) |
@@ -14,7 +14,7 @@ Every figure here is a full-profile figure (ρ, p, u, T against Lagrangian mass)
 
 Test 3's file is `test3_full_profiles.png` (its fine-mesh run, `test3_smooth`).
 
-**Tests 3 and 4, every view.** Each folder that has the case (Test 3: `paper_bath/`; Test 4: the three bath folders and `overlay/`) also has a subfolder `test3_full/` or `test4_full/` with six figures, `<region>_<scale>.png`:
+**Tests 3 and 4, every view.** Each folder that has the case (Test 3: `paper_bath/`, `calibrated_flux_bath/` and `overlay/`; Test 4: the three bath folders and `overlay/`) also has a subfolder `test3_full/` or `test4_full/` with six figures, `<region>_<scale>.png`:
 
 | region | mass window | | scale | axes |
 |---|---|---|---|---|

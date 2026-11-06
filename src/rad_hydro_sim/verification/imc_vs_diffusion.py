@@ -743,6 +743,36 @@ def short_case_name(label: str) -> str:
     return f"Au ({title[4:]})" if title.startswith("Au, ") else title
 
 
+def heat_front_mass(solver, t: float):
+    """m_f(t) of an AblationSolver (or of an object wrapping one as .base); None for anything else."""
+    hs = getattr(solver, "heat_solver", None) or getattr(getattr(solver, "base", None), "heat_solver", None)
+    return None if hs is None else float(hs.ablated_mass(time=t))
+
+
+def front_spike_mask(mass, sol, m_f) -> np.ndarray:
+    """The analytic points to draw: all but the heat solution's last sliver before its front where it
+    is denser or colder than the shocked matter just past the front.
+
+    That sliver is where the two self-similar solutions meet: the heat solution's rigid front
+    (gold: rho -> 313 g/cm^3, T -> 0.02 HeV) against a lighter, hotter shocked state, a spike in
+    rho and T that is an artifact of the patch.  It holds 0.001% of m_f (Test 1), 0.2-0.5%
+    (Test 4), up to 3.5% (omega = -0.8 at 1 ns); the front values and the tables do not use it.
+    ``mass`` ascending; no front (m_f None) or no shock point: everything is kept."""
+    keep = np.ones(len(mass), dtype=bool)
+    if m_f is None:
+        return keep
+    rho, T = (np.asarray(sol[k], dtype=float) for k in ("density", "temperature"))
+    heat, shock = np.flatnonzero(mass < m_f), np.flatnonzero(mass > m_f)
+    if not len(heat) or not len(shock):
+        return keep
+    j = shock[0]
+    spiky = ~np.isfinite(rho[heat]) | ~np.isfinite(T[heat]) | (rho[heat] > rho[j]) | (T[heat] < T[j])
+    run = int(np.argmin(spiky[::-1])) if not spiky.all() else 0   # the spiky points ending at the front
+    if run:
+        keep[heat[-run:]] = False
+    return keep
+
+
 def _box_is_free(ax, pos) -> bool:
     """True if no plotted point of ax falls in the box pos = (x0, y0, width, height), in axes fractions."""
     x0, y0, w, h = pos
@@ -822,11 +852,12 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, p
                                          np.geomspace(1e-4 * m_sim[0], m_sim[-1], 1500),
                                          np.linspace(1e-12, min(m_layer, m_sim[-1]), 800))))
         exact = solver.solve(mass=mass, time=t)
+        keep = front_spike_mask(mass, exact, heat_front_mass(solver, t))   # no patch spike at the front
         mean = {key: np.mean([r[key][k] for r in imc], axis=0) for key in scales} if imc else None
         for key, ax in panels.items():
             ref = np.asarray(exact[ref_keys[key]], dtype=float)
             ax.plot(m_sim * 1e3, d[key][k] * scales[key], "-", color=col, lw=1.7, zorder=2)
-            ax.plot(mass * 1e3, ref * scales[key], **original)
+            ax.plot(mass[keep] * 1e3, ref[keep] * scales[key], **original)
             for _, obj, style in patched:
                 sol = obj.solve(mass=mass, time=t)
                 ax.plot(mass * 1e3, np.asarray(sol[ref_keys[key]], dtype=float) * scales[key], **style)

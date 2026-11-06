@@ -249,6 +249,7 @@ def plot_overlay(label: str, path: Path, t: float = 2e-9, region="full", scale=N
                   "shock": (0.85e3 * heat_min, 1.1e3 * shock)}[region]
     m_dense = np.unique(np.concatenate((m_dense, np.linspace(max(x_lo, 1e-9) * 1e-3, x_hi * 1e-3, 1500))))
     sol = analytic.solve(mass=m_dense, time=t_an)
+    keep = ivd.front_spike_mask(m_dense, sol, analytic.front_values(t_an)["m_heat"])   # no patch spike at the front
     for key, ref, ylabel, fscale in FIELDS:
         ax = axes[key]
         for b, r in runs.items():
@@ -256,7 +257,8 @@ def plot_overlay(label: str, path: Path, t: float = 2e-9, region="full", scale=N
             # the closest bath wide underneath, the others thin on top: where baths agree, all stay visible
             ax.plot(r["m"][k[b]] * 1e3, r[key][k[b]] * fscale, color=BATH_COLOR[b], lw=3.4 if hl else 1.3,
                     alpha=0.8 if hl else 0.95, zorder=2 if hl else 3)
-        ax.plot(m_dense * 1e3, np.asarray(sol[ref], dtype=float) * fscale, color=INK, ls="--", lw=1.8, zorder=4)
+        ax.plot(m_dense[keep] * 1e3, np.asarray(sol[ref], dtype=float)[keep] * fscale, color=INK, ls="--", lw=1.8,
+                zorder=4)
         # y limits from the simulations inside the mass window
         sim = np.concatenate([r[key][k[b]][(r["m"][k[b]] * 1e3 >= x_lo) & (r["m"][k[b]] * 1e3 <= x_hi)] * fscale
                               for b, r in runs.items()])

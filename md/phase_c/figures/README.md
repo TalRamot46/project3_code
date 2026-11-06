@@ -4,6 +4,8 @@ Every figure here is a full-profile figure (ρ, p, u, T against Lagrangian mass)
 
 Each per-bath figure is titled with the test, the region, the bath and the scale. It shows diffusion at 1, 1.5 and 2 ns (light to dark blue), IMC (the mean of 3 seeds, orange) and the analytic solution (black). The overlays use one colour per bath; the closest bath is drawn wide underneath and listed first in the table.
 
+The analytic curve leaves out the heat solution's last sliver before its front, where it is denser or colder than the shocked matter just past the front. That sliver is where the two self-similar solutions meet: the heat solution's rigid front (gold: ρ → 313 g/cm³, T → 0.02 HeV) against a lighter, hotter shocked state. Drawn, it is a spike in ρ and T at the ablation front, an artifact of the patch. It holds at most 0.5% of m_f (Test 4; 0.001% in Test 1), 3.5% for ω = −0.8 at 1 ns, and nothing for Test 3, Cu, Al and ω ≥ +0.2. The front values, the tables and the overlay ranking do not use it (`imc_vs_diffusion.front_spike_mask`).
+
 | folder | what it is |
 |---|---|
 | `paper_bath/` | simulations driven by the manuscript's bath relation: Tests 1–6 and the earlier ω scan (ω = −0.75, −0.5 at N = 400, −0.25, +0.25 at N = 2000) |

@@ -140,39 +140,101 @@ def analytic_fronts(omega: float, times):
     return {k: np.asarray(v) for k, v in out.items()}
 
 
-def run(omega: float, flux=True, imc=False, imc_flux=False, fine=False, paper=True):
+def run(omega: float, flux=True, imc=False, imc_flux=False, fine=False, paper=True, seeds=(1,)):
     """Paper-bath diffusion (and IMC with imc), the flux calibration and flux-bath diffusion (and
-    IMC with imc_flux); fine: the same on register_fine's mesh, with the coarse mesh's flux table."""
+    IMC with imc_flux), IMC with each of seeds; fine: the same on register_fine's mesh, with the
+    coarse mesh's flux table.  Every run is cached by file (<label>_diffusion.npz, _imc<seed>.npz)."""
     label = register(omega)
     run_label = register_fine(omega) if fine else label
     OUT.mkdir(parents=True, exist_ok=True)
     OUT_FLUX.mkdir(parents=True, exist_ok=True)
     if paper:
-        ivd.run_hydro(OUT, run_label, seeds=(1,) if imc else (), physical=False)
+        ivd.run_hydro(OUT, run_label, seeds=tuple(seeds) if imc else (), physical=False)
     if flux:
         cal = ivd.BATH_CORRECTION_DIR / f"{label.upper()}_flux.txt"
         if not cal.exists():
             print(f"[{label}] calibrating the bath to the energy flux", flush=True)
             ivd.calibrate_bath(label, target="flux")
-        ivd.run_hydro(OUT_FLUX, run_label, seeds=(1,) if imc_flux else (), physical=False, bath="calibrated_flux")
+        ivd.run_hydro(OUT_FLUX, run_label, seeds=tuple(seeds) if imc_flux else (), physical=False,
+                      bath="calibrated_flux")
+
+
+def run_parallel(omegas, seeds, jobs: int, paper=True, flux=True):
+    """Every (omega, bath, seed) IMC run as its own process, `jobs` at a time, the slowest omegas
+    first (+0.6: ~2 h a seed, +0.4: ~50 min, the rest minutes).  First, one process per omega and
+    bath for the diffusion run (a no-op when cached), which the seeds of that pair share.  Logs:
+    results/omega_sweep/logs/run_<w>_<bath>_<run>.log."""
+    import subprocess
+    import sys
+    from concurrent.futures import ThreadPoolExecutor
+
+    logs = OUT / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    baths = [b for b, on in (("paper", paper), ("flux", flux)) if on]
+    only = {"paper": "--no-flux", "flux": "--no-paper"}
+    imc_flag = {"paper": "--imc", "flux": "--imc-flux"}
+    diffusion = [((f"--run={w}", only[b]), f"run_{w:+.1f}_{b}_diffusion.log") for w in omegas for b in baths]
+    imc = sorted((((f"--run={w}", only[b], imc_flag[b], "--seeds", str(s)), f"run_{w:+.1f}_{b}_imc{s}.log")
+                  for w in omegas for b in baths for s in seeds), key=lambda job: -float(job[0][0][6:]))
+
+    def launch(job):
+        args, log = job
+        with open(logs / log, "w", encoding="utf-8") as f:
+            code = subprocess.run([sys.executable, "-m", "rad_hydro_sim.verification.omega_sweep", *args],
+                                  stdout=f, stderr=subprocess.STDOUT).returncode
+        print(f"  {'done  ' if code == 0 else 'FAILED'} {' '.join(args)}  (log {log})", flush=True)
+        return code
+
+    for stage in (diffusion, imc):
+        with ThreadPoolExecutor(max(1, jobs)) as pool:
+            codes = list(pool.map(launch, stage))
+        if any(codes):
+            print(f"  {sum(c != 0 for c in codes)} of {len(stage)} runs failed; see the logs", flush=True)
+
+
+IMC_SEEDS = range(1, 10)   # the seeds looked for on disk
+
+
+def _series(r):
+    # before ~1% of t_end there is no shock yet and the front finder returns the domain edge
+    ok = r["series_t"] > 0.01 * r["series_t"][-1]
+    return dict(t=r["series_t"][ok], m_f=r["m_heat"][ok], m_s=r["m_shock"][ok], x_f=r["x_heat"][ok],
+                x_s=r["x_shock"][ok])
+
+
+def _imc_mean(out: Path, label: str):
+    """The mean front series over the IMC seeds on disk (each seed interpolated to the first one's
+    times), with n_seeds; None without any."""
+    runs = [_series(np.load(out / f"{label}_imc{s}.npz")) for s in IMC_SEEDS if (out / f"{label}_imc{s}.npz").exists()]
+    if not runs:
+        return None
+    t = runs[0]["t"]
+    mean = {k: np.mean([np.interp(t, r["t"], r[k]) for r in runs], axis=0) for k in ("m_f", "m_s", "x_f", "x_s")}
+    return dict(t=t, **mean, n_seeds=len(runs))
 
 
 def sim_series(omega: float, fine: bool = False):
-    """{run name: {t, x_f, m_f, x_s, m_s}} of the runs of this omega that exist (fine: on the
-    register_fine mesh)."""
+    """{run name: {t, x_f, m_f, x_s, m_s, n_seeds}} of the runs of this omega that exist (fine: on
+    the register_fine mesh); IMC is the mean over its seeds."""
     label = label_of(omega) + ("_fine" if fine else "")
     found = {}
-    for name, path in (("diffusion, paper bath", OUT / f"{label}_diffusion.npz"),
-                       ("IMC, paper bath", OUT / f"{label}_imc1.npz"),
-                       ("diffusion, flux-calibrated bath", OUT_FLUX / f"{label}_diffusion.npz"),
-                       ("IMC, flux-calibrated bath", OUT_FLUX / f"{label}_imc1.npz")):
-        if path.exists():
-            r = np.load(path)
-            # before ~1% of t_end there is no shock yet and the front finder returns the domain edge
-            ok = r["series_t"] > 0.01 * r["series_t"][-1]
-            found[name] = dict(t=r["series_t"][ok], m_f=r["m_heat"][ok], m_s=r["m_shock"][ok],
-                               x_f=r["x_heat"][ok], x_s=r["x_shock"][ok])
+    for name, out, kind in (("diffusion, paper bath", OUT, "diffusion"), ("IMC, paper bath", OUT, "imc"),
+                            ("diffusion, flux-calibrated bath", OUT_FLUX, "diffusion"),
+                            ("IMC, flux-calibrated bath", OUT_FLUX, "imc")):
+        if kind == "imc":
+            mean = _imc_mean(out, label)
+            if mean is not None:
+                found[name] = mean
+        elif (out / f"{label}_diffusion.npz").exists():
+            found[name] = dict(_series(np.load(out / f"{label}_diffusion.npz")), n_seeds=0)
     return found
+
+
+def legend_name(name: str, counts) -> str:
+    """'IMC, paper bath (mean of 3 seeds)' when every omega shown has the same number of seeds > 1."""
+    counts = set(counts)
+    n = counts.pop() if len(counts) == 1 else 0
+    return f"{name} (mean of {n} seeds)" if n > 1 else name
 
 
 # reference palette (dataviz skill): one hue per bath in fixed order, ink for the analytic curve
@@ -234,7 +296,7 @@ def plot_omega(omega: float, path: Path):
         ax.set_xlabel("t [ns]", color=INK, fontsize=11)
         ax.set_ylabel(ylabel, color=INK, fontsize=11)
         _style(ax)
-    handles = [Line2D([0], [0], label=n, **STYLE[n]) for n in sims]
+    handles = [Line2D([0], [0], label=legend_name(n, [s["n_seeds"]]), **STYLE[n]) for n, s in sims.items()]
     handles.append(Line2D([0], [0], color=INK, lw=1.8, ls="--", label="analytic (AblationSolver)"))
     fig.legend(handles=handles, loc="upper left", bbox_to_anchor=(0.06, 0.955), ncol=len(handles), frameon=False,
                fontsize=10, labelcolor=INK, handlelength=2.6)
@@ -270,7 +332,7 @@ def plot_profiles(omegas):
         for bath, out, folder in PROFILE_BATHS:
             if not (out / f"{label}_diffusion.npz").exists():
                 continue
-            seeds = (1,) if (out / f"{label}_imc1.npz").exists() else ()
+            seeds = tuple(s for s in IMC_SEEDS if (out / f"{label}_imc{s}.npz").exists())
             path = FIG / "profiles" / folder / f"{omega_tag(w)}.png"
             path.parent.mkdir(parents=True, exist_ok=True)
             ivd.plot_hydro_profiles(out, label, seeds, path, solver=solver, method=bath, region="full",
@@ -291,12 +353,14 @@ def plot_summary(omegas, path: Path, t: float = 2e-9):
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
 
-    rows = {}
+    rows, seeds = {}, {}
     for w in omegas:
         sims = sim_series(w)
         an = analytic_fronts(w, [t])
         rows[w] = {name: {key: 100 * (at(s, key, t) / an[key][0] - 1) for key, *_ in PANELS}
                    for name, s in sims.items() if s["t"][-1] >= 0.999 * t}
+        for name, s in sims.items():
+            seeds.setdefault(name, []).append(s["n_seeds"])
     names = [n for n in STYLE if any(n in r for r in rows.values())]
     fig, axes = plt.subplots(2, 2, figsize=(12.5, 8.4), sharex=True)
     for ax, (key, ylabel, _) in zip(axes.flat, PANELS):
@@ -326,7 +390,7 @@ def plot_summary(omegas, path: Path, t: float = 2e-9):
     for ax in axes[1]:
         ax.set_xlabel(r"$\omega$", color=INK, fontsize=12)
         ax.set_xticks(list(OMEGAS))
-    handles = [Line2D([0], [0], marker="o", ms=6, label=n, **STYLE[n]) for n in names]
+    handles = [Line2D([0], [0], marker="o", ms=6, label=legend_name(n, seeds[n]), **STYLE[n]) for n in names]
     fig.legend(handles=handles, loc="upper left", bbox_to_anchor=(0.06, 0.955), ncol=len(handles), frameon=False,
                fontsize=10.5, labelcolor=INK)
     fig.suptitle(rf"Gold, 1 HeV, $\tau = 0$: fronts at {t * 1e9:g} ns against the semi-analytic solution, by $\omega$",
@@ -396,13 +460,19 @@ def main(argv=None):
     ap.add_argument("--imc-flux", action="store_true", help="also IMC (one seed) with the flux-calibrated bath")
     ap.add_argument("--fine", action="store_true", help="the finer mesh of register_fine")
     ap.add_argument("--no-paper", action="store_true", help="skip the paper-bath runs")
+    ap.add_argument("--seeds", nargs="*", type=int, default=[1], help="IMC seeds of --imc / --imc-flux")
+    ap.add_argument("--jobs", type=int, default=0,
+                    help="with --run: IMC with --seeds under both baths (unless --no-paper / --no-flux), "
+                         "one process per (omega, bath, seed), this many at once (run_parallel)")
     ap.add_argument("--figures", action="store_true", help="fronts, summary, convergence and full profiles")
     ap.add_argument("--profiles", action="store_true", help="only the full profiles, profiles/<bath>/")
     args = ap.parse_args(argv)
-    if args.run is not None:
+    if args.run is not None and args.jobs > 0:
+        run_parallel(args.run, args.seeds, args.jobs, paper=not args.no_paper, flux=not args.no_flux)
+    elif args.run is not None:
         for w in args.run:
             run(w, flux=not args.no_flux, imc=args.imc, imc_flux=args.imc_flux, fine=args.fine,
-                paper=not args.no_paper)
+                paper=not args.no_paper, seeds=args.seeds)
     done = [w for w in OMEGAS if (OUT / f"{label_of(w)}_diffusion.npz").exists()]
     if args.profiles or args.figures:
         plot_profiles(done)

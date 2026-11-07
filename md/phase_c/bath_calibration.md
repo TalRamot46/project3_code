@@ -97,3 +97,30 @@ uv run python -m rad_hydro_sim.verification.imc_vs_diffusion --cases test5_full 
 ```
 
 Figures: `figures/<bath>/` (one full-profile figure per case and bath) and `figures/overlay/` (one per case with more than one bath: every bath against the solver, the closest drawn bold). Layout: `figures/README.md`. Tables: `results/bath_calibration/<case>_table.md`.
+
+## Addendum 2026-11-07: the fine meshes
+
+The figures in `figures/` are now drawn from each test's fine mesh. That is 2.5× the cells of § 2's runs, the rule of the ω sweep's mesh-convergence check: Tests 1, 2 and 6 go from 400 to 1000 cells, Tests 4 and 5 from 1000 to 2500. Test 3 was already on its fine mesh. Diffusion and IMC seeds 1–3 ran under every bath, 60 runs in cloud sessions, all completed with energy errors ≤ 6×10⁻¹¹. The table in § 2 is the default mesh. On the fine mesh, with the change from the default mesh in percentage points in parentheses (Test 3 as in § 2):
+
+| case | bath | profile L1 | heat front | shock | front pressure |
+|---|---|---|---|---|---|
+| Test 1 (Au, ω = 0) | **T-calibrated** | **2.2% (−2.7)** | +0.7% (−1.5) | −0.2% (−2.1) | −2.2% (−0.1) |
+|  | flux-calibrated | 2.6% (−1.9) | +0.5% (−1.5) | −0.6% (−2.0) | −2.4% (−0.1) |
+|  | paper | 3.9% (+0.5) | −0.5% (−1.7) | −1.4% (−2.1) | −2.7% (−0.6) |
+| Test 2 (Au, τ > 0) | **paper** | **2.1% (−2.7)** | −0.7% (−1.7) | −0.1% (−2.1) | −4.7% (−0.2) |
+|  | flux-calibrated | 2.3% (−3.1) | −0.3% (−1.6) | +0.4% (−2.1) | −4.6% (−0.0) |
+|  | T-calibrated | 3.4% (−3.2) | +0.8% (−1.4) | +1.4% (−2.1) | −4.0% (−0.1) |
+| Test 4 (Au, ω = −0.5) | **flux-calibrated** | **17.5% (−0.3)** | +13.8% (−0.1) | −6.3% (+0.0) | +15.1% (+0.0) |
+|  | T-calibrated | 23.1% (−0.3) | +8.0% (−0.1) | −10.9% (+0.0) | +11.9% (+0.0) |
+|  | paper | 25.0% (−0.3) | +6.0% (−0.0) | −12.5% (+0.0) | +10.2% (−0.0) |
+| Test 5 (Cu) | **flux-calibrated** | **3.2% (+0.6)** | +3.3% (−0.5) | −0.9% (−0.7) | −1.6% (+0.2) |
+|  | paper | 10.4% (+0.9) | −2.1% (−0.6) | −5.4% (−0.7) | −4.7% (+0.3) |
+|  | T-calibrated | 24.8% (−0.9) | +19.8% (−0.5) | +12.5% (−0.7) | +8.8% (+0.2) |
+| Test 6 (Al) | **flux-calibrated** | **8.2% (+0.6)** | +1.4% (−0.9) | −3.5% (−0.6) | −4.1% (−1.3) |
+|  | T-calibrated | 14.6% (−1.1) | +13.6% (−0.7) | +6.0% (−0.6) | +1.6% (−1.2) |
+|  | paper | 17.0% (+1.1) | −5.0% (−0.9) | −8.4% (−0.6) | −7.2% (+1.2) |
+
+- **Tests 1 and 2 were not converged at 400 cells.** Their fronts move by 1.4–2.1 points, and the profile L1 drops by 1.9–3.2 points, except for Test 1 under the paper bath (+0.5).
+- **Test 1's closest bath changes:** the T-calibrated bath (2.2%) and the flux-calibrated bath (2.6%) are now ahead of the paper bath (3.9%). Test 2 keeps the paper bath (2.1%, against 2.3% for the flux-calibrated bath). This amends conclusion 1 of § 3. For gold with ω ≥ 0 the three baths are within 1.7 points of each other, and which is closest differs between Tests 1 and 2. The profile L1 no longer singles out the paper bath there; every front is within 2.7% of the solver under every bath.
+- **Tests 4, 5 and 6 are converged:** every entry moves ≤ 1.3 points, and the closest bath is unchanged. Conclusions 2 and 3 stand: the flux-calibrated bath is clearly closest for Cu and Al, and in Test 4 no bath closes the gap left by the solver's patching.
+- **Reproduce:** `uv run python -m rad_hydro_sim.verification.bath_calibration --cases test1_fine test2_fine test3_smooth test4_fine test5_fine test6_fine --profiles` (likewise `--overlay`). The runs: `--cases <case> --baths calibrated calibrated_flux paper --seeds 1 2 3 --jobs 4`. The table above: `bath_calibration.mesh_table`.

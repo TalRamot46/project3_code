@@ -243,6 +243,41 @@ def _style(ax):
     ax.tick_params(which="both", top=False, right=False, colors=MUTED, labelcolor=INK, labelsize=10)
 
 
+def bath_rows(label: str, t: float = 2e-9, analytic=None):
+    """Diffusion under every bath of one case at t against the solver, closest first: profile L1
+    (profile_score) and the heat front, shock and front pressure in % (+ = diffusion ahead / higher)."""
+    analytic = analytic or Analytic(label)
+    rows = []
+    for b in baths_of(label):
+        r = np.load(BATHS[b][1] / f"{label}_diffusion.npz")
+        k = int(np.argmin(np.abs(r["t"] - t)))
+        tb = float(r["t"][k])
+        fv, ref = ivd.front_values(r, label, tb), analytic.front_values(tb)
+        rows.append(dict(bath=b, score=profile_score(r, k, analytic, tb),
+                         **{q: 100 * (fv[q] / ref[q] - 1) for q in ("m_heat", "m_shock", "p_abl")}))
+    return sorted(rows, key=lambda row: row["score"])
+
+
+def mesh_table(pairs, t: float = 2e-9) -> str:
+    """Markdown: bath_rows on each test's default and fine mesh, the fine values and the change from
+    the default mesh in percentage points.  pairs: (name, default-mesh label, fine-mesh label)."""
+    short = {"paper": "paper", "calibrated": "T-calibrated", "calibrated_flux": "flux-calibrated"}
+    lines = ["| case | bath | profile L1 | heat front | shock | front pressure |", "|---|---|---|---|---|---|"]
+    for name, coarse, fine in pairs:
+        old = {r["bath"]: r for r in bath_rows(coarse, t)}
+        for i, r in enumerate(bath_rows(fine, t)):
+            o = old.get(r["bath"])
+
+            def cell(key, scale=1.0, signed=True):
+                v = scale * r[key]
+                text = (f"{v:+.1f}%" if signed else f"{v:.1f}%").replace("-", "−")
+                return text if o is None else f"{text} ({scale * (r[key] - o[key]):+.1f})".replace("-", "−")
+            bold = (lambda s: f"**{s}**") if i == 0 else (lambda s: s)
+            lines.append(f"| {name if i == 0 else ''} | {bold(short[r['bath']])} | {bold(cell('score', 100, False))} "
+                         f"| {cell('m_heat')} | {cell('m_shock')} | {cell('p_abl')} |")
+    return "\n".join(lines)
+
+
 def plot_overlay(label: str, path: Path, t: float = 2e-9, region="full", scale=None):
     """Diffusion under every bath of one case at t against the analytic solution; the bath
     closest to it by profile_score drawn bold, the baths ranked beside the profiles.
@@ -259,13 +294,7 @@ def plot_overlay(label: str, path: Path, t: float = 2e-9, region="full", scale=N
     analytic = Analytic(label)
     runs = {b: np.load(BATHS[b][1] / f"{label}_diffusion.npz") for b in baths_of(label)}
     k = {b: int(np.argmin(np.abs(r["t"] - t))) for b, r in runs.items()}
-    rows = []
-    for b, r in runs.items():
-        tb = float(r["t"][k[b]])
-        fv, ref = ivd.front_values(r, label, tb), analytic.front_values(tb)
-        rows.append(dict(bath=b, score=profile_score(r, k[b], analytic, tb),
-                         **{q: 100 * (fv[q] / ref[q] - 1) for q in ("m_heat", "m_shock", "p_abl")}))
-    rows.sort(key=lambda row: row["score"])
+    rows = bath_rows(label, t, analytic)
     best = rows[0]
 
     fig = plt.figure(figsize=(17, 9.2))
@@ -381,7 +410,7 @@ def plot_overlay(label: str, path: Path, t: float = 2e-9, region="full", scale=N
     return rows
 
 
-VIEW_CASES = ("test3_smooth", "test4_full")
+VIEW_CASES = ("test3_smooth", "test4_fine")   # the fine meshes (Test 3: test3_smooth)
 REGIONS = ("full", "heat", "shock")
 SCALES = ("linear", "semilogx", "semilogy", "loglog")
 

@@ -35,6 +35,7 @@ OUT = ivd.REPO / "results" / "omega_sweep"
 OUT_FLUX = OUT.with_name(OUT.name + "_calibrated_flux")
 FIG = ivd.REPO / "md" / "phase_c" / "omega_sweep"
 GRADED_FROM = 0.4      # from here on the shocked mass is >~ 100x the ablated one: graded mesh as Test 3
+FIGURES_FINE = True    # the fronts, profiles and deviation tables use register_fine's mesh (the paper's figures)
 CELLS_PER_LAYER = 40   # uniform-mass mesh: cells across the ablated layer at t_end
 
 
@@ -231,6 +232,11 @@ def sim_series(omega: float, fine: bool = False):
     return found
 
 
+def short_legend(text: str) -> str:
+    """'IMC, flux-calibrated (3 seeds)' for 'IMC, flux-calibrated bath (mean of 3 seeds)': fits a one-row legend."""
+    return text.replace(" bath", "").replace("mean of ", "")
+
+
 def legend_name(name: str, counts) -> str:
     """'IMC, paper bath (mean of 3 seeds)' when every omega shown has the same number of seeds > 1."""
     counts = set(counts)
@@ -273,7 +279,7 @@ def plot_omega(omega: float, path: Path):
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
 
-    sims = sim_series(omega)
+    sims = sim_series(omega, fine=FIGURES_FINE)
     t_end = max(s["t"][-1] for s in sims.values())
     tg = np.linspace(0.02, 1.0, 120) * t_end
     an = analytic_fronts(omega, tg)
@@ -297,13 +303,14 @@ def plot_omega(omega: float, path: Path):
         ax.set_xlabel("t [ns]", color=INK, fontsize=11)
         ax.set_ylabel(ylabel, color=INK, fontsize=11)
         _style(ax)
-    handles = [Line2D([0], [0], label=legend_name(n, [s["n_seeds"]]), **STYLE[n]) for n, s in sims.items()]
+    handles = [Line2D([0], [0], label=short_legend(legend_name(n, [s["n_seeds"]])), **STYLE[n]) for n, s in sims.items()]
     handles.append(Line2D([0], [0], color=INK, lw=1.8, ls="--", label="analytic (AblationSolver)"))
     fig.legend(handles=handles, loc="upper left", bbox_to_anchor=(0.06, 0.955), ncol=len(handles), frameon=False,
                fontsize=10, labelcolor=INK, handlelength=2.6)
-    spec = ivd.HYDRO_CASES[label_of(omega)]
+    spec = ivd.HYDRO_CASES[register_fine(omega) if FIGURES_FINE else label_of(omega)]
+    cells = f"{spec.N} cells" if omega < GRADED_FROM else "graded mesh, cells <= 0.3 mg/cm$^2$" if FIGURES_FINE else "graded mesh"
     fig.suptitle(rf"Gold, 1 HeV, $\omega = {omega:+.1f}$: heat front and shock against time"
-                 f"  ({spec.N} cells{', graded mesh' if omega >= GRADED_FROM else ', uniform in mass'})",
+                 f"  ({'fine mesh, ' if FIGURES_FINE else ''}{cells}{', uniform in mass' if omega < GRADED_FROM else ''})",
                  x=0.06, ha="left", fontsize=14, fontweight="bold", color=INK, y=0.985)
     fig.tight_layout(rect=(0, 0, 1, 0.935))
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -321,16 +328,19 @@ PROFILE_BATHS = (("paper bath", OUT, "paper_bath"), ("flux-calibrated bath", OUT
 
 def plot_profiles(omegas):
     """rho, p, u, T against mass at 1, 1.5 and 2 ns over the full domain, linear axes: diffusion and
-    IMC (one seed) under each bath against this omega's solver, as the per-bath figures of
+    IMC (the mean of the seeds on disk) under each bath against this omega's solver, on the fine
+    mesh (FIGURES_FINE; the default mesh where a bath has no fine run), as the per-bath figures of
     md/phase_c/figures (imc_vs_diffusion.plot_hydro_profiles):
     md/phase_c/omega_sweep/profiles/<bath>/omega<w>.png."""
     import matplotlib
     matplotlib.use("Agg")
 
     for w in omegas:
-        label = register(w)
+        coarse = register(w)
+        fine = register_fine(w) if FIGURES_FINE else coarse
         solver = solver_of(w)
         for bath, out, folder in PROFILE_BATHS:
+            label = fine if (out / f"{fine}_diffusion.npz").exists() else coarse
             if not (out / f"{label}_diffusion.npz").exists():
                 continue
             seeds = tuple(s for s in IMC_SEEDS if (out / f"{label}_imc{s}.npz").exists())
@@ -356,7 +366,7 @@ def plot_summary(omegas, path: Path, t: float = 2e-9):
 
     rows, seeds = {}, {}
     for w in omegas:
-        sims = sim_series(w)
+        sims = sim_series(w, fine=FIGURES_FINE)
         an = analytic_fronts(w, [t])
         rows[w] = {name: {key: 100 * (at(s, key, t) / an[key][0] - 1) for key, *_ in PANELS}
                    for name, s in sims.items() if s["t"][-1] >= 0.999 * t}
@@ -391,7 +401,7 @@ def plot_summary(omegas, path: Path, t: float = 2e-9):
     for ax in axes[1]:
         ax.set_xlabel(r"$\omega$", color=INK, fontsize=12)
         ax.set_xticks(list(OMEGAS))
-    handles = [Line2D([0], [0], marker="o", ms=6, label=legend_name(n, seeds[n]), **STYLE[n]) for n in names]
+    handles = [Line2D([0], [0], marker="o", ms=6, label=short_legend(legend_name(n, seeds[n])), **STYLE[n]) for n in names]
     fig.legend(handles=handles, loc="upper left", bbox_to_anchor=(0.06, 0.955), ncol=len(handles), frameon=False,
                fontsize=10.5, labelcolor=INK)
     fig.suptitle(rf"Gold, 1 HeV, $\tau = 0$: fronts at {t * 1e9:g} ns against the semi-analytic solution, by $\omega$",
@@ -404,13 +414,13 @@ def plot_summary(omegas, path: Path, t: float = 2e-9):
 
 def plot_convergence(omegas, path: Path, t: float = 2e-9):
     """Deviation from the solver at t against omega on the default mesh (solid) and the
-    register_fine mesh (open markers, dotted), diffusion with each bath."""
+    register_fine mesh (open markers, dotted), diffusion and IMC (seed mean) with each bath."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
 
-    baths = ("diffusion, paper bath", "diffusion, flux-calibrated bath")
+    baths = tuple(STYLE)   # diffusion and IMC, each bath
     rows = {}
     for w in omegas:
         an = analytic_fronts(w, [t])
@@ -437,12 +447,12 @@ def plot_convergence(omegas, path: Path, t: float = 2e-9):
     for ax in axes[1]:
         ax.set_xlabel(r"$\omega$", color=INK, fontsize=12)
         ax.set_xticks(sorted(rows))
-    handles = [Line2D([0], [0], color=STYLE[b]["color"], lw=2.0, marker="o", ms=6, label=f"{b}, default mesh")
+    handles = [Line2D([0], [0], color=STYLE[b]["color"], lw=2.0, marker="o", ms=6, label=f"{b.replace(' bath', '')}, default")
                for b in baths]
     handles += [Line2D([0], [0], color=STYLE[b]["color"], lw=1.4, ls=":", marker="o", ms=7, markerfacecolor="white",
-                       markeredgecolor=STYLE[b]["color"], markeredgewidth=1.6, label=f"{b}, fine mesh") for b in baths]
-    fig.legend(handles=handles, loc="upper left", bbox_to_anchor=(0.06, 0.96), ncol=2, frameon=False,
-               fontsize=10, labelcolor=INK)
+                       markeredgecolor=STYLE[b]["color"], markeredgewidth=1.6, label=f"{b.replace(' bath', '')}, fine") for b in baths]
+    fig.legend(handles=handles, loc="upper left", bbox_to_anchor=(0.06, 0.96), ncol=4, frameon=False,
+               fontsize=9, labelcolor=INK)
     fig.suptitle(rf"Mesh convergence of the gold $\omega$ sweep at {t * 1e9:g} ns: default vs. fine mesh "
                  r"(2.5$\times$ the cells; $\omega \geq 0.4$: cells $\leq$ 0.3 mg/cm$^2$)",
                  x=0.06, ha="left", fontsize=13, fontweight="bold", color=INK, y=0.99)

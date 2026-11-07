@@ -104,3 +104,52 @@ Runs are cached in `results/omega_sweep{,_calibrated_flux}/`, the flux tables in
 IMC in the tables and figures above is now the mean of seeds 1–3; before, it was seed 1 alone. Seeds 2 and 3 were run in a cloud session (4 cores, one process per run) for every ω and both baths, 32 runs, all completed; the diffusion runs and seed 1 were reused from the cache unchanged, and the diffusion rows are identical to before. Run times: about 1 min for ω = −0.8 … −0.2, 1.7 min at ω = 0, 4.3 min at +0.2, 27–28 min at +0.4 and 94–98 min at +0.6.
 
 The largest change of any IMC deviation against the seed-1 values is 0.1 percentage points, as printed to one decimal (for example m_f at ω = −0.8, paper bath: +17.0 → +17.1%). The IMC seed-to-seed scatter is therefore small next to the differences between IMC and diffusion (0.1–2.1 points), and no conclusion changed: IMC follows diffusion, its shock sits slightly behind diffusion's, and the trends with ω and the effect of the flux-calibrated bath are as stated above.
+
+## Addendum 2026-11-07: the figures on the fine mesh
+
+Every figure in this folder now shows the fine mesh of § Mesh convergence: 2.5× the cells for ω ≤ +0.2 (1000–3775 cells, uniform in mass) and the graded mesh with cells ≤ 0.3 mg/cm² for ω ≥ +0.4 (744 and 2710 cells). That covers `fronts_omega<ω>.png`, `fronts_vs_omega.png` and `profiles/`, for diffusion and for IMC (the mean of seeds 1–3) under both baths. The fine-mesh IMC runs (48) and the flux-bath diffusion run at ω = +0.6, which was missing, ran in cloud sessions (4 cores, one process per run). Run times per IMC run: 3–4 min for ω ≤ −0.2, 5 min at 0, 13 min at +0.2, 28 min at +0.4 and 1.7 h at +0.6. All runs completed, with energy errors ≤ 1.2×10⁻⁹.
+
+The table under § Deviation from the solver at 2 ns is the default mesh. On the fine mesh, with the change from the default mesh in percentage points in parentheses:
+
+| ω | run | x_f | m_f | x_s | m_s |
+|---|---|---|---|---|---|
+| −0.8 | diffusion, paper | −6.6 (+0.1) | +17.7 (+0.1) | −8.8 (+0.2) | −15.5 (+0.3) |
+|  | IMC, paper | −7.3 (−0.1) | +16.6 (−0.4) | −9.6 (−0.1) | −16.7 (−0.1) |
+|  | diffusion, flux-calibrated | −0.0 (+0.2) | +34.4 (+0.3) | −2.5 (+0.2) | −4.5 (+0.5) |
+|  | IMC, flux-calibrated | −0.9 (−0.2) | +32.9 (−0.5) | −3.4 (−0.2) | −6.1 (−0.2) |
+| −0.6 | diffusion, paper | −7.3 (−0.1) | +9.5 (−0.1) | −9.5 (−0.1) | −14.8 (+0.1) |
+|  | IMC, paper | −7.8 (+0.0) | +8.7 (−0.3) | −10.0 (+0.0) | −15.6 (+0.1) |
+|  | diffusion, flux-calibrated | −1.9 (+0.0) | +21.2 (+0.0) | −4.1 (−0.1) | −6.5 (+0.1) |
+|  | IMC, flux-calibrated | −2.5 (−0.1) | +20.2 (−0.2) | −4.6 (+0.0) | −7.3 (+0.1) |
+| −0.4 | diffusion, paper | −5.5 (−0.1) | +3.5 (−0.3) | −7.0 (−0.2) | −9.8 (−0.1) |
+|  | IMC, paper | −6.1 (−0.1) | +2.8 (−0.5) | −7.6 (+0.0) | −10.5 (+0.1) |
+|  | diffusion, flux-calibrated | −2.6 (−0.2) | +8.7 (−0.2) | −3.8 (−0.2) | −5.3 (−0.1) |
+|  | IMC, flux-calibrated | −3.1 (+0.0) | +7.9 (−0.5) | −4.3 (+0.0) | −6.1 (+0.1) |
+| −0.2 | diffusion, paper | −3.4 (−0.3) | +0.6 (−0.4) | −4.0 (−0.7) | −4.9 (−0.7) |
+|  | IMC, paper | −4.1 (+0.0) | −0.1 (−1.0) | −4.9 (−0.4) | −5.9 (−0.2) |
+|  | diffusion, flux-calibrated | −2.0 (−0.2) | +2.6 (−0.5) | −2.4 (−0.7) | −3.0 (−0.7) |
+|  | IMC, flux-calibrated | −2.8 (−0.1) | +1.9 (−1.0) | −3.3 (−0.4) | −4.0 (−0.3) |
+| 0 | diffusion, paper | −2.3 (+0.1) | −0.7 (−0.6) | −1.9 (−1.2) | −2.0 (−1.2) |
+|  | IMC, paper | −3.2 (+0.3) | −1.5 (−1.3) | −3.1 (−0.7) | −3.2 (−0.7) |
+|  | diffusion, flux-calibrated | −1.8 (−0.1) | −0.0 (−0.7) | −1.1 (−1.3) | −1.2 (−1.2) |
+|  | IMC, flux-calibrated | −2.7 (+0.1) | −0.8 (−1.4) | −2.3 (−0.7) | −2.4 (−0.7) |
+| +0.2 | diffusion, paper | −3.2 (+1.5) | −1.2 (−0.7) | −1.0 (−1.7) | −0.8 (−1.3) |
+|  | IMC, paper | −4.4 (+1.6) | −1.9 (−1.3) | −2.4 (−1.0) | −2.0 (−0.8) |
+|  | diffusion, flux-calibrated | −2.9 (+1.7) | −0.9 (−0.7) | −0.5 (−1.7) | −0.4 (−1.3) |
+|  | IMC, flux-calibrated | −3.8 (+2.1) | −1.6 (−1.3) | −1.9 (−1.0) | −1.6 (−0.8) |
+| +0.4 | diffusion, paper | −8.7 (+0.2) | −1.3 (+0.0) | −0.9 (−0.1) | −0.7 (+2.6) |
+|  | IMC, paper | −10.6 (+0.3) | −2.2 (+0.0) | −2.5 (−0.5) | −1.7 (+1.9) |
+|  | diffusion, flux-calibrated | −8.5 (+0.2) | −1.2 (+0.0) | −0.5 (+0.0) | −0.5 (+2.7) |
+|  | IMC, flux-calibrated | −10.3 (+0.1) | −1.9 (+0.0) | −2.1 (−0.4) | −1.4 (+2.1) |
+| +0.6 | diffusion, paper | not resolved | −0.0 (+0.0) | +5.6 (−0.7) | +1.8 (+1.9) |
+|  | IMC, paper | not resolved | +0.9 (+0.1) | +2.3 (−0.3) | +0.5 (+2.2) |
+|  | diffusion, flux-calibrated | not resolved | +0.2 (+0.0) | +6.1 (−0.6) | +2.1 (+2.2) |
+|  | IMC, flux-calibrated | not resolved | +1.2 (+0.0) | +2.8 (−0.6) | +0.8 (+2.1) |
+
+- **For ω ≤ 0 every entry moves ≤ 1.4 points.**
+- **ω = +0.2:** x_f moves 1.6–2.1 points towards the solver, and x_s moves 1.7 points.
+- **ω = +0.4 and +0.6:** the shock mass moves 1.9–2.7 points (largest: +0.4, flux bath, −3.2 → −0.5%). This is the shocked-region quantization described in § Mesh convergence; the other fronts move ≤ 0.7 points.
+- **x_f at +0.6 is still not resolved.** The fine mesh does not refine the heated cell at the front either.
+- **IMC follows diffusion on the fine mesh as on the default one:** within 1.9 points for ω ≤ +0.4 (x_f at +0.4), and 3.3 points on x_s at +0.6.
+- **`mesh_convergence.png` now has IMC as well**, default against fine mesh, and IMC moves with the mesh as diffusion does.
+- **No conclusion changes.** The trends with ω, the effect of the flux-calibrated bath and the agreement of IMC with diffusion are as stated above, now on the mesh of the figures.

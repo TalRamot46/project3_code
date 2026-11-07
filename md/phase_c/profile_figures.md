@@ -5,6 +5,8 @@ Each figure shows density, pressure, velocity and temperature against Lagrangian
 - IMC, orange (the mean of 3 seeds);
 - the semi-analytic `AblationSolver` (black).
 
+> **2026-11-07:** these are the fine-mesh figures. Tests 1, 2 and 6 use 1000 cells, Tests 4 and 5 use 2500, and Test 3 uses its fine mesh. How the numbers moved from the default mesh is in [bath_calibration.md](bath_calibration.md), Addendum 2026-11-07.
+
 The title of each figure names the test, the region, the bath and the axes. The baths are described in [bath_calibration.md](bath_calibration.md). The figure conventions, including the patch sliver left out of the analytic curve at the ablation front, are in [figures/README.md](figures/README.md).
 
 | Test | Material and drive | Bath | Views |

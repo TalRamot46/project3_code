@@ -97,7 +97,8 @@ def run_shussman_solver(case: ComparisonCase, save_path: str | None = None) -> H
     print(f"  Times: {len(params['times'])} snapshots")
     
     if save_path is None:
-        save_path = str(Path(__file__).parent / "shock_profiles.npz")
+        from project3_code.hydro_sim.verification.comparison_config import get_output_dir
+        save_path = str(get_output_dir() / "shock_profiles.npz")   # results/hydro_sim_verification/
     
     # Convert time to ns to input into shussman_solver!
     times_ns = params['times'] * 1e9

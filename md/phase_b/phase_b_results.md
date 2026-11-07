@@ -23,7 +23,7 @@ The pattern is the expected one. Where the medium is optically thick (gold), gra
 
 `PRESET_SIO2_FOAM_RADIATION_ONLY`: 100 cells, tabulated synthetic drive, 3 ns. The plot shows the outgoing flux at the far face, in 0.05 ns blocks.
 
-![T1 outgoing flux](figures/t1_sio2_outgoing_flux.png)
+![T1 outgoing flux](../../results/phase_b/figures/t1_sio2_outgoing_flux.png)
 
 | Solver | Breakout (flux ≥ 0.01) | Peak |
 |---|---|---|
@@ -41,9 +41,9 @@ The pattern is the expected one. Where the medium is optically thick (gold), gra
 
 `PRESET_PAPER_TEST1_RADIATION_ONLY` and `PRESET_PAPER_TEST2_RADIATION_ONLY` use the manuscript's material and Marshak bath with the mesh held fixed. The domain is cut to 10⁻² g/cm² with 400 cells (2.5×10⁻⁵ g/cm² per cell), so the heated layer spans 30–65 cells. With the presets' 2.5×10⁻² g/cm² and 100 cells only 3 cells were heated, too coarse to compare.
 
-![Test 1 profiles](figures/test1_profiles.png)
+![Test 1 profiles](../../results/phase_b/figures/test1_profiles.png)
 
-![Test 2 profiles](figures/test2_profiles.png)
+![Test 2 profiles](../../results/phase_b/figures/test2_profiles.png)
 
 | | t [ns] | Heat front (T = 0.5 HeV), diffusion → IMC | T in the heated region, median / max difference | IMC s.e. |
 |---|---|---|---|---|
@@ -63,7 +63,7 @@ How to read these:
 
 The Test 1 setup with g ×100 (opacity ÷100), on the presets' full domain with 400 cells. The bath is that case's own self-similar Marshak bath.
 
-![thin gold profiles](figures/thin100_profiles.png)
+![thin gold profiles](../../results/phase_b/figures/thin100_profiles.png)
 
 | t [ns] | Heat front, diffusion → IMC | T median / max difference | IMC s.e. |
 |---|---|---|---|
@@ -93,7 +93,7 @@ All runs, tables and figures come from one module, `src/rad_hydro_sim/verificati
 
 ```bash
 uv run python -m rad_hydro_sim.verification.imc_vs_diffusion                                  # everything
-uv run python -m rad_hydro_sim.verification.imc_vs_diffusion --figures-dir md/phase_b/figures  # and refresh this doc's figures
+uv run python -m rad_hydro_sim.verification.imc_vs_diffusion --figures-dir results/phase_b/figures  # and refresh this doc's figures
 uv run python -m rad_hydro_sim.verification.imc_vs_diffusion --cases test1 --no-runs           # redo one table/figure from the cache
 ```
 

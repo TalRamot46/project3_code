@@ -30,9 +30,9 @@ These are the comparisons that close Phase C of `md/plans/full_plan_imc_comparis
 
 ## 2. Test 1
 
-![Test 1 profiles](figures/paper_bath/test1_full_profiles.png)
+![Test 1 profiles](../../results/phase_c/figures/paper_bath/test1_full_profiles.png)
 
-![Test 1 fronts](figures/legacy/non_profile/test1_full_fronts.png)
+![Test 1 fronts](../../results/phase_c/figures/legacy/non_profile/test1_full_fronts.png)
 
 | quantity | t [ns] | semi-analytic | diffusion | IMC (mean ± s.e.) | IMC vs. diffusion |
 |---|---|---|---|---|---|
@@ -51,9 +51,9 @@ The profiles of ρ, p, u and T at 1, 1.5 and 2 ns lie on top of each other throu
 
 ## 3. Test 2
 
-![Test 2 profiles](figures/paper_bath/test2_full_profiles.png)
+![Test 2 profiles](../../results/phase_c/figures/paper_bath/test2_full_profiles.png)
 
-![Test 2 fronts](figures/legacy/non_profile/test2_full_fronts.png)
+![Test 2 fronts](../../results/phase_c/figures/legacy/non_profile/test2_full_fronts.png)
 
 | quantity | t [ns] | semi-analytic | diffusion | IMC (mean ± s.e.) | IMC vs. diffusion |
 |---|---|---|---|---|---|
@@ -117,7 +117,7 @@ The residual differences are understood: resolution and the near-surface transpo
 
 ```bash
 uv run python -m rad_hydro_sim.verification.imc_vs_diffusion --cases test1_full test2_full \
-    --figures-dir md/phase_c/figures                                   # N = 400, seeds 1-3, ~5 min per IMC run
+    --figures-dir results/phase_c/figures                                   # N = 400, seeds 1-3, ~5 min per IMC run
 uv run python -m rad_hydro_sim.verification.imc_vs_diffusion --cases test1_full test2_full \
     --seeds 1 --hydro-n 1000 --no-physical --out results/imc_vs_diffusion_n1000      # Sec. 5
 ```
@@ -129,7 +129,7 @@ M="uv run python -m rad_hydro_sim.verification.imc_vs_diffusion"
 $M --cases test1_full --seeds 1 &                                # diffusion, physical runs, IMC seed 1
 $M --cases test1_full --seeds 2 --imc-only --no-physical &
 $M --cases test1_full --seeds 3 --imc-only --no-physical &
-wait; $M --cases test1_full --no-runs --figures-dir md/phase_c/figures
+wait; $M --cases test1_full --no-runs --figures-dir results/phase_c/figures
 ```
 
 Cost on this machine at N = 400 (8 processes in parallel on 12 cores): diffusion 35–40 s (10 000–11 500 steps); IMC 240–300 s per seed.

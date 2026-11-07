@@ -232,8 +232,8 @@ def verify_and_plot(solver: AblationSolver, coeffs: dict, label: str, filename: 
 
 
 def main():
-    output_dir = Path(__file__).parent / "position_verification_results"
-    output_dir.mkdir(exist_ok=True)
+    output_dir = Path(__file__).resolve().parents[2] / "results" / "menahem_new" / "position_verification"
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     for tau, label in [(0.0, "Fig 8 (tau=0)"), (0.122957198444, "Fig 9 (tau=0.123)")]:
         kwargs = build_test_case(tau)

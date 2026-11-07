@@ -33,7 +33,7 @@ from rad_hydro_sim.verification import bath_calibration as bc
 OMEGAS = tuple(round(float(w), 1) + 0.0 for w in np.arange(-0.8, 0.81, 0.2))   # + 0.0: no "-0.0"
 OUT = ivd.REPO / "results" / "omega_sweep"
 OUT_FLUX = OUT.with_name(OUT.name + "_calibrated_flux")
-FIG = ivd.REPO / "md" / "phase_c" / "omega_sweep"
+FIG = ivd.REPO / "results" / "phase_c" / "omega_sweep"   # the text: md/phase_c/omega_sweep/README.md
 GRADED_FROM = 0.4      # from here on the shocked mass is >~ 100x the ablated one: graded mesh as Test 3
 FIGURES_FINE = True    # the fronts, profiles and deviation tables use register_fine's mesh (the paper's figures)
 CELLS_PER_LAYER = 40   # uniform-mass mesh: cells across the ablated layer at t_end
@@ -330,8 +330,8 @@ def plot_profiles(omegas):
     """rho, p, u, T against mass at 1, 1.5 and 2 ns over the full domain, linear axes: diffusion and
     IMC (the mean of the seeds on disk) under each bath against this omega's solver, on the fine
     mesh (FIGURES_FINE; the default mesh where a bath has no fine run), as the per-bath figures of
-    md/phase_c/figures (imc_vs_diffusion.plot_hydro_profiles):
-    md/phase_c/omega_sweep/profiles/<bath>/omega<w>.png."""
+    results/phase_c/figures (imc_vs_diffusion.plot_hydro_profiles):
+    results/phase_c/omega_sweep/profiles/<bath>/omega<w>.png."""
     import matplotlib
     matplotlib.use("Agg")
 

@@ -9,7 +9,7 @@
 > The analytic follow-up (also legacy) is [`analytic_patching_impulse.md`](analytic_patching_impulse.md); the current reference is [`../bath_calibration.md`](../bath_calibration.md).
 > Code: `src/menahem_new/legacy/moving_front_shock.py` and
 > `src/rad_hydro_sim/verification/legacy/patching_fix_b.py`. Figures:
-> `md/phase_c/figures/legacy/fix_B/`. Tables: `results/patching_poc/legacy/`.
+> `results/phase_c/figures/legacy/fix_B/`. Tables: `results/patching_poc/legacy/`.
 
 Follow-up to `../why_the_solver_differs.md` §3.3. Branch `feat/patching-poc`, 2026-11-05.
 
@@ -86,11 +86,11 @@ B_simdrive is the diagnostic: the moving-front target driven by the diffusion ru
 
 IMC agrees with diffusion on the new ω runs to 0.9–1.4% in the shock (−0.75: −1.0%, −0.5: −0.9%, −0.25: −1.4%), as in the old tests.
 
-![shock error vs omega and the heat-side residual](../figures/legacy/fix_B/patching_omega_scan.png)
+![shock error vs omega and the heat-side residual](../../../results/phase_c/figures/legacy/fix_B/patching_omega_scan.png)
 
 *Left: shock error against ω for each patching (gold, 1 HeV, τ = 0). Right: the simulated heat front and front pressure against the rigid heat solution's.*
 
-![Test 4 profiles](../figures/legacy/fix_B/patching_test4_profiles.png)
+![Test 4 profiles](../../../results/phase_c/figures/legacy/fix_B/patching_test4_profiles.png)
 
 *Test 4 at 2 ns. The original patching jumps in p and u at m_f (dotted). B and C are continuous. The simulated layer velocity sits on the front-shifted heat solution, and the simulated layer pressure follows the rigid heat profile (orange), not p′ + m|a| (green).*
 
@@ -126,14 +126,14 @@ uv run python -m rad_hydro_sim.verification.legacy.patching_fix_b --omega-scan 0
 
 | ω (gold) | figure |
 |---|---|
-| −0.75 | [figures/legacy/fix_B/profiles/omegam075_profiles.png](../figures/legacy/fix_B/profiles/omegam075_profiles.png) |
-| −0.5 (Test 4, N = 1000) | [figures/legacy/fix_B/profiles/test4_full_profiles.png](../figures/legacy/fix_B/profiles/test4_full_profiles.png) |
-| −0.5 (scan, N = 400) | [figures/legacy/fix_B/profiles/omegam050_profiles.png](../figures/legacy/fix_B/profiles/omegam050_profiles.png) |
-| −0.25 | [figures/legacy/fix_B/profiles/omegam025_profiles.png](../figures/legacy/fix_B/profiles/omegam025_profiles.png) |
-| 0 (Test 1; Test 2 with τ > 0) | [test1_full](../figures/legacy/fix_B/profiles/test1_full_profiles.png), [test2_full](../figures/legacy/fix_B/profiles/test2_full_profiles.png) |
-| +0.25 (N = 2000, no IMC) | [figures/legacy/fix_B/profiles/omegap025_n2000_profiles.png](../figures/legacy/fix_B/profiles/omegap025_n2000_profiles.png) |
-| +0.5 (Test 3) | [log mass axis](../figures/legacy/fix_B/profiles/test3_smooth_profiles.png), [linear mass axis](../figures/legacy/fix_B/profiles/test3_smooth_profiles_linear.png) (`--linear`) |
-| Cu, Al (ω = 0) | [test5_full](../figures/legacy/fix_B/profiles/test5_full_profiles.png), [test6_full](../figures/legacy/fix_B/profiles/test6_full_profiles.png) |
+| −0.75 | [figures/legacy/fix_B/profiles/omegam075_profiles.png](../../../results/phase_c/figures/legacy/fix_B/profiles/omegam075_profiles.png) |
+| −0.5 (Test 4, N = 1000) | [figures/legacy/fix_B/profiles/test4_full_profiles.png](../../../results/phase_c/figures/legacy/fix_B/profiles/test4_full_profiles.png) |
+| −0.5 (scan, N = 400) | [figures/legacy/fix_B/profiles/omegam050_profiles.png](../../../results/phase_c/figures/legacy/fix_B/profiles/omegam050_profiles.png) |
+| −0.25 | [figures/legacy/fix_B/profiles/omegam025_profiles.png](../../../results/phase_c/figures/legacy/fix_B/profiles/omegam025_profiles.png) |
+| 0 (Test 1; Test 2 with τ > 0) | [test1_full](../../../results/phase_c/figures/legacy/fix_B/profiles/test1_full_profiles.png), [test2_full](../../../results/phase_c/figures/legacy/fix_B/profiles/test2_full_profiles.png) |
+| +0.25 (N = 2000, no IMC) | [figures/legacy/fix_B/profiles/omegap025_n2000_profiles.png](../../../results/phase_c/figures/legacy/fix_B/profiles/omegap025_n2000_profiles.png) |
+| +0.5 (Test 3) | [log mass axis](../../../results/phase_c/figures/legacy/fix_B/profiles/test3_smooth_profiles.png), [linear mass axis](../../../results/phase_c/figures/legacy/fix_B/profiles/test3_smooth_profiles_linear.png) (`--linear`) |
+| Cu, Al (ω = 0) | [test5_full](../../../results/phase_c/figures/legacy/fix_B/profiles/test5_full_profiles.png), [test6_full](../../../results/phase_c/figures/legacy/fix_B/profiles/test6_full_profiles.png) |
 
 What they show:
 - **ω < 0:** the original patch jumps in every quantity at m_f, and its shock (gray) runs ahead of the simulations. B is continuous and close to diffusion and IMC in ρ, u and T. The visible remainder is in the pressure: the simulations' front pressure is higher and their heat front further out, which is the heat-side residual of §5.4.

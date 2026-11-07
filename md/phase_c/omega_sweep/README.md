@@ -4,10 +4,10 @@ Gold, 1 HeV, τ = 0 (Test 4's material and drive) with the density ρ₀x^(−ω
 
 | file | content |
 |---|---|
-| `fronts_omega<ω>.png` | one per ω (`m0.8` = −0.8, `p0.2` = +0.2): x_f, m_f, x_s, m_s against t, with each simulation's deviation from the solver at 2 ns |
-| `fronts_vs_omega.png` | the deviations at 2 ns against ω, one panel per quantity |
-| `mesh_convergence.png` | the same on the default and on a finer mesh (§ Mesh convergence) |
-| `profiles/<bath>/omega<ω>.png` | ρ, p, u, T against mass at 1, 1.5 and 2 ns, full domain, linear axes: diffusion and IMC (mean of seeds 1–3) under that bath (`paper_bath/`, `calibrated_flux_bath/`) against the solver, as the per-bath figures of `../figures/`. On the graded meshes (ω ≥ +0.4) the ablated layer is a sliver of the domain; the velocity inset shows it |
+| `results/phase_c/omega_sweep/fronts_omega<ω>.png` | one per ω (`m0.8` = −0.8, `p0.2` = +0.2): x_f, m_f, x_s, m_s against t, with each simulation's deviation from the solver at 2 ns |
+| `results/phase_c/omega_sweep/fronts_vs_omega.png` | the deviations at 2 ns against ω, one panel per quantity |
+| `results/phase_c/omega_sweep/mesh_convergence.png` | the same on the default and on a finer mesh (§ Mesh convergence) |
+| `results/phase_c/omega_sweep/profiles/<bath>/omega<ω>.png` | ρ, p, u, T against mass at 1, 1.5 and 2 ns, full domain, linear axes: diffusion and IMC (mean of seeds 1–3) under that bath (`paper_bath/`, `calibrated_flux_bath/`) against the solver, as the per-bath figures of `results/phase_c/figures/`. On the graded meshes (ω ≥ +0.4) the ablated layer is a sliver of the domain; the velocity inset shows it |
 
 ## Deviation from the solver at 2 ns
 
@@ -70,7 +70,7 @@ The uniform-mass meshes put ≥ 40 cells across the ablated layer at 2 ns (cells
 
 ### Mesh convergence
 
-`mesh_convergence.png`: every ω again on a finer mesh (`--fine`), both baths: 2.5× the cells of the uniform-mass mesh for ω ≤ +0.2 (1000 to 3775 cells), and Test 3's fine-mesh cap of 0.3 mg/cm² per cell on the graded mesh for ω ≥ +0.4. The flux tables are the default mesh's.
+`results/phase_c/omega_sweep/mesh_convergence.png`: every ω again on a finer mesh (`--fine`), both baths: 2.5× the cells of the uniform-mass mesh for ω ≤ +0.2 (1000 to 3775 cells), and Test 3's fine-mesh cap of 0.3 mg/cm² per cell on the graded mesh for ω ≥ +0.4. The flux tables are the default mesh's.
 - **ω ≤ −0.4:** every front moves by ≤ 0.5 points: the trend with ω is converged.
 - **ω = −0.2 … +0.2:** up to 1.3 points on the shock (ω = 0: m_s −0.8 → −2.0%; +0.2: +0.5 → −0.8%), so at small |ω| the remaining differences of 1–2% are of the order of the mesh error.
 - **What sets the mesh error on the uniform-mass meshes is the number of cells across the ablated layer**, not the cells at the shock: the shift in m_s with refinement is 0.3, 0.1, 0.1, 0.7, 1.2 and 1.3 points for 197, 130, 81, 47, 39 and 39 layer cells (ω = −0.8 … +0.2). The layer is the drive: refining it moves m_f by up to 0.7 points and the shock follows. The default rule of 40 cells per layer is therefore marginal (~1% on the shock); ≥ 80 cells keeps it ≤ 0.3%.
@@ -107,7 +107,7 @@ The largest change of any IMC deviation against the seed-1 values is 0.1 percent
 
 ## Addendum 2026-11-07: the figures on the fine mesh
 
-Every figure in this folder now shows the fine mesh of § Mesh convergence: 2.5× the cells for ω ≤ +0.2 (1000–3775 cells, uniform in mass) and the graded mesh with cells ≤ 0.3 mg/cm² for ω ≥ +0.4 (744 and 2710 cells). That covers `fronts_omega<ω>.png`, `fronts_vs_omega.png` and `profiles/`, for diffusion and for IMC (the mean of seeds 1–3) under both baths. The fine-mesh IMC runs (48) and the flux-bath diffusion run at ω = +0.6, which was missing, ran in cloud sessions (4 cores, one process per run). Run times per IMC run: 3–4 min for ω ≤ −0.2, 5 min at 0, 13 min at +0.2, 28 min at +0.4 and 1.7 h at +0.6. All runs completed, with energy errors ≤ 1.2×10⁻⁹.
+Every figure in this folder now shows the fine mesh of § Mesh convergence: 2.5× the cells for ω ≤ +0.2 (1000–3775 cells, uniform in mass) and the graded mesh with cells ≤ 0.3 mg/cm² for ω ≥ +0.4 (744 and 2710 cells). That covers `results/phase_c/omega_sweep/fronts_omega<ω>.png`, `results/phase_c/omega_sweep/fronts_vs_omega.png` and `results/phase_c/omega_sweep/profiles/`, for diffusion and for IMC (the mean of seeds 1–3) under both baths. The fine-mesh IMC runs (48) and the flux-bath diffusion run at ω = +0.6, which was missing, ran in cloud sessions (4 cores, one process per run). Run times per IMC run: 3–4 min for ω ≤ −0.2, 5 min at 0, 13 min at +0.2, 28 min at +0.4 and 1.7 h at +0.6. All runs completed, with energy errors ≤ 1.2×10⁻⁹.
 
 The table under § Deviation from the solver at 2 ns is the default mesh. On the fine mesh, with the change from the default mesh in percentage points in parentheses:
 
@@ -151,5 +151,5 @@ The table under § Deviation from the solver at 2 ns is the default mesh. On the
 - **ω = +0.4 and +0.6:** the shock mass moves 1.9–2.7 points (largest: +0.4, flux bath, −3.2 → −0.5%). This is the shocked-region quantization described in § Mesh convergence; the other fronts move ≤ 0.7 points.
 - **x_f at +0.6 is still not resolved.** The fine mesh does not refine the heated cell at the front either.
 - **IMC follows diffusion on the fine mesh as on the default one:** within 1.9 points for ω ≤ +0.4 (x_f at +0.4), and 3.3 points on x_s at +0.6.
-- **`mesh_convergence.png` now has IMC as well**, default against fine mesh, and IMC moves with the mesh as diffusion does.
+- **`results/phase_c/omega_sweep/mesh_convergence.png` now has IMC as well**, default against fine mesh, and IMC moves with the mesh as diffusion does.
 - **No conclusion changes.** The trends with ω, the effect of the flux-calibrated bath and the agreement of IMC with diffusion are as stated above, now on the mesh of the figures.

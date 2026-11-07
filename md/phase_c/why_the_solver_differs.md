@@ -178,11 +178,11 @@ Proof of concept on branch `feat/patching-poc`; results, tables and conclusions 
 
 ## Addendum (2026-11-05, later): fix B is legacy; the analytic patch
 
-Fix B integrates the target's hydro equations in (m, t), so it is not an analytic model and cannot benchmark IMC and diffusion. It is now legacy (`legacy/patching_poc_fix_B.md`, with its code under `legacy/` folders). The current result is the analytic impulse-matched patch (fix C) in `analytic_patching.md`: both pieces stay self-similar, and the PistonShock amplitude is set by the momentum a massless front delivers. With the paper bath it agrees better with the simulations than the original over the whole profile for every ω < 0 case and for Cu and Al, ties for ω > 0, and is worse in Test 1. Figures are now partitioned by bath and analytic method in `figures/` (see `figures/README.md`).
+Fix B integrates the target's hydro equations in (m, t), so it is not an analytic model and cannot benchmark IMC and diffusion. It is now legacy (`legacy/patching_poc_fix_B.md`, with its code under `legacy/` folders). The current result is the analytic impulse-matched patch (fix C) in `analytic_patching.md`: both pieces stay self-similar, and the PistonShock amplitude is set by the momentum a massless front delivers. With the paper bath it agrees better with the simulations than the original over the whole profile for every ω < 0 case and for Cu and Al, ties for ω > 0, and is worse in Test 1. Figures are now partitioned by bath and analytic method in `results/phase_c/figures/` (see `results/phase_c/figures/README.md`).
 
 ## Addendum (2026-11-05, last): the impulse patch is legacy too
 
-The impulse-matched patch is not a consistent improvement: it flips the shock error for ω ≤ −0.5, makes the front pressure worse, leaves a pressure step at the front, and with the flux-calibrated bath it is the best option only for Al. It is now legacy (`legacy/analytic_patching_impulse.md`). The current reference is the original `AblationSolver`, compared under the three bath drives in `bath_calibration.md`. Figures: `figures/<bath>/` and `figures/overlay/` (`figures/README.md`).
+The impulse-matched patch is not a consistent improvement: it flips the shock error for ω ≤ −0.5, makes the front pressure worse, leaves a pressure step at the front, and with the flux-calibrated bath it is the best option only for Al. It is now legacy (`legacy/analytic_patching_impulse.md`). The current reference is the original `AblationSolver`, compared under the three bath drives in `bath_calibration.md`. Figures: `results/phase_c/figures/<bath>/` and `results/phase_c/figures/overlay/` (`results/phase_c/figures/README.md`).
 
 ## Addendum (2026-11-06): how fixes B and C work, and why they fail
 

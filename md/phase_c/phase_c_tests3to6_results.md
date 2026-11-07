@@ -46,11 +46,11 @@ Energy is conserved to round-off in every run: diffusion 10⁻¹⁴–10⁻¹³;
 | 5 (Cu) | 1000 | 3 | −2.3% / −2.5% / −1.8% / −4.1% | +3.8% / −0.2% / −1.8% / −2.2% | 3.3 | 0.956 |
 | 6 (Al) | 400 | 3 | −4.5% / −3.3% / −4.0% / −5.2% | +2.3% / −2.9% / −2.8% / −2.3% | 2.6 | 0.974 |
 
-With the flux-matched bath, copper and aluminum lie within ~4% of the solver on every quantity, and IMC still agrees with diffusion as it did with the paper's bath. The IMC-vs-diffusion difference is a property of the material, not of the bath. Profiles: `md/phase_c/figures/calibrated_flux_bath/`.
+With the flux-matched bath, copper and aluminum lie within ~4% of the solver on every quantity, and IMC still agrees with diffusion as it did with the paper's bath. The IMC-vs-diffusion difference is a property of the material, not of the bath. Profiles: `results/phase_c/figures/calibrated_flux_bath/`.
 
 ## 2. Figures
 
-In `md/phase_c/figures/` (layout: `figures/README.md`); the profiles of this page are in `paper_bath/`, the others are under `legacy/non_profile/`:
+In `results/phase_c/figures/` (layout: `results/phase_c/figures/README.md`); the profiles of this page are in `paper_bath/`, the others are under `legacy/non_profile/`:
 - `testN_full_profiles.png`: ρ, p, u, T at 1, 1.5 and 2 ns in the style of `results/ictt/const_T/dimensional_verification/const_T_fully_patched_comparison.png`. Diffusion is drawn per time (blue, orange, red), the solver in black, IMC dashed green, with zoom insets on the ablation layer and the shocked region. Test 3 uses a log mass axis: its ablated layer, 1.5 mg/cm², sits on a 300 mg/cm² domain. Each figure's subtitle gives the hot plasma's 𝒯, the share of its mass in cells with τ < 1, and the surface temperature against the solver's.
 - `testN_full_fronts.png`: the heat and shock fronts, ablation pressure and energy delivered vs. time, against the self-similar laws.
 - `opacity_summary.png`: 𝒯 per test, next to the IMC-vs-diffusion and diffusion-vs-solver differences.
@@ -94,7 +94,7 @@ With ω = −0.5 the ablated mass is 28–37% of the shocked mass, and the shock
 
 ```bash
 M="uv run python -m rad_hydro_sim.verification.imc_vs_diffusion"
-$M --cases test1_full test2_full test3_full test4_full test5_full test6_full --figures-dir md/phase_c/figures
+$M --cases test1_full test2_full test3_full test4_full test5_full test6_full --figures-dir results/phase_c/figures
 $M --calibrate-bath --calibrate-target flux --cases test5_full test6_full      # the energy-flux tables
 $M --cases test5_full test6_full --bath calibrated_flux                         # runs with them
 ```

@@ -29,6 +29,8 @@ import matplotlib.pyplot as plt
 
 # Ensure project3_code parent is on sys.path for absolute package imports
 _REPO_PARENT = Path(__file__).resolve().parents[2]
+# the profile tables it reads and the figures it writes: results/steinberg_comparison/
+STEINBERG_RESULTS = Path(__file__).resolve().parents[2] / "results" / "steinberg_comparison"
 if str(_REPO_PARENT) not in sys.path:
     sys.path.insert(0, str(_REPO_PARENT))
 
@@ -106,7 +108,7 @@ def extract_steinberg_data() -> dict[str, dict[str, np.ndarray]]:
     Outer dictionary keys: filenames (e.g., 'profile_diff_1024.txt').
     Inner dictionary keys: column names (e.g., 'x', 'temperature', 'mass_coord').
     """
-    current_dir = Path(__file__).resolve().parent
+    current_dir = STEINBERG_RESULTS   # the profile tables, beside the figures
     results = {}
     for filename in os.listdir(current_dir):
         if filename.endswith(".txt"):
@@ -309,21 +311,21 @@ if __name__ == "__main__":
     plot_steinberg_comparison_for_multiplier_and_num_cells(
         multiplier=100,
         num_cells=512,
-        save_path=Path(__file__).resolve().parent / "steinberg_comparison_diff_512_p_100.png",
+        save_path=STEINBERG_RESULTS / "steinberg_comparison_diff_512_p_100.png",
         show=False
     )
     print("Running smoke test comparison for N=512, chi=1000...")
     plot_steinberg_comparison_for_multiplier_and_num_cells(
         multiplier=1000,
         num_cells=512,
-        save_path=Path(__file__).resolve().parent / "steinberg_comparison_diff_512_p_1000.png",
+        save_path=STEINBERG_RESULTS / "steinberg_comparison_diff_512_p_1000.png",
         show=False
     )
     print("Running smoke test comparison for N=1024, chi=100...")
     plot_steinberg_comparison_for_multiplier_and_num_cells(
         multiplier=100,
         num_cells=1024,
-        save_path=Path(__file__).resolve().parent / "steinberg_comparison_diff_1024_p_100.png",
+        save_path=STEINBERG_RESULTS / "steinberg_comparison_diff_1024_p_100.png",
         show=False
     )
     print("Smoke test finished.")

@@ -11,7 +11,7 @@ rad_hydro_sim.verification.bath_calibration (the original AblationSolver under e
     uv run python -m rad_hydro_sim.verification.legacy.patching_poc --cases test4_full --overlay
 
 Patchings (menahem_new.legacy.matched_piston_patch): original, C_pressure, C_impulse.
-Figures go to md/phase_c/figures/legacy/impulse_patch/; tables to results/patching_poc/.
+Figures go to results/phase_c/figures/legacy/impulse_patch/; tables to results/patching_poc/.
 """
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ BATH_TEXT = {"paper": "paper bath", "calibrated": "bath calibrated to the surfac
 # analytic method per figure folder: (patching, what the figure calls it)
 METHODS = {"original_patch": ("original", "original patch"),
            "impulse_patch": ("C_impulse", "impulse-matched patch")}
-FIG = ivd.REPO / "md" / "phase_c" / "figures" / "legacy" / "impulse_patch"
+FIG = ivd.REPO / "results" / "phase_c" / "figures" / "legacy" / "impulse_patch"
 
 
 def patched_solvers(label: str):
@@ -81,7 +81,7 @@ def table(label: str, solvers, sims, patchings=PATCHINGS, title=None) -> str:
 
 def plot_profile_set(labels, baths=tuple(BATHS)):
     """One full-profile figure per (bath, analytic method, case) with runs in that bath:
-    md/phase_c/figures/<bath>_bath/<method>/<case>_profiles.png, the analytic curve in black."""
+    results/phase_c/figures/<bath>_bath/<method>/<case>_profiles.png, the analytic curve in black."""
     import matplotlib
     matplotlib.use("Agg")
 
@@ -277,10 +277,10 @@ def main(argv=None):
     ap.add_argument("--seeds", nargs="*", type=int, default=[], help="IMC seeds of the omega-scan runs")
     ap.add_argument("--run-only", action="store_true", help="only run the omega-scan simulations")
     ap.add_argument("--profiles", action="store_true",
-                    help="the full-profile figures, md/phase_c/figures/<bath>/<method>/")
+                    help="the full-profile figures, results/phase_c/figures/<bath>/<method>/")
     ap.add_argument("--baths", nargs="*", default=list(BATHS), choices=list(BATHS))
     ap.add_argument("--overlay", action="store_true",
-                    help="one figure per case with every bath and patch, md/phase_c/figures/overlay/")
+                    help="one figure per case with every bath and patch, results/phase_c/figures/overlay/")
     ap.add_argument("--momentum", action="store_true",
                     help="the target's momentum beyond the cut: massive / massless closures vs the run")
     args = ap.parse_args(argv)

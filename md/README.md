@@ -21,7 +21,7 @@
 | [imc_problem_zero_d.md](imc_code/imc_problem_zero_d.md) | `src/imc/problems/zero_d.py`: the 0-D problem; Wollaber Figs. 1–2 reproduced |
 | [imc_problem_linear_step.md](imc_code/imc_problem_linear_step.md) | `src/imc/problems/linear_step.py`: one linear step vs. S_N |
 
-Figures: `imc_code/figures/`.
+Figures: `results/imc_code/figures/`.
 
 ## `phase_b/`: Phase B of the plan (diffusion conventions, IMC in rad_hydro_sim)
 | File | Contents |
@@ -29,7 +29,7 @@ Figures: `imc_code/figures/`.
 | [phase_b_diffusion_changes.md](phase_b/phase_b_diffusion_changes.md) | **Every change made to the diffusion code**, why, how it was verified, and findings left unchanged |
 | [phase_b_results.md](phase_b/phase_b_results.md) | Diffusion vs. IMC on SiO₂ and on the paper's gold tests |
 
-Figures: `phase_b/figures/`.
+Figures: `results/phase_b/figures/`.
 
 ## `phase_c/`: Phase C of the plan (IMC in Lagrangian rad-hydro)
 | File | Contents |
@@ -43,11 +43,22 @@ Figures: `phase_b/figures/`.
 | [omega_sweep/](phase_c/omega_sweep/README.md) | Gold, ω = −0.8 … +0.6: heat front and shock (x, m) against time, diffusion and IMC with and without the flux calibration, against the solver |
 | [legacy/](phase_c/legacy/) | Superseded attempts to improve the solver's patching: fix B (a numerical moving-front target, not an analytic benchmark) and the impulse-matched patch (analytic, not a consistent improvement); how both work and why they fail: [patching_fixes_explained.md](phase_c/legacy/patching_fixes_explained.md) |
 
-Figures: `phase_c/figures/`, all full-profile figures by bath, plus per-case bath overlays; layout in [phase_c/figures/README.md](phase_c/figures/README.md).
+Figures: `results/phase_c/figures/`, all full-profile figures by bath, plus per-case bath overlays; layout in [phase_c/figures/README.md](../results/phase_c/figures/README.md).
 
 ## Where to start
 - **New to the IMC:** `theory/imc_mc_derivation.md` §1, then `imc_code/imc_core.md`.
 - **Reviewing the diffusion code changes:** `phase_b/phase_b_diffusion_changes.md`, then `phase_c/phase_c_changes.md`.
 - **What's next:** the latest status block in `plans/full_plan_imc_comparison.md`.
 
-When a later phase is added, give it its own folder (e.g. `phase_c/`), with a `figures/` subfolder next to its md files.
+When a later phase is added, give it its own folder here for its text (e.g. `phase_c/`), and put its figures and tables in `results/<phase>/` (layout: `results/README.md`).
+
+## Repositories, branches and results (2026-11-07)
+
+Every test result, figures and tables included, is now in `results/` next to the run data (map: `results/README.md`); this folder keeps only the text.
+
+| repository | remote | branches |
+|---|---|---|
+| `project3_code` (this one) | GitHub `TalRamot46/project3_code` | `main`, the stable line. `feat/patching-poc` is the current work: Phase C, the fine meshes, all of `md/phase_c/`. `docs/solver-differs-restructure` is the 4 Nov restructure of `why_the_solver_differs.md`, kept aside and not merged. `data/runs-backup` is on GitHub only and holds the run files behind the figures. |
+| `subsonic_self_similar_paper` (the manuscript) | Overleaf's git bridge (`git.overleaf.com`); no GitHub copy | `main` only, since Overleaf syncs a single branch. Pull before editing (`git pull`), and push to publish to Overleaf (`git push`). |
+| `project3_docs` | GitHub `TalRamot46/project3_docs` | `main`; the local copy is 1 commit ahead and not pushed. There is also a local branch `agents/subsonic-regime-derivation-eq443-462`. |
+

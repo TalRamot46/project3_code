@@ -37,7 +37,7 @@ BATHS = {"paper": ("paper_bath", SIM_OUT),
 BATH_TEXT = {"paper": "paper bath", "calibrated": "bath calibrated to the surface temperature",
              "calibrated_flux": "bath calibrated to the energy flux"}
 BATH_SHORT = {"paper": "paper bath", "calibrated": "T-calibrated bath", "calibrated_flux": "flux-calibrated bath"}
-FIG = ivd.REPO / "md" / "phase_c" / "figures"
+FIG = ivd.REPO / "results" / "phase_c" / "figures"
 
 
 def omega_label(omega: float) -> str:
@@ -185,7 +185,7 @@ def figure_name(label: str) -> str:
 
 
 def plot_profile_set(labels, baths=tuple(BATHS)):
-    """md/phase_c/figures/<bath>/<case>_profiles.png for every case with runs in that bath."""
+    """results/phase_c/figures/<bath>/<case>_profiles.png for every case with runs in that bath."""
     import matplotlib
     matplotlib.use("Agg")
 
@@ -417,7 +417,7 @@ SCALES = ("linear", "semilogx", "semilogy", "loglog")
 
 def plot_views(labels=VIEW_CASES, baths=tuple(BATHS)):
     """Every region x scale view of each case, in each bath folder and (cases with more than one
-    bath) in overlay/: md/phase_c/figures/<folder>/<case>/<region>_<scale>.png."""
+    bath) in overlay/: results/phase_c/figures/<folder>/<case>/<region>_<scale>.png."""
     import matplotlib
     matplotlib.use("Agg")
 
@@ -452,13 +452,13 @@ def main(argv=None):
     ap.add_argument("--N", type=int, default=400, help="cells of the omega-scan diffusion runs")
     ap.add_argument("--seeds", nargs="*", type=int, default=[], help="IMC seeds of the omega-scan runs")
     ap.add_argument("--run-only", action="store_true", help="only run the omega-scan simulations")
-    ap.add_argument("--profiles", action="store_true", help="the full-profile figures, md/phase_c/figures/<bath>/")
+    ap.add_argument("--profiles", action="store_true", help="the full-profile figures, results/phase_c/figures/<bath>/")
     ap.add_argument("--overlay", action="store_true",
-                    help="cases with more than one bath: one figure comparing them, md/phase_c/figures/overlay/")
+                    help="cases with more than one bath: one figure comparing them, results/phase_c/figures/overlay/")
     ap.add_argument("--baths", nargs="*", default=list(BATHS), choices=list(BATHS))
     ap.add_argument("--views", action="store_true",
                     help="every region (full, heat, shock) x scale (linear, semilogx, semilogy, loglog) view of --cases, "
-                         "md/phase_c/figures/<folder>/<case>/")
+                         "results/phase_c/figures/<folder>/<case>/")
     ap.add_argument("--jobs", type=int, default=0,
                     help="run --cases under --baths, diffusion and IMC with --seeds, one process per run, this many "
                          "at once (run_parallel)")

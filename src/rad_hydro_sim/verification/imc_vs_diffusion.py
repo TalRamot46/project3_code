@@ -5,10 +5,10 @@ md/phase_c/phase_c_results.md:
 
     uv run python -m rad_hydro_sim.verification.imc_vs_diffusion
     uv run python -m rad_hydro_sim.verification.imc_vs_diffusion --cases t1 test1 test2 thin100 \
-        --figures-dir md/phase_b/figures
+        --figures-dir results/phase_b/figures
     uv run python -m rad_hydro_sim.verification.imc_vs_diffusion --cases test1_full test2_full \
-        --figures-dir md/phase_c/figures/paper_bath
-    (the fronts figures land there too; md/phase_c/figures keeps only full profiles, see its
+        --figures-dir results/phase_c/figures/paper_bath
+    (the fronts figures land there too; results/phase_c/figures keeps only full profiles, see its
     README; the per-bath set comes from rad_hydro_sim.verification.bath_calibration --profiles)
 
 Radiation-only cases (Phase B, static mesh):

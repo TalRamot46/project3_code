@@ -4,7 +4,7 @@ This driver checks the central claim of `md/theory/imc_mc_derivation.md`: over o
 
 ```bash
 uv run python -m imc.problems.linear_step                                                     # table
-uv run python -m imc.problems.linear_step --figure md/imc_code/figures/m1_linear_step_vs_sn.png
+uv run python -m imc.problems.linear_step --figure results/imc_code/figures/m1_linear_step_vs_sn.png
 ```
 
 ## 1. The physics
@@ -71,7 +71,7 @@ Measured with 32 IMC seeds:
 | 1 | agrees cell by cell | S_N oscillates odd–even; cell-pair sums agree (max \|z\| = 1.8) | agrees |
 | 10 | agrees cell by cell | pair sums agree in the interior; the two boundary pairs differ | agrees |
 
-![M1 figure](figures/m1_linear_step_vs_sn.png)
+![M1 figure](../../results/imc_code/figures/m1_linear_step_vs_sn.png)
 
 How to read the figure:
 - **Left column:** census energy, with the IMC band (±2 s.e.) and the S_N line. They overlap at all three thicknesses. The band widens at σΔx = 10 because each packet travels only ~1 mean free path before it is absorbed or scattered.

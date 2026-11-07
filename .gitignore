@@ -33,9 +33,18 @@ Thumbs.db
 # ==============================================================================
 # Project outputs — generated results, large binary files
 # ==============================================================================
-results/
-!results/.gitkeep
-!results/README.md
+# results/ holds every test result. Run data (npz, pickles, logs, caches) stays untracked;
+# the figures and tables the docs show are tracked (results/README.md maps the folders).
+/results/**
+!/results/**/
+!/results/README.md
+!/results/phase_b/**
+!/results/phase_c/**
+!/results/imc_code/**
+!/results/hydro_sim/png/**
+!/results/hydro_sim_verification/png/**
+!/results/rad_hydro_sim/figures/png/**
+!/results/steinberg_comparison/**
 project3_code/results/
 !project3_code/results/.gitkeep
 !project3_code/results/README.md

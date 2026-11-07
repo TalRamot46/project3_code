@@ -96,11 +96,11 @@ uv run python -m rad_hydro_sim.verification.imc_vs_diffusion --cases test5_full 
 uv run python -m rad_hydro_sim.verification.imc_vs_diffusion --cases test5_full --bath calibrated_flux
 ```
 
-Figures: `figures/<bath>/` (one full-profile figure per case and bath) and `figures/overlay/` (one per case with more than one bath: every bath against the solver, the closest drawn bold). Layout: `figures/README.md`. Tables: `results/bath_calibration/<case>_table.md`.
+Figures: `results/phase_c/figures/<bath>/` (one full-profile figure per case and bath) and `results/phase_c/figures/overlay/` (one per case with more than one bath: every bath against the solver, the closest drawn bold). Layout: `results/phase_c/figures/README.md`. Tables: `results/bath_calibration/<case>_table.md`.
 
 ## Addendum 2026-11-07: the fine meshes
 
-The figures in `figures/` are now drawn from each test's fine mesh. That is 2.5× the cells of § 2's runs, the rule of the ω sweep's mesh-convergence check: Tests 1, 2 and 6 go from 400 to 1000 cells, Tests 4 and 5 from 1000 to 2500. Test 3 was already on its fine mesh. Diffusion and IMC seeds 1–3 ran under every bath, 60 runs in cloud sessions, all completed with energy errors ≤ 6×10⁻¹¹. The table in § 2 is the default mesh. On the fine mesh, with the change from the default mesh in percentage points in parentheses (Test 3 as in § 2):
+The figures in `results/phase_c/figures/` are now drawn from each test's fine mesh. That is 2.5× the cells of § 2's runs, the rule of the ω sweep's mesh-convergence check: Tests 1, 2 and 6 go from 400 to 1000 cells, Tests 4 and 5 from 1000 to 2500. Test 3 was already on its fine mesh. Diffusion and IMC seeds 1–3 ran under every bath, 60 runs in cloud sessions, all completed with energy errors ≤ 6×10⁻¹¹. The table in § 2 is the default mesh. On the fine mesh, with the change from the default mesh in percentage points in parentheses (Test 3 as in § 2):
 
 | case | bath | profile L1 | heat front | shock | front pressure |
 |---|---|---|---|---|---|

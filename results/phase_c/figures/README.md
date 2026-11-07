@@ -1,8 +1,8 @@
 # Phase C figures
 
-Every figure here is a full-profile figure (ρ, p, u, T against Lagrangian mass): diffusion and IMC against the semi-analytic `AblationSolver`. The folder says which bath drove the simulations (`../bath_calibration.md`).
+Every figure here is a full-profile figure (ρ, p, u, T against Lagrangian mass): diffusion and IMC against the semi-analytic `AblationSolver`. The folder says which bath drove the simulations (`../../../md/phase_c/bath_calibration.md`).
 
-> **2026-11-07: fine meshes.** Every profile figure here is now drawn from the tests' fine meshes: Tests 1, 2 and 6 at 1000 cells, Tests 4 and 5 at 2500, Test 3 on its fine mesh as before. IMC is the mean of 3 seeds. How the fine mesh changes the numbers is in `../bath_calibration.md`, Addendum 2026-11-07. To regenerate, use the fine-mesh cases; the default-mesh commands under § Regenerate would draw the default mesh over these figures:
+> **2026-11-07: fine meshes.** Every profile figure here is now drawn from the tests' fine meshes: Tests 1, 2 and 6 at 1000 cells, Tests 4 and 5 at 2500, Test 3 on its fine mesh as before. IMC is the mean of 3 seeds. How the fine mesh changes the numbers is in `../../../md/phase_c/bath_calibration.md`, Addendum 2026-11-07. To regenerate, use the fine-mesh cases; the default-mesh commands under § Regenerate would draw the default mesh over these figures:
 > ```
 > uv run python -m rad_hydro_sim.verification.bath_calibration --cases test1_fine test2_fine test3_smooth test4_fine test5_fine test6_fine --profiles
 > uv run python -m rad_hydro_sim.verification.bath_calibration --cases test1_fine test2_fine test3_smooth test4_fine test5_fine test6_fine --overlay
@@ -19,9 +19,9 @@ The analytic curve leaves out the heat solution's last sliver before its front, 
 | `calibrated_T_bath/` | bath calibrated so that the matter's surface temperature follows T_s(t): Tests 1, 2, 4, 5, 6 |
 | `calibrated_flux_bath/` | bath calibrated so that the net energy flux equals the solver's s(0, t): Tests 1–6 (Test 3 on its fine mesh) |
 | `overlay/` | one figure per case with more than one bath, at 2 ns: diffusion under every bath against the solver, the closest (smallest profile L1) drawn bold, the baths ranked in a table with their front errors |
-| `legacy/fix_B/` | figures that involve fix B, a numerical moving-front target. **Not analytic** (`../legacy/patching_poc_fix_B.md`) |
-| `legacy/impulse_patch/` | the impulse-matched patch, per bath and overlays (`../legacy/analytic_patching_impulse.md`) |
-| `legacy/omega_scan/` | the earlier gold ω scan (ω = −0.75, −0.5, −0.25 at N = 400, +0.25 at N = 2000; paper bath, 1 IMC seed), superseded by `../omega_sweep/` |
+| `legacy/fix_B/` | figures that involve fix B, a numerical moving-front target. **Not analytic** (`../../../md/phase_c/legacy/patching_poc_fix_B.md`) |
+| `legacy/impulse_patch/` | the impulse-matched patch, per bath and overlays (`../../../md/phase_c/legacy/analytic_patching_impulse.md`) |
+| `legacy/omega_scan/` | the earlier gold ω scan (ω = −0.75, −0.5, −0.25 at N = 400, +0.25 at N = 2000; paper bath, 1 IMC seed), superseded by `../../../md/phase_c/omega_sweep/` |
 | `legacy/non_profile/` | the earlier non-profile figures: fronts against time, `opacity_summary.png`, `bath_comparison.png` |
 
 Test 3's file is `test3_full_profiles.png` (its fine-mesh run, `test3_smooth`).
@@ -37,7 +37,7 @@ Test 3's file is `test3_full_profiles.png` (its fine-mesh run, `test3_smooth`).
 
 On a log field axis u, which changes sign, goes on a symmetric-log axis, linear within ±1 km/s.
 
-The y limits come from the simulations inside the window. In the shocked region they come from the shocked matter alone, simulations and solver together, between each one's heat front and shock, so the plateaus and their differences fill the panels. In the overlays the ranking table is always over the full domain. The top-level `test3_full_profiles.png` (log mass axis, linear values) and `test4_full_profiles.png` (linear) are the figures the docs link to. The gold ω sweep of the fronts against time is a separate set: `../omega_sweep/`.
+The y limits come from the simulations inside the window. In the shocked region they come from the shocked matter alone, simulations and solver together, between each one's heat front and shock, so the plateaus and their differences fill the panels. In the overlays the ranking table is always over the full domain. The top-level `test3_full_profiles.png` (log mass axis, linear values) and `test4_full_profiles.png` (linear) are the figures the docs link to. The gold ω sweep of the fronts against time is a separate set: `../../../md/phase_c/omega_sweep/`.
 
 Regenerate (seconds per case once the solvers are cached in `results/patching_poc/`):
 

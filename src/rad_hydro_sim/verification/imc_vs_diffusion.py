@@ -84,6 +84,7 @@ class HydroCase:
     imc: tuple = ()                   # extra SimulationConfig items for the IMC runs, as (key, value) pairs
     config: tuple = ()                # extra SimulationConfig items for every run, as (key, value) pairs
     log_mass_axis: bool = False       # profiles on a log mass axis (a thin ablated layer on a wide domain)
+    case_items: tuple = ()            # RadHydroCase fields to replace, as (key, value) pairs
 
 
 HYDRO_CASES = {
@@ -110,6 +111,23 @@ HYDRO_CASES = {
     "test3_smooth": HydroCase("CONSTANT_TEMPERATURE_OMEGA_0_5_FULL", r"Test 3 (Au, $\omega=+0.5$), fine mesh",
                               N=25, store_every=2000, log_mass_axis=True, config=(("max_cell_mass", 3e-4),),
                               imc=(("imc_n_emission", 2000), ("imc_n_bath", 2000), ("imc_max_census", 20000))),
+    # Test 3 started from the semi-analytic solution at 0.1 ns (initial_condition="analytic_ablation"),
+    # when the ablated layer spans ~14 surface cells, instead of a cold target at t = 0: until
+    # ~0.6 ps the layer is thinner than one surface cell, and the overdriven early shock leaves
+    # the matter it crosses (m < ~30 mg/cm^2) with 1.3-4x the solver's entropy for the rest of
+    # the run (md/phase_c/test3_analytic_start.md).  On the default mesh and on the fine mesh.
+    "test3_analytic": HydroCase("CONSTANT_TEMPERATURE_OMEGA_0_5_FULL",
+                                r"Test 3 (Au, $\omega=+0.5$), analytic start at 0.1 ns", N=25,
+                                store_every=2000, log_mass_axis=True,
+                                case_items=(("initial_condition", "analytic_ablation"), ("t_sec_start", 1e-10)),
+                                imc=(("imc_n_emission", 2000), ("imc_n_bath", 2000), ("imc_max_census", 20000))),
+    "test3_smooth_analytic": HydroCase("CONSTANT_TEMPERATURE_OMEGA_0_5_FULL",
+                                       r"Test 3 (Au, $\omega=+0.5$), fine mesh, analytic start at 0.1 ns", N=25,
+                                       store_every=2000, log_mass_axis=True, config=(("max_cell_mass", 3e-4),),
+                                       case_items=(("initial_condition", "analytic_ablation"),
+                                                   ("t_sec_start", 1e-10)),
+                                       imc=(("imc_n_emission", 2000), ("imc_n_bath", 2000),
+                                            ("imc_max_census", 20000))),
     "test4_full": HydroCase("CONSTANT_TEMPERATURE_OMEGA_MINUS_0_5_FULL", r"Test 4 (Au, $\omega=-0.5$)", N=1000,
                             store_every=40, config=(("mesh", "uniform_mass"),),
                             imc=(("imc_n_emission", 5000), ("imc_n_bath", 5000), ("imc_max_census", 30000))),
@@ -406,7 +424,8 @@ def plot_gold(out: Path, label: str, seeds, path: Path):
 def _hydro_case(spec: HydroCase, t_end=None):
     from rad_hydro_sim.problems import presets_config as P
 
-    case = replace(P.PRESET_TEST_CASES[getattr(P, spec.preset)], t_sec_end=t_end or spec.t_end)
+    case = replace(P.PRESET_TEST_CASES[getattr(P, spec.preset)], t_sec_end=t_end or spec.t_end,
+                   **dict(spec.case_items))
     if spec.x_max_mass is not None:
         assert case.omega == 0.0, "x_max_mass assumes a uniform initial density"
         case = replace(case, x_max=spec.x_max_mass / case.rho0)
@@ -570,7 +589,11 @@ def run_hydro(out: Path, label: str, seeds, rerun=False, N=None, t_end=None, imc
             return
         _, meta, hist, wall = _simulate(case, **common, **opts)
         idx = [int(np.argmin(np.abs(hist.t - ts))) for ts in snaps]
-        fronts = np.array([fronts_of_profile(hist.m[k], hist.T_material[k], hist.rho[k], hist.p[k], hist.rho[0])
+        # the shock is found against the cold target; a run seeded from the solution at t0 > 0
+        # does not start from it
+        rho_init = (_initial_density(hist.m[0], case) if case.initial_condition == "analytic_ablation"
+                    else hist.rho[0])
+        fronts = np.array([fronts_of_profile(hist.m[k], hist.T_material[k], hist.rho[k], hist.p[k], rho_init)
                            for k in range(hist.t.size)])
         # the fronts' Eulerian positions: x is stored at cell centres, the fronts at cell-centre mass
         mc = hist.m - 0.5 * np.diff(hist.m, axis=1, prepend=0.0)
@@ -751,7 +774,11 @@ def short_case_name(label: str) -> str:
     title = HYDRO_CASES[label].title
     match = re.match(r"Test (\d+)", title)
     if match:
-        return f"Test {match.group(1)}: {TEST_DESCRIPTIONS[int(match.group(1))]}"
+        name = f"Test {match.group(1)}: {TEST_DESCRIPTIONS[int(match.group(1))]}"
+        items = dict(HYDRO_CASES[label].case_items)
+        if items.get("initial_condition") == "analytic_ablation":     # seeded from the solver
+            name += f" · analytic start at {items['t_sec_start'] * 1e9:g} ns"
+        return name
     return f"Au ({title[4:]})" if title.startswith("Au, ") else title
 
 
@@ -1195,6 +1222,9 @@ FIGURE_NAMES = {"t1": "t1_sio2_outgoing_flux.png", "test1": "test1_profiles.png"
                 **{f"test{k}_full": (f"test{k}_full_profiles.png", f"test{k}_full_fronts.png") for k in range(3, 7)},
                 "test3_fine": ("test3_fine_profiles.png", "test3_fine_fronts.png"),
                 "test3_smooth": ("test3_full_profiles.png", "test3_smooth_fronts.png"),
+                # Test 3 seeded from the solution at 0.1 ns (fine mesh); views in <bath>/test3_analytic_start/
+                "test3_smooth_analytic": ("test3_analytic_start_profiles.png", "test3_analytic_start_fronts.png"),
+                "test3_analytic": ("test3_analytic_coarse_profiles.png", "test3_analytic_coarse_fronts.png"),
                 # the fine meshes draw the paper's figures, under the tests' own names
                 **{f"test{k}_fine": (f"test{k}_full_profiles.png", f"test{k}_fine_fronts.png") for k in (1, 2, 4, 5, 6)}}
 

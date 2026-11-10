@@ -138,6 +138,16 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
         T_material = calculate_temperature_from_specific_energy(e, rho, case.f_Kelvin, case.beta_Rosen, case.mu)
         T_rad = T_material.copy()
         E_rad = a_Kelvin * T_rad**4
+    elif case.initial_condition == "analytic_ablation":
+        # The cold target at T_initial, overwritten up to the shock by the semi-analytic
+        # AblationSolver at t_sec_start (see _seed_ablation_profile).
+        assert case.T_initial_Kelvin is not None
+        e_cold = case.f_Kelvin * case.T_initial_Kelvin**case.beta_Rosen * rho**(-case.mu)
+        rho, e, u, x_nodes = _seed_ablation_profile(case, x_nodes, rho, e_cold)
+        p = case.r * rho * e
+        T_material = calculate_temperature_from_specific_energy(e, rho, case.f_Kelvin, case.beta_Rosen, case.mu)
+        T_rad = T_material.copy()
+        E_rad = a_Kelvin * T_rad**4
 
     if getattr(config, "subtract_radiation_energy", False) and case.initial_condition != "temperature, density":
         raise NotImplementedError("subtract_radiation_energy needs initial_condition='temperature, density'.")
@@ -189,6 +199,107 @@ def _cap_cell_masses(x_nodes: np.ndarray, case: RadHydroCase, geom, max_cell_mas
     x_new[: j + 1] = x_nodes[: j + 1]
     x_new[-1] = x_nodes[-1]
     return x_new
+
+
+def _ablation_cache_key(case: RadHydroCase) -> tuple:
+    return (*_subsonic_heat_wave_cache_key(case), float(case.rho0), float(case.omega))
+
+
+@lru_cache(maxsize=None)
+def _get_ablation_solver(cache_key: tuple):
+    """The semi-analytic AblationSolver (heat + shock, one EOS) of a case; ~10 s to build."""
+    from menahem_new.ablation_solver_og import AblationSolver
+
+    Tb, tau, g, alpha, lambdap, f, beta, mu, r, rho0, omega = cache_key
+    return AblationSolver(
+        Tb=Tb * (1. / 1e-9)**tau, tau=tau, g=g, alpha=alpha, lambdap=lambdap,
+        f_heat=f, beta_heat=beta, mu_heat=mu, gamma_heat=r + 1.0, rho0=rho0, omega=omega,
+        f_shock=f, beta_shock=beta, mu_shock=mu, gamma_shock=r + 1.0,
+    )
+
+
+def _seed_ablation_profile(case: RadHydroCase, x_nodes: np.ndarray, rho_cold: np.ndarray,
+                           e_cold: np.ndarray, n_sub: int = 8):
+    """(rho, e, u, x_nodes) of the semi-analytic ablation solution at case.t_sec_start.
+
+    initial_condition="analytic_ablation" starts the run from the AblationSolver's profile
+    instead of a cold target at t = 0.  The solution is singular at t -> 0 (the ablation
+    pressure goes as t^c3 with c3 < 0, and so does the bath), and while the ablated layer
+    is thinner than a surface cell no mesh can follow it: the first cell is heated as a
+    block, the early shock is overdriven, and the entropy it leaves is carried with the
+    mass for the rest of the run (md/phase_c/test3_analytic_start.md).  Seeding at a t0
+    where the layer spans many cells skips that start.
+
+    The mesh keeps its cells' masses (the nodes of the cold mesh, in mass).  The nodes behind
+    the analytic shock move to the solution's positions and velocities (the surface node to
+    its boundary), so every cell's volume, and with its mass its density, is the solution's
+    exactly; ahead of the shock the cold target is untouched.  The specific energy is the
+    solution's average over the cell's mass, sampled at n_sub points, so the cell holds the
+    solution's internal energy; in the cell that holds the shock, the sub-points ahead of it
+    take the cold target's.  The cell that holds the heat front mixes the hot layer and the
+    dense shocked matter; for this EOS (p V = r E) the mixture keeps their common pressure.
+    Planar, x_min = 0.
+    """
+    if case.geom.alpha != 0 or case.x_min != 0.0:
+        raise NotImplementedError("initial_condition='analytic_ablation' is implemented for planar x_min = 0 only.")
+    t0 = float(case.t_sec_start)
+    assert t0 > 0.0, "initial_condition='analytic_ablation' requires t_sec_start > 0"
+    w = float(case.omega)
+    solver = _get_ablation_solver(_ablation_cache_key(case))
+    m_nodes = case.rho0 * x_nodes**(1.0 - w) / (1.0 - w)
+    dm = np.diff(m_nodes)
+    m_heat = float(solver.heat_solver.ablated_mass(time=t0))
+    m_shock = float(np.ravel(solver.shock_solver.shocked_mass(time=t0))[0])
+
+    def solve(mass):
+        # AblationSolver.solve needs > 2 points past the heat front; pad with some, then drop them
+        lo = max(float(mass[-1]), m_heat)
+        pad = lo + (m_shock - lo) * np.array([0.25, 0.5, 0.75])
+        out = solver.solve(mass=np.concatenate((mass, pad)), time=t0)
+        return {key: (np.asarray(val)[:mass.size] if np.ndim(val) else val) for key, val in out.items()}
+
+    # nodes: 0..k-1 lie behind the shock
+    k = int(np.searchsorted(m_nodes, m_shock))
+    x_new = x_nodes.copy()
+    if k > 1:
+        sol = solve(m_nodes[1:k])
+        x_new[1:k] = sol["position"]
+    else:
+        sol = solve(np.array([0.5 * dm[0]]))
+    if k > 0:
+        # boundary_position is in the heat solution's frame; its positions are shifted by heat_position
+        x_new[0] = sol["boundary_position"] + sol["heat_position"]
+    rho = dm / np.diff(x_new)
+    rho[k:] = rho_cold[k:]                     # cells wholly ahead of the shock: the cold target as it was
+
+    # sub-cell points (n_sub per cell, equal masses); the cold target ahead of the shock
+    assert n_sub % 2 == 0
+    m_sub = m_nodes[:-1, None] + dm[:, None] * ((np.arange(n_sub) + 0.5) / n_sub)[None, :]
+    behind = m_sub < m_shock
+    seeded = behind.any(axis=1)
+    x_sub = ((1.0 - w) * m_sub / case.rho0)**(1.0 / (1.0 - w))
+    e_sub = case.f_Kelvin * case.T_initial_Kelvin**case.beta_Rosen * (case.rho0 * x_sub**(-w))**(-case.mu)
+    u_sub = np.zeros_like(m_sub)
+    s = solve(m_sub[behind])
+    e_sub[behind] = s["pressure"] / (case.r * s["density"])
+    u_sub[behind] = s["velocity"]
+
+    # specific energy: the mass average over each cell
+    e = e_cold.copy()
+    e[seeded] = np.mean(e_sub[seeded], axis=1)
+    # node velocity: the mass average over the node's half-cells, which keeps the momentum.
+    # Point values would overweight the fast blow-off at the surface, where u falls steeply
+    # across the first cells.  The surface node carries the whole first cell in the momentum
+    # update (hydro_steps.node_masses) but stands for its first half only, so it takes the
+    # velocity that gives that half's kinetic energy instead.
+    half = n_sub // 2
+    left_half = u_sub[:, :half].mean(axis=1) * 0.5 * dm        # momentum in each cell's left half
+    right_half = u_sub[:, half:].mean(axis=1) * 0.5 * dm
+    u = np.zeros_like(x_nodes)
+    u[0] = np.sign(left_half[0]) * np.sqrt(0.5 * np.mean(u_sub[0, :half]**2))
+    u[1:-1] = (right_half[:-1] + left_half[1:]) / (0.5 * (dm[:-1] + dm[1:]))
+    u[-1] = right_half[-1] / (0.5 * dm[-1])
+    return rho, e, u, x_new
 
 
 def _subsonic_heat_wave_cache_key(case: RadHydroCase) -> tuple[float, float, float, float, float, float, float, float, float]:

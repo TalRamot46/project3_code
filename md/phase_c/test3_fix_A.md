@@ -27,7 +27,7 @@ In Test 3 (gold, ω = +0.5, paper bath) the density of diffusion and of IMC fall
 | IMC, fix A | 1.01 | 0.99 | 0.97 | 0.99 | 1.00 | 1.01 | 1.01 | 0.99 | 0.93 | 0.93 | 0.96 | 0.95 |
 
 - **The startup band is gone in both codes.** Inside the seeded region (m < 61.6 mg/cm²) the entropy p/ρ^γ is the solver's within 0.1% in diffusion and within 0.1–2.2% in IMC (largest at 2–8 mg/cm², next to the heat front; the three seeds agree to 0.5%).
-- **The fronts are unchanged.** At 2 ns against the solver: heat front −0.8% (diffusion) and −1.1% (IMC), shock +0.1% and −0.4%, ablation pressure −4.8% and −4.5%.
+- **The fronts are unchanged.** At 2 ns against the solver: heat front −0.8% (diffusion) and −1.1% (IMC), shock +0.1% and −0.4%, ablation pressure −4.8% and −4.5%. The ablation pressure is read where T = 0.3 T_s, on the hot side of the density jump; on the dense side it is within 0.6% of the solver's (`test3_hydro_only.md` § 2).
 - **Energy error:** 2×10⁻¹⁴ (diffusion, 56 min), 1.2×10⁻⁹ (IMC, 16.7 h per seed).
 
 ## What fix A does not remove

@@ -136,7 +136,11 @@ Over the solver's, same run:
 
 In the 1T run the heat front mass is within 1.3% of the solver's from 0.03 ps on and the shock mass within 1% from 0.25 ps on. Its front pressure reads 1.00–1.07 of the solver's; that reading is the largest pressure in the 30 cells beyond the front, so the ringing biases it upward (`startup.png`).
 
-Why the matter lags although gold is opaque: at 1 HeV and 1 g/cm³ the matter holds ~10³ times the energy of the radiation field (3×10¹³ against 1×10¹⁰ erg/cm³), so the radiation must be absorbed and replaced ~10³ times, each taking a mean free path over c (~5 fs there): roughly 5 ps. This is an estimate, consistent with the table. The solver assumes one temperature, so for t ≲ 0.1 ns it does not describe the 2T model, and no mesh changes that.
+**Why equilibrium is not established although gold is opaque.** The mean free path depends inversely on the density. With the test's opacity law, 1/κ = g T^α ρ^(−λ) (α = 1.5, λ = 0.2), it is
+
+  ℓ = 1/(κρ) = g T^α ρ^(−(1+λ)) ≈ 1.4×10⁻⁴ cm × T_HeV^1.5 × ρ^(−1.2)  (ρ in g/cm³).
+
+The heat wave does not run in dense gold. It runs in the ablated layer, which has expanded to 0.04–6 g/cm³ at 5 ps (0.2–20 g/cm³ at 1.4 ps; the cells at the front itself are denser), against ~10⁶ g/cm³ in the shocked matter next to it. There the mean free path is long, and each absorption takes ℓ/c ≈ 5 fs at 1 g/cm³ and 1 HeV. The matter also holds ~10³ times the energy of the radiation field (3×10¹³ against 1×10¹⁰ erg/cm³ at 1 g/cm³, 1 HeV), so the radiation must be absorbed and replaced ~10³ times before the matter has caught up: roughly 5 ps. Both factors depend on the density, ℓ as ρ^(−1.2) and the matter's energy per volume as ρ^(1−μ) = ρ^0.86, so the equilibration time goes as ρ^(−0.34): it grows as the layer expands, about 3 times longer at 0.04 g/cm³ than at 1 g/cm³. These are estimates; they are consistent with the measured temperatures above. A self-similar wave changes on the timescale of its own age, so for t ≲ 10 times this time the matter is behind the radiation. The solver assumes one temperature, so for t ≲ 0.1 ns it does not describe the 2T model, and no mesh changes that. Multiplying the coupling by χ shortens the time by χ (§ 2.3).
 
 ### 3.3 Cause 3: growing cells in the shocked region
 

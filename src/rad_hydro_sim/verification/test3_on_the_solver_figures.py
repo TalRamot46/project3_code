@@ -6,6 +6,7 @@
 - ratio_cold.png, ratio_seeded.png: density, pressure, velocity over the solver's and the entropy
   against the solver's, at 1, 1.5 and 2 ns.
 - entropy.png: the entropy p / rho^gamma against the solver's, and its change between 1 and 2 ns.
+- chi_convergence.png, chi_table.md: the 2T cold start against the coupling factor chi.
 - table.md: the ratios and the fronts at 2 ns.
 """
 from __future__ import annotations
@@ -31,7 +32,8 @@ TABLE_MASSES = np.array([2, 3, 5, 8, 12, 20, 30, 50, 100, 150, 200]) * 1e-3
 
 
 def _new(start):
-    return [n for n, (st, _, _) in t3.RUNS.items() if st == start and (t3.OUT / f"{n}.npz").exists()]
+    return [n for n, (st, _, _) in t3.RUNS.items()
+            if st == start and n not in t3.CHI and n not in t3.IMC and (t3.OUT / f"{n}.npz").exists()]
 
 
 def _load(name):
@@ -53,6 +55,17 @@ def _mean_ratios(s, runs, t, m_lo):
     return parts[0][0], ratios, float(np.mean([p[2] for p in parts]))
 
 
+IMC_COLOR = "#8e44ad"
+
+
+def _imc_runs():
+    return [_load(n) for n in t3.IMC if (t3.OUT / f"{n}.npz").exists()]
+
+
+def _imc_text():
+    return f"IMC ({len(_imc_runs())} seeds), new mesh, smeared shock, 30 K"
+
+
 def _curves(s, start, t):
     """[(mc, ratios, shock ratio, colour, text, lw)] of the old and the new runs of a start."""
     m_lo = 1.05 * float(s.heat_solver.ablated_mass(time=t))
@@ -60,6 +73,9 @@ def _curves(s, start, t):
     for stem, tags, text, color in OLD[start]:
         mc, r, shock = _mean_ratios(s, [_old(stem, tag) for tag in tags], t, m_lo)
         out.append((mc, r, shock, color, text, 1.0))
+    if start == "seeded" and _imc_runs():
+        mc, r, shock = _mean_ratios(s, _imc_runs(), t, m_lo)
+        out.append((mc, r, shock, IMC_COLOR, _imc_text(), 1.2))
     for n in _new(start):
         mc, r, shock = _mean_ratios(s, [_load(n)], t, m_lo)
         out.append((mc, r, shock, COLORS[n], t3.RUN_TEXT[n], 1.7))
@@ -237,6 +253,8 @@ def plot_entropy(path):
         entries = []                                       # (runs, colour, text, lw)
         for stem, tags, text, color in OLD[start]:
             entries.append(([_old(stem, tag) for tag in tags], color, text, 1.0))
+        if start == "seeded" and _imc_runs():
+            entries.append((_imc_runs(), IMC_COLOR, _imc_text(), 1.2))
         for n in _new(start):
             entries.append(([_load(n)], COLORS[n], t3.RUN_TEXT[n], 1.7))
         for runs, color, text, lw in entries:
@@ -270,6 +288,97 @@ def plot_entropy(path):
     plt.close(fig)
 
 
+# --------------------------------------------------------------------------- the coupling factor chi
+CHI_COLORS = {1.0: "#2f9e8f", 10.0: "#b8860b", 100.0: "#8e44ad", 1000.0: "#12305e"}
+
+
+def _chi_runs():
+    """[(chi, run name)] of the 2T cold starts at 30 K with data, chi = 1 first."""
+    runs = [(1.0, "cold_2T_30K")] + sorted((chi, n) for n, chi in t3.CHI.items())
+    return [(chi, n) for chi, n in runs if (t3.OUT / f"{n}.npz").exists()]
+
+
+def plot_chi(path, t=2e-9):
+    """The 2T cold start against the coupling factor chi, with the 1T run and the solver:
+    density and velocity over the solver's, the entropy itself, and the convergence in chi."""
+    import matplotlib.pyplot as plt
+
+    s = h.solver()
+    m_lo = 1.05 * float(s.heat_solver.ablated_mass(time=t))
+    curves = [(f"2T, $\\chi$ = {chi:g}", CHI_COLORS[chi], 1.5, _mean_ratios(s, [_load(n)], t, m_lo)) for chi, n in _chi_runs()]
+    one = _mean_ratios(s, [_load("cold_1T_30K")], t, m_lo)
+    curves.append(("1T conduction", "#c0392b", 1.5, one))
+    fig, axes = plt.subplots(2, 2, figsize=(15, 10.5))
+    for ax, key, ylabel in ((axes[0, 0], "rho", r"$\rho\,/\,\rho_{\rm solver}$"), (axes[0, 1], "u", r"$u\,/\,u_{\rm solver}$"),
+                            (axes[1, 0], "S", r"entropy $P/\rho^\gamma$ [cgs]")):
+        if key == "S":
+            mc = one[0]
+            ax.loglog(mc * 1e3, hf._reference(s, mc, t)[0]["entropy"], color=INK, lw=1.3, label="Analytic (shock solver)", zorder=5)
+        else:
+            ax.axhline(1.0, color=INK, lw=1.0)
+        for text, color, lw, (mc, r, _) in curves:
+            ax.semilogx(mc * 1e3, r[key], color=color, lw=lw, label=text)
+        ax.set_xlim(1.0, 330.0)
+        ax.set_xlabel(r"Lagrangian mass $m$ [mg/cm$^2$]")
+        ax.set_ylabel(ylabel)
+        hf._style(ax)
+    axes[0, 0].set_ylim(0.9, 1.2)
+    axes[0, 1].set_ylim(0.98, 1.01)
+    axes[0, 1].ticklabel_format(axis="y", useOffset=False)
+    axes[1, 0].set_ylim(6e5, 9e6)
+    axes[1, 0].legend(frameon=False, fontsize=10, loc="lower right")
+    axes[0, 0].set_title("Density over the solver's", loc="left", fontweight="bold")
+    axes[0, 1].set_title("Velocity over the solver's", loc="left", fontweight="bold")
+    axes[1, 0].set_title("Entropy", loc="left", fontweight="bold")
+    # convergence: entropy over the solver's at fixed masses, and the shock mass, against chi
+    ax = axes[1, 1]
+    masses = (5e-3, 12e-3, 30e-3, 100e-3)
+    shades = ("#6ea8e5", "#2f6fc0", "#12305e", "#000000")
+    chis = np.array([chi for chi, _ in _chi_runs()])
+    data = [c[3] for c in curves[:-1]]
+    for m, color in zip(masses, shades):
+        vals = [np.interp(m, mc[np.isfinite(r["A"])], r["A"][np.isfinite(r["A"])]) for mc, r, _ in data]
+        ok = np.isfinite(one[1]["A"])
+        ax.semilogx(chis, vals, color=color, lw=1.5, marker="o", ms=5, label=f"entropy at {m * 1e3:g} mg/cm$^2$")
+        ax.plot([chis[-1] * 3], [np.interp(m, one[0][ok], one[1]["A"][ok])], color=color, marker="s", ms=7, ls="none")
+    ax.semilogx(chis, [c[2] for c in data], color=ORANGE, lw=1.5, marker="o", ms=5, label="shock mass")
+    ax.plot([chis[-1] * 3], [one[2]], color=ORANGE, marker="s", ms=7, ls="none")
+    ax.axhline(1.0, color=INK, lw=1.0)
+    ax.set_xlim(chis[0] / 1.6, chis[-1] * 5)
+    ax.set_xticks(list(chis) + [chis[-1] * 3])
+    ax.set_xticklabels([f"{c:g}" for c in chis] + ["1T"])
+    ax.minorticks_off()
+    ax.set_xlabel(r"coupling factor $\chi$   (squares: the 1T run)")
+    ax.set_ylabel("over the solver's")
+    ax.set_title(r"Convergence in $\chi$", loc="left", fontweight="bold")
+    ax.legend(frameon=False, fontsize=9.5, loc="lower right")
+    hf._style(ax)
+    fig.suptitle(rf"Test 3: Au ($\omega=+0.5$) · cold start, new mesh, 30 K · 2T diffusion against the coupling factor $\chi$ · {t * 1e9:g} ns",
+                 x=0.05, ha="left", fontweight="bold", fontsize=14)
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    fig.savefig(path, dpi=140)
+    plt.close(fig)
+
+
+def chi_table(t=2e-9) -> str:
+    s = h.solver()
+    m_lo = 1.05 * float(s.heat_solver.ablated_mass(time=t))
+    rows = [(f"2T, χ = {chi:g}", n) for chi, n in _chi_runs()] + [("1T conduction", "cold_1T_30K")]
+    lines = [f"**Cold start, new mesh, 30 K, {t * 1e9:g} ns: (p/ρ^γ) / solver's**", "",
+             "| m [mg/cm²] | " + " | ".join(f"{m * 1e3:g}" for m in TABLE_MASSES)
+             + " | shock mass | heat front mass | velocity (median) | steps | wall [min] |",
+             "|---" * (TABLE_MASSES.size + 6) + "|"]
+    for text, n in rows:
+        run = _load(n)
+        mc, r, shock = _mean_ratios(s, [run], t, m_lo)
+        ok = np.isfinite(r["A"])
+        keep = ok & (mc > 2e-3)
+        lines.append(f"| {text} | " + " | ".join(f"{v:.3f}" for v in np.interp(TABLE_MASSES, mc[ok], r["A"][ok]))
+                     + f" | {shock:.3f} | {run['m_heat'][-1] / float(s.heat_solver.ablated_mass(time=t)):.3f} | "
+                     f"{np.nanmedian(r['u'][keep]):.4f} | {int(run['steps'])} | {float(run['wall']) / 60:.0f} |")
+    return "\n".join(lines)
+
+
 # --------------------------------------------------------------------------- table
 def table(t=2e-9) -> str:
     s = h.solver()
@@ -289,7 +398,7 @@ def table(t=2e-9) -> str:
         lines += [f"**{start_text}, {t * 1e9:g} ns: the heat front and the run**", "",
                   "| run | heat front mass / solver's | front pressure (dense side) / solver's | cells | steps | wall [min] |",
                   "|---|---|---|---|---|---|"]
-        for n in _new(start):
+        for n in _new(start) + [n for n in t3.IMC if start == "seeded" and (t3.OUT / f"{n}.npz").exists()]:
             r = _load(n)
             m_f = float(s.heat_solver.ablated_mass(time=t))
             lines.append(f"| {t3.RUN_TEXT[n]} | {r['m_heat'][-1] / m_f:.3f} | {r['p_dense'][-1] / (p0 * t**c3):.3f} | "
@@ -312,10 +421,15 @@ def all_figures():
     t3.FIGURES.mkdir(parents=True, exist_ok=True)
     plot_startup(t3.FIGURES / "startup.png")
     for name in t3.RUNS:
+        if name in t3.IMC and name != next(iter(t3.IMC)):
+            continue                                   # one IMC seed's profiles
         if (t3.OUT / f"{name}.npz").exists():
             plot_profiles(name, t3.FIGURES / f"profiles_{name}.png")
             plot_profiles(name, t3.FIGURES / f"full_{name}.png", region="full")
     for start in ("cold", "seeded"):
         plot_ratios(start, t3.FIGURES / f"ratio_{start}.png")
     plot_entropy(t3.FIGURES / "entropy.png")
+    if len(_chi_runs()) > 1:
+        plot_chi(t3.FIGURES / "chi_convergence.png")
+        (t3.FIGURES / "chi_table.md").write_text(chi_table() + "\n", encoding="utf-8")
     print(f"  wrote {len(list(t3.FIGURES.glob('*.png')))} figures in {t3.FIGURES.relative_to(ivd.REPO)}")

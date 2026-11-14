@@ -58,7 +58,14 @@ RUNS = {
     "seeded_2T_300K": ("seeded", "2T", 300.0),
     "seeded_2T_30K_smeared": ("seeded", "2T", 30.0),
 }
-SMEARED = {"seeded_2T_30K_smeared"}          # the seeded shock spread over the scheme's shock width
+# the 2T cold start with the matter-radiation coupling multiplied by chi (the preset has chi = 1):
+# toward the one-temperature limit
+CHI = {"cold_2T_30K_chi10": 10.0, "cold_2T_30K_chi100": 100.0, "cold_2T_30K_chi1000": 1000.0}
+RUNS.update({name: ("cold", "2T", 30.0) for name in CHI})
+# IMC from the recommended analytic start (smeared shock, 30 K); run with --t-end, it is slow
+IMC = {"seeded_IMC_30K_smeared_seed1": 1, "seeded_IMC_30K_smeared_seed2": 2}
+RUNS.update({name: ("seeded", "IMC", 30.0) for name in IMC})
+SMEARED = {"seeded_2T_30K_smeared", *IMC}          # the seeded shock spread over the scheme's shock width
 RUN_TEXT = {
     "cold_1T_30K": "1T conduction, new mesh, 30 K",
     "cold_1T_300K": "1T conduction, new mesh, 300 K",
@@ -69,6 +76,10 @@ RUN_TEXT = {
 }
 
 
+RUN_TEXT.update({name: f"IMC seed {seed}, new mesh, smeared shock, 30 K" for name, seed in IMC.items()})
+RUN_TEXT.update({name: rf"2T diffusion, $\chi$ = {chi:g}, new mesh, 30 K" for name, chi in CHI.items()})
+
+
 def case_and_config(name: str, t_end: float = 2e-9):
     start, physics, T0 = RUNS[name]
     spec = ivd.HYDRO_CASES[BASE]
@@ -76,6 +87,10 @@ def case_and_config(name: str, t_end: float = 2e-9):
     cfg = dict(N=spec.N, store_every=2000, show_plot=False, energy_diagnostics=True,
                dt_ramp_max=spec.dt_max, bath_drive="paper", **ivd.HYDRO_MATCHED)
     cfg.update(dict(MESH_SEEDED if start == "seeded" else MESH))
+    if name in CHI:
+        case = replace(case, chi=CHI[name])
+    if name in IMC:
+        cfg.update(dict(spec.imc), radiation_solver="imc", imc_seed=IMC[name])
     if physics == "1T":
         # the solver's equation: one temperature, T(0, t) = T_s(t) on the surface, no bath
         case = replace(case, force_black="conduction")
@@ -129,7 +144,7 @@ def run(name: str, t_end: float = 2e-9, rerun: bool = False):
     frames = {f"frames_{key}": getattr(hist, attr)[fr].astype(np.float32)
               for key, attr in (("rho", "rho"), ("p", "p"), ("u", "u"), ("T", "T_material"))}
     b = meta["energy_budget"]
-    err = float(np.max(np.abs(b["relative_error"]))) if RUNS[name][1] == "2T" else np.nan
+    err = float(np.max(np.abs(b["relative_error"]))) if RUNS[name][1] != "1T" else np.nan
     np.savez(path, t=hist.t[idx], m=hist.m[idx], x=hist.x[idx], rho=hist.rho[idx], p=hist.p[idx],
              u=hist.u[idx], T_material=hist.T_material[idx], T_rad=hist.T[idx],
              series_t=hist.t, m_heat=front[:, 0], p_dense=front[:, 1], m_shock=np.array(shock),

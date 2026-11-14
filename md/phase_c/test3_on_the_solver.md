@@ -1,8 +1,8 @@
 # Test 3 on the solver: what separates the simulations from the semi-analytic solution, and what removes it
 
-Branch `feat/patching-poc`, 2026-11-14. Test 3 is gold with ω = +0.5, T_s = 1 HeV, to 2 ns. Follows [test3_fix_A.md](test3_fix_A.md) and [test3_hydro_only.md](test3_hydro_only.md).
+Branch `feat/patching-poc`, 2026-11-14 (χ scan and IMC added the same day). Test 3 is gold with ω = +0.5, T_s = 1 HeV, to 2 ns. Follows [test3_fix_A.md](test3_fix_A.md) and [test3_hydro_only.md](test3_hydro_only.md).
 
-**Result.** A cold start from t = 0 can sit on the solver. With the one-temperature conduction mode, a geometric surface mesh and a 30 K target, the shocked region at 2 ns (2 mg/cm² to the shock) has, over the solver's: density 0.994 (median; range 0.973–1.022), entropy p/ρ^γ 1.007 (1.001–1.027), pressure 1.000 (0.978–1.030), velocity 1.0005 (0.996–1.007), shock mass 0.999, heat front mass 0.992. The old cold start had density 0.40–0.95 and entropy 1.07–3.1 there. The two-temperature diffusion code cannot do this from t = 0, and IMC presumably cannot either (not run): for them the analytic start at 0.1 ns stays, now with a smeared seeded shock and a 30 K target.
+**Result.** A cold start from t = 0 can sit on the solver. With the one-temperature conduction mode, a geometric surface mesh and a 30 K target, the shocked region at 2 ns (2 mg/cm² to the shock) has, over the solver's: density 0.994 (median; range 0.973–1.022), entropy p/ρ^γ 1.007 (1.001–1.027), pressure 1.000 (0.978–1.030), velocity 1.0005 (0.996–1.007), shock mass 0.999, heat front mass 0.992. The old cold start had density 0.40–0.95 and entropy 1.07–3.1 there. The two-temperature diffusion code reaches the same result from t = 0 when its matter–radiation coupling is multiplied by χ ≥ 100, at a quarter of the cost (§ 2.3). With its own coupling (χ = 1) it cannot, and IMC has no such factor: for them the analytic start at 0.1 ns stays, now with a smeared seeded shock and a 30 K target. IMC run that way is on the solver within its noise (§ 2.4). All figures on one page: [test3_figures.md](test3_figures.md).
 
 Words used here: **1T** is `force_black="conduction"`, one temperature and the surface temperature imposed, which is the solver's own equation. **2T** is the gray diffusion with separate radiation and matter temperatures and the paper bath, the code of all earlier Test 3 runs. **Entropy** is the entropy function p/ρ^γ, γ = 1.25. **Old mesh** is `test3_smooth` (1237 cells).
 
@@ -13,7 +13,7 @@ Words used here: **1T** is `force_black="conduction"`, one temperature and the s
 | # | Cause | Its mark | Cure | How it was established |
 |---|---|---|---|---|
 | 1 | The ablated layer is thinner than a surface cell at the start | cold start: entropy ×1.3–5 at 0.5–20 mg/cm² (old mesh) | surface mesh with geometrically growing cells | two such meshes give the same answer (§ 3.1) |
-| 2 | Matter and radiation are out of equilibrium for the first ~0.1 ns (2T, IMC) | cold start: shock up to 17% too weak at 1–5 ps, entropy ×0.83 at 12–20 mg/cm² | 1T mode; or an analytic start at 0.1 ns | measured temperatures (§ 3.2); the 1T run has no such mark |
+| 2 | Matter and radiation are out of equilibrium for the first ~0.1 ns (2T, IMC) | cold start: shock up to 17% too weak at 1–5 ps, entropy ×0.83 at 12–20 mg/cm² | 1T mode; or χ ≥ 100 in the 2T code; or an analytic start at 0.1 ns | measured temperatures (§ 3.2); the 1T run has no such mark; the mark shrinks with χ (§ 2.3) |
 | 3 | A shock crossing cells of growing mass | entropy +0.9 × (growth − 1): +4.5% at 5% growth | 0.3% growth in the shocked region | hydro-only runs at 5%, 2%, 1% (§ 3.3) |
 | 4 | The 300 K target: the shock has Mach 11.5, the solver's is infinite | density −6%, entropy +8%, velocity −0.7% in matter the run shocks | 30 K target (Mach 73) | 30 K and 300 K runs, 1T and 2T (§ 2) |
 | 5 | The seeded shock is a sharp jump | analytic start: entropy ×1.53 in 4 cells where the shock was seeded | seed the shock over the scheme's own shock width | sharp and smeared runs (§ 2.2) |
@@ -62,6 +62,42 @@ Over the solver's, 2 mg/cm² to the shock, median and range:
 - **An earlier start is not better.** The seeding marks sit where the shock is at the start time (5.7 mg/cm² at 1 ps), and before ~0.1 ns the 2T code's front pressure is more than 2–5% from the solver's (§ 3.2).
 
 ![analytic start](../../results/phase_c/figures/test3_on_the_solver/ratio_seeded.png)
+
+### 2.3 The 2T code against the coupling factor χ
+
+Cold start, new mesh, 30 K, the preset's coupling multiplied by χ (`RadHydroCase.chi`; the preset has χ = 1). Entropy over the solver's at 2 ns:
+
+| m [mg/cm²] | 2 | 3 | 5 | 8 | 12 | 20 | 30 | 50 | 100 | 200 | shock mass | velocity | steps | wall [min] |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2T, χ = 1 | 1.088 | 0.996 | 0.910 | 0.856 | 0.832 | 0.831 | 0.853 | 0.897 | 0.946 | 0.974 | 0.989 | 0.992 | 1.65 M | 21 |
+| 2T, χ = 10 | 1.109 | 1.032 | 0.972 | 0.955 | 0.959 | 0.971 | 0.982 | 0.991 | 0.997 | 0.999 | 0.997 | 0.998 | 1.78 M | 21 |
+| 2T, χ = 100 | 1.041 | 1.023 | 1.015 | 1.011 | 1.006 | 1.004 | 1.008 | 1.010 | 1.001 | 1.001 | 0.998 | 0.999 | 2.04 M | 24 |
+| 2T, χ = 1000 | 1.051 | 1.040 | 1.026 | 1.017 | 1.015 | 1.009 | 1.012 | 1.012 | 1.001 | 1.002 | 0.999 | 0.999 | 2.20 M | 26 |
+| 1T conduction | 1.023 | 1.017 | 1.013 | 1.010 | 1.011 | 1.007 | 1.012 | 1.013 | 1.003 | 1.005 | 0.999 | 1.0005 | 4.37 M | 88 |
+
+- **The deficit closes with χ**: at 12 mg/cm², 0.832 → 0.959 → 1.006 → 1.015, against 1.011 in the 1T run. χ = 100 and χ = 1000 are within 0.5% of the 1T run beyond 12 mg/cm².
+- **Below 5 mg/cm² the χ runs are 1–3% above the 1T run**, χ = 1000 more than χ = 100. That matter was shocked in the first ~0.8 ps; not investigated.
+- **The surface follows.** Matter temperature at the surface at 0.1 ps: 0.51 HeV (χ = 1), 0.76 (10), 0.94 (100), 0.99 (1000). Front pressure over the solver's at 1 ps: 0.86, 0.96, 1.02, 1.03.
+- **Energy** is conserved to 3–6×10⁻¹⁴ in all four, which the 1T mode cannot show (§ 5).
+- **Cost**: 21–26 min against 88 min for the 1T mode.
+
+![chi](../../results/phase_c/figures/test3_on_the_solver/chi_convergence.png)
+
+### 2.4 IMC from the recommended analytic start
+
+`seeded_IMC_30K_smeared_seed1`, `_seed2`: IMC (2000 emission and 2000 bath packets per step, census capped at 20 000), solver's profile at 0.1 ns, smeared shock, 30 K, new shocked-region mesh, to 2 ns. 1.39 million steps, 84 min each, energy error 1.2×10⁻⁹. Mean of the two seeds over the solver's at 2 ns, 2 mg/cm² to the shock:
+
+| | density | entropy | pressure | velocity | shock mass | heat front mass |
+|---|---|---|---|---|---|---|
+| IMC, old mesh, 300 K, sharp seam (fix A, 3 seeds) | 0.93–1.01 | 1.00–1.07 | 0.98–1.02 | 0.983–0.991 | 0.995 | 0.989 |
+| IMC, new mesh, 30 K, smeared shock (2 seeds) | 0.997 (0.937–1.040) | 1.001 (0.961–1.068) | 0.988 (0.943–1.063) | 0.990 (0.981–1.003) | 0.994 | 0.989 |
+| 2T, same start | 0.995 (0.945–1.019) | 1.000 (0.985–1.070) | 0.995 (0.973–1.022) | 0.997 (0.992–1.003) | 0.998 | 0.991 |
+
+- **IMC behaves like the 2T run.** The 300 K plateau beyond 62 mg/cm² is gone (entropy 1.006 at 70 mg/cm², was 1.07), and the seeded shock leaves ×1.027 in entropy, the same as in the 2T run.
+- **Beyond 100 mg/cm² IMC's entropy is 0.4–2.3% below the solver's** (0.977 at 100 and 200 mg/cm², 0.996 at 150); the 2T run has 0.99–1.01 there.
+- **IMC's velocity stays 1% low** (0.990; 2T 0.997) and its shock 0.6% behind, as in every earlier IMC run.
+- **IMC's entropy next to the front still rises in time**: +0.65% between 1 and 2 ns at 2–10 mg/cm² (seed 1), +0.13% at 10–60. On the old mesh it was 0.5–2.3% with a jump where the cell mass started to grow; that jump is gone with the growth zone.
+- The front pressure in `table.md` reads 1.04 for IMC: it is the largest pressure among 30 noisy cells, not a 4% excess.
 
 ## 3. The evidence for each cause
 
@@ -112,14 +148,15 @@ Pressure on the dense side of the front over the solver's, 2T seeded at 0.1 ns, 
 
 ## 4. What to use
 
-- **Diffusion against the solver:** `cold_1T_30K` (1T, new mesh, 30 K, cold start). Within 3% in density and entropy and 1% in velocity from 2 mg/cm² to the shock, no analytic start.
-- **The 2T code and IMC:** an analytic start at 0.1 ns with a 30 K target and the smeared shock (`seeded_2T_30K_smeared`). Within 1% outside the pulse marks.
+- **Diffusion against the solver:** a cold start on the new mesh at 30 K, with either the 2T code at χ = 100 (`cold_2T_30K_chi100`: 24 min, energy conservation checked) or the 1T mode (`cold_1T_30K`: 88 min). Both are within 3% in density and entropy and 1% in velocity from 2 mg/cm² to the shock, with no analytic start.
+- **The 2T code with its own coupling, and IMC:** an analytic start at 0.1 ns with a 30 K target and the smeared shock (`seeded_2T_30K_smeared`, `seeded_IMC_30K_smeared_seed*`). 2T: within 1% outside the pulse marks. IMC: the same within its noise (±4–6% in density and pressure per cell with 2 seeds), velocity 1% low.
 - **Reading the ablation pressure:** on the dense side of the front (`test3_hydro_only.md` § 2).
 
 ## 5. What is not established
 
-- **IMC was not run** in any new configuration (16.7 h per seed on the old mesh). That an IMC run seeded as `seeded_2T_30K_smeared` behaves like the 2T run is expected, not shown.
-- **Energy conservation of the 1T runs is not measured.** The energy budget does not record the conduction mode's surface flux. The 2T runs conserve energy to 5×10⁻¹⁴.
+- **IMC from a cold start was not run** on the new mesh. It has no coupling factor, so it is expected to show the χ = 1 deficit; not shown.
+- **A χ > 1 changes the model**, not the numerics: it is a device to reach the solver's one-temperature limit, not gold's coupling.
+- **Energy conservation of the 1T runs is not measured.** The energy budget does not record the conduction mode's surface flux. The 2T runs conserve energy to 6×10⁻¹⁴ (χ = 1 to 1000), IMC to 1.2×10⁻⁹.
 - **The 1T run's remaining entropy excess** (1% at 5–50 mg/cm², 2–3% below 3 mg/cm²) was not converged against the mesh: one mesh only.
 - **The 1T heat front is 0.8% behind** the solver's at 0.5–2 ns, as in every earlier run; not investigated.
 - **The 2T velocity is 0.3% low (seeded) and 0.8% low (cold) at 30 K**, where 1T has 1.000. Not explained.
@@ -130,12 +167,12 @@ Pressure on the dense side of the front over the solver's, 2T seeded at 0.1 ns, 
 - `simulation/iterator.py`: `mesh="log_mass"` (`_log_mass_nodes`); `seed_shock_on_face` (`_start_with_shock_on_face`); `seed_shock_smeared` (`_smear_seeded_shock`).
 - `simulation/radiation_step.py`: the conduction mode in `full_rad_hydro` starts each step from the matter energy after the hydro step. Before, it carried the temperature in `E_rad` and would have ignored compression and shock heating; it was only used without hydro.
 - `hydro_sim/problems/simulation_config.py`: `log_mass_first`, `log_mass_segments`, `seed_shock_on_face`, `seed_shock_smeared`.
-- `verification/test3_on_the_solver.py`, `test3_on_the_solver_figures.py`: the runs, figures, table and slider.
+- `verification/test3_on_the_solver.py`, `test3_on_the_solver_figures.py`: the runs (also the χ scan and IMC), figures, tables and slider.
 
 ## 7. Reproduce
 
 ```
-uv run python -m rad_hydro_sim.verification.test3_on_the_solver --run-all --jobs 4      # 6 runs: 16-88 min each
+uv run python -m rad_hydro_sim.verification.test3_on_the_solver --run-all --jobs 4      # 11 runs: 16-88 min each (IMC: 84 min)
 uv run python -m rad_hydro_sim.verification.test3_on_the_solver --figures --table
 uv run python -m rad_hydro_sim.verification.test3_on_the_solver --slider cold_1T_30K
 ```

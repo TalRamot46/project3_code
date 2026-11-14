@@ -196,7 +196,7 @@ def plot_ratios(start, path):
     s = h.solver()
     names = [n for n, (st, _) in h.RUNS.items() if st == start and (h.OUT / f"{n}.npz").exists()]
     rows = (("rho", r"$\rho\,/\,\rho_{\rm solver}$"), ("p", r"$P\,/\,P_{\rm solver}$"),
-            ("u", r"$u\,/\,u_{\rm solver}$"), ("A", r"$(P/\rho^\gamma)\,/\,$solver's"))
+            ("u", r"$u\,/\,u_{\rm solver}$"), ("A", r"entropy $P/\rho^\gamma$ [cgs]"))
     fig, axes = plt.subplots(len(rows), len(h.FIGURE_NS), figsize=(16, 13), sharex=True, sharey="row")
     for j, t_ns in enumerate(h.FIGURE_NS):
         t = t_ns * 1e-9
@@ -214,9 +214,17 @@ def plot_ratios(start, path):
             curves.append((mc, r, color, h.RUN_TEXT[n], 1.7, 3))
         for i, (key, ylabel) in enumerate(rows):
             ax = axes[i, j]
-            ax.axhline(1.0, color=INK, lw=1.0, zorder=1)
-            for mc, r, color, text, lw, z in curves:
-                ax.semilogx(mc * 1e3, r[key], color=color, lw=lw, label=text, zorder=z)
+            if key == "A":                    # the entropy itself (ratio x the solver's), against the solver's
+                for mc, r, color, text, lw, z in curves:
+                    ax.loglog(mc * 1e3, r[key] * _reference(s, mc, t)[0]["entropy"], color=color, lw=lw, label=text, zorder=z)
+                mc = curves[-1][0]
+                ax.loglog(mc * 1e3, _reference(s, mc, t)[0]["entropy"], color=INK, lw=1.3,
+                          label="Analytic (shock solver)", zorder=5)
+            else:
+                ax.axhline(1.0, color=INK, lw=1.0, zorder=1)
+                for mc, r, color, text, lw, z in curves:
+                    ax.semilogx(mc * 1e3, r[key], color=color, lw=lw, label=text, zorder=z)
+                ax.ticklabel_format(axis="y", useOffset=False)
             if j == 0:
                 ax.set_ylabel(ylabel)
             if i == 0:
@@ -225,16 +233,15 @@ def plot_ratios(start, path):
                 ax.set_xlabel(r"Lagrangian mass $m$ [mg/cm$^2$]")
             ax.set_xlim(1.0, 330.0)
             _style(ax)
-            ax.ticklabel_format(axis="y", useOffset=False)
     wide = start == "cold"
     axes[0, 0].set_ylim((0.3, 1.15) if wide else (0.88, 1.06))
     axes[1, 0].set_ylim(0.9, 1.1)
     axes[2, 0].set_ylim(0.96, 1.04)
-    axes[3, 0].set_ylim((0.9, 3.4) if wide else (0.97, 1.13))
-    handles, labels = axes[0, 0].get_legend_handles_labels()
+    axes[3, 0].set_ylim(6e5, 9e6)
+    handles, labels = axes[3, 0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper left", bbox_to_anchor=(0.05, 0.955), ncol=3, frameon=False, fontsize=10.5)
     start_text = "cold start (t = 0)" if start == "cold" else "analytic start at 0.1 ns"
-    fig.suptitle(rf"Test 3: Au ($\omega=+0.5$) · shocked region over the solver's · {start_text}",
+    fig.suptitle(rf"Test 3: Au ($\omega=+0.5$) · shocked region: density, pressure, velocity over the solver's, and the entropy · {start_text}",
                  x=0.05, ha="left", fontweight="bold", fontsize=14)
     fig.tight_layout(rect=(0, 0, 1, 0.91))
     fig.savefig(path, dpi=140)
@@ -305,7 +312,7 @@ def plot_entropy(path):
 
     s = h.solver()
     t1, t2 = 1e-9, 2e-9
-    fig, axes = plt.subplots(3, 2, figsize=(15, 13.5), sharex=True, sharey="row")
+    fig, axes = plt.subplots(2, 2, figsize=(15, 10), sharex=True, sharey="row")
     shown = {"cold": ("cold_p_solver", "cold_p_diffusion", "cold_piston"),
              "seeded": ("seeded_p_solver", "seeded_p_diffusion", "seeded_p_solver_30K")}
     for j, start in enumerate(("cold", "seeded")):
@@ -332,38 +339,27 @@ def plot_entropy(path):
         for mc, A2, _, ratio, color, text, lw in curves:
             ax.loglog(mc * 1e3, np.where(np.isfinite(ratio), A2, np.nan), color=color, lw=lw, label=text)
         ax.loglog(curves[0][0] * 1e3, ref["entropy"], color=INK, lw=1.3, label="Analytic (shock solver)", zorder=5)
-        ax.set_title(("Cold start (t = 0)" if start == "cold" else "Analytic start at 0.1 ns") + r" · $A=P/\rho^\gamma$ at 2 ns",
+        ax.set_title(("Cold start (t = 0)" if start == "cold" else "Analytic start at 0.1 ns") + r" · entropy $P/\rho^\gamma$ at 2 ns",
                      loc="left", fontweight="bold")
         ax = axes[1, j]
-        ax.axhline(1.0, color=INK, lw=1.0)
-        for mc, _, _, ratio, color, text, lw in curves:
-            ax.semilogx(mc * 1e3, ratio, color=color, lw=lw)
-        ax.set_title("over the solver's, 2 ns", loc="left", fontweight="bold")
-        ax = axes[2, j]
         ax.axhline(0.0, color=INK, lw=1.0)
         for mc, A2, A1, _, color, text, lw in curves:
             lo = 1.05 * m_f if "rad-hydro" in text else 1e-3
             keep = (mc > lo) & (mc < 0.97 * m_s1)           # matter already shocked at 1 ns
             ax.semilogx(mc * 1e3, np.where(keep, 100.0 * (A2 / A1 - 1.0), np.nan), color=color, lw=lw)
-        ax.set_title("change of each element's $A$ between 1 and 2 ns", loc="left", fontweight="bold")
+        ax.set_title("change of each element's entropy between 1 and 2 ns", loc="left", fontweight="bold")
         ax.set_xlabel(r"Lagrangian mass $m$ [mg/cm$^2$]")
         for ax in axes[:, j]:
             ax.set_xlim(1.0, 330.0)
             _style(ax)
     axes[0, 0].set_ylabel(r"$P/\rho^\gamma$ [cgs]")
-    axes[1, 0].set_ylabel(r"$A\,/\,A_{\rm solver}$")
-    axes[1, 0].set_yscale("log")
-    axes[1, 0].set_ylim(0.9, 3.5)
-    axes[1, 0].set_yticks([1, 1.25, 1.5, 2, 2.5, 3])
-    axes[1, 0].set_yticklabels(["1", "1.25", "1.5", "2", "2.5", "3"])
-    axes[1, 0].minorticks_off()
-    axes[2, 0].set_ylabel(r"$A(2\,{\rm ns})/A(1\,{\rm ns})-1$ [%]")
-    axes[2, 0].set_ylim(-1.0, 3.0)
+    axes[1, 0].set_ylabel(r"$(P/\rho^\gamma)_{2\,{\rm ns}}\,/\,(P/\rho^\gamma)_{1\,{\rm ns}}-1$ [%]")
+    axes[1, 0].set_ylim(-1.0, 3.0)
     axes[0, 0].set_ylim(6e5, 9e6)
     for j in (0, 1):
         axes[0, j].legend(frameon=False, fontsize=9.5, loc="lower right")
     fig.suptitle(r"Test 3: Au ($\omega=+0.5$) · entropy of the shocked region", x=0.05, ha="left",
                  fontweight="bold", fontsize=14)
-    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
     fig.savefig(path, dpi=140)
     plt.close(fig)

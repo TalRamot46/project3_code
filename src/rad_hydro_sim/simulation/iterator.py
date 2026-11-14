@@ -61,10 +61,20 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
             case.x_min, case.x_max, config.N, omega=omega, d=d_dim,
             refine_by_mass=case.has_ablation_surface,
         )
+    elif mesh == "log_mass":
+        # A self-similar mesh for a self-similar start (md/phase_c/test3_on_the_solver.md): the
+        # cell mass grows by a fixed factor per cell from a very thin first cell, dm ~ (g - 1) m.
+        # The ablated layer of the solution has no scale at t -> 0, so on a mesh with equal
+        # surface cells it is thinner than one cell at first and the early shock is overdriven;
+        # here it spans ~ln(m_f / m_1) / (g - 1) cells once the first cells are ablated.
+        # config.log_mass_segments: (growth, cap, until) per segment, see _log_mass_nodes.
+        if geom.alpha != 0 or case.x_min != 0.0:
+            raise NotImplementedError("mesh='log_mass' is implemented for planar x_min = 0 only.")
+        x_nodes = _log_mass_nodes(case, float(config.log_mass_first), config.log_mass_segments)
     else:
-        raise ValueError(f"mesh must be 'default' or 'uniform_mass', got {mesh!r}")
+        raise ValueError(f"mesh must be 'default', 'uniform_mass' or 'log_mass', got {mesh!r}")
     max_cell_mass = getattr(config, "max_cell_mass", None)
-    if max_cell_mass is not None:
+    if max_cell_mass is not None and mesh != "log_mass":
         x_nodes = _cap_cell_masses(x_nodes, case, geom, float(max_cell_mass))
     x_cells = 0.5 * (x_nodes[:-1] + x_nodes[1:])
 
@@ -143,7 +153,10 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
         # AblationSolver at t_sec_start (see _seed_ablation_profile).
         assert case.T_initial_Kelvin is not None
         e_cold = case.f_Kelvin * case.T_initial_Kelvin**case.beta_Rosen * rho**(-case.mu)
-        rho, e, u, x_nodes = _seed_ablation_profile(case, x_nodes, rho, e_cold)
+        if getattr(config, "seed_shock_on_face", False):
+            case = replace(case, t_sec_start=_start_with_shock_on_face(case, x_nodes))
+        smear = config.sigma_visc if getattr(config, "seed_shock_smeared", False) else None
+        rho, e, u, x_nodes = _seed_ablation_profile(case, x_nodes, rho, e_cold, smear_shock=smear)
         p = case.r * rho * e
         T_material = calculate_temperature_from_specific_energy(e, rho, case.f_Kelvin, case.beta_Rosen, case.mu)
         T_rad = T_material.copy()
@@ -201,6 +214,29 @@ def _cap_cell_masses(x_nodes: np.ndarray, case: RadHydroCase, geom, max_cell_mas
     return x_new
 
 
+def _log_mass_nodes(case: RadHydroCase, first: float, segments) -> np.ndarray:
+    """Nodes of mesh='log_mass'.  The first cell has mass `first`; in each segment
+    (growth, cap, until) the cell mass grows by `growth` per cell up to `cap`, until the
+    cumulative mass passes `until` (the last segment runs to the end of the domain).
+    Planar, x_min = 0, rho0 x^-omega: m(x) = rho0 x^(1-omega) / (1-omega)."""
+    if not first > 0.0:
+        raise ValueError("mesh='log_mass' needs log_mass_first > 0")
+    w = case.omega
+    m_total = case.rho0 * case.x_max ** (1.0 - w) / (1.0 - w)
+    segments = [tuple(float(v) for v in seg) for seg in segments]
+    m_nodes, size = [0.0], first
+    for i, (growth, cap, until) in enumerate(segments):
+        end = m_total if i == len(segments) - 1 else min(until, m_total)
+        while m_nodes[-1] < end:
+            m_nodes.append(min(m_nodes[-1] + size, m_total))
+            size = min(size * growth, cap)
+    if len(m_nodes) > 3 and m_nodes[-1] - m_nodes[-2] < 0.5 * (m_nodes[-2] - m_nodes[-3]):
+        m_nodes.pop(-2)                        # merge a sliver into the last cell
+    x_nodes = ((1.0 - w) * np.asarray(m_nodes) / case.rho0) ** (1.0 / (1.0 - w))
+    x_nodes[-1] = case.x_max
+    return x_nodes
+
+
 def _ablation_cache_key(case: RadHydroCase) -> tuple:
     return (*_subsonic_heat_wave_cache_key(case), float(case.rho0), float(case.omega))
 
@@ -218,8 +254,26 @@ def _get_ablation_solver(cache_key: tuple):
     )
 
 
+def _start_with_shock_on_face(case: RadHydroCase, x_nodes: np.ndarray) -> float:
+    """The start time nearest case.t_sec_start at which the solver's shock is on a cell face.
+
+    A cell that holds the seeded shock starts as a mixture of shocked and cold matter; the
+    shock re-forms inside it and the cell keeps a wrong entropy (rho -31% in Test 3).  The
+    shocked mass is a power law of time, so the time at which it equals a node's mass is exact.
+    """
+    t0 = float(case.t_sec_start)
+    w = float(case.omega)
+    shock = _get_ablation_solver(_ablation_cache_key(case)).shock_solver
+    m_nodes = case.rho0 * x_nodes**(1.0 - w) / (1.0 - w)
+    m_shock = float(np.ravel(shock.shocked_mass(time=t0))[0])
+    power = np.log(float(np.ravel(shock.shocked_mass(time=2.0 * t0))[0]) / m_shock) / np.log(2.0)
+    k = int(np.argmin(np.abs(m_nodes - m_shock)))
+    # a hair before the node, so the node itself counts as ahead of the shock
+    return t0 * (m_nodes[k] * (1.0 - 1e-10) / m_shock) ** (1.0 / power)
+
+
 def _seed_ablation_profile(case: RadHydroCase, x_nodes: np.ndarray, rho_cold: np.ndarray,
-                           e_cold: np.ndarray, n_sub: int = 8):
+                           e_cold: np.ndarray, n_sub: int = 8, smear_shock=None):
     """(rho, e, u, x_nodes) of the semi-analytic ablation solution at case.t_sec_start.
 
     initial_condition="analytic_ablation" starts the run from the AblationSolver's profile
@@ -238,6 +292,8 @@ def _seed_ablation_profile(case: RadHydroCase, x_nodes: np.ndarray, rho_cold: np
     solution's internal energy; in the cell that holds the shock, the sub-points ahead of it
     take the cold target's.  The cell that holds the heat front mixes the hot layer and the
     dense shocked matter; for this EOS (p V = r E) the mixture keeps their common pressure.
+    smear_shock (the viscosity coefficient, or None): spread the shock over the scheme's own
+    shock width, see _smear_seeded_shock; needs the shock on a cell face.
     Planar, x_min = 0.
     """
     if case.geom.alpha != 0 or case.x_min != 0.0:
@@ -299,7 +355,52 @@ def _seed_ablation_profile(case: RadHydroCase, x_nodes: np.ndarray, rho_cold: np
     u[0] = np.sign(left_half[0]) * np.sqrt(0.5 * np.mean(u_sub[0, :half]**2))
     u[1:-1] = (right_half[:-1] + left_half[1:]) / (0.5 * (dm[:-1] + dm[1:]))
     u[-1] = right_half[-1] / (0.5 * dm[-1])
+    if smear_shock is not None:
+        rho, e, u, x_new = _smear_seeded_shock(case, k, dm, rho, e, u, x_new, rho_cold, e_cold, float(smear_shock))
     return rho, e, u, x_new
+
+
+def _smear_seeded_shock(case, k, dm, rho, e, u, x_nodes, rho_cold, e_cold, sigma_visc):
+    """Spread the seeded shock (on the face of node k) over the cells the scheme itself uses.
+
+    A sharp jump is not a state the scheme can carry: the artificial viscosity
+    q = sigma rho (du)^2 holds a steady shock as half a sine in the specific volume, of width
+    pi sqrt(2 sigma / (gamma + 1)) cells (2.96 for sigma = 1, gamma = 1.25).  Seeded sharp, the
+    shock relaxes to that shape in its first steps and the cells it crosses meanwhile keep
+    ~50% too much entropy.  Here the cells within that width take the sine's specific volume,
+    V = eta V_cold with eta from V_shocked / V_cold to 1, and the energy and velocity of a
+    steady shock at that compression (mass flux j, with the viscous stress in the momentum):
+        e = e_cold + p_cold (V_cold - V) + j^2 (V_cold - V)^2 / 2,    u = j (V_cold - V).
+    The sine is centred on the shock's face, so the zone keeps its width, mass and (to the
+    cells' mass ratio) its momentum.
+    """
+    gamma = case.r + 1.0
+    V1, V2 = 1.0 / rho_cold[k], 1.0 / rho[k - 1]
+    c = V2 / (1.0 / rho_cold[k - 1])                         # the shocked compression, ~ (gamma-1)/(gamma+1)
+    p1, p2 = case.r * rho_cold[k] * e_cold[k], case.r * rho[k - 1] * e[k - 1]
+    j2 = (p2 - p1) / (V1 - V2)
+    kappa = np.sqrt((gamma + 1.0) / (2.0 * sigma_visc))      # phase per cell
+
+    def eta(offset):                                         # V / V_cold at `offset` cells from the face
+        return 0.5 * (1.0 + c) + 0.5 * (1.0 - c) * np.sin(np.clip(kappa * offset, -0.5 * np.pi, 0.5 * np.pi))
+
+    rho, e, u, x = rho.copy(), e.copy(), u.copy(), x_nodes.copy()
+    reach = int(np.ceil(0.5 * np.pi / kappa + 0.5))
+    cells = [i for i in range(k - reach, k + reach) if c < eta(i - k + 0.5) < 1.0]
+    u2 = u[cells[0]]                                         # the solution's velocity behind the zone
+    for i in cells:
+        V_cold = 1.0 / rho_cold[i]
+        V = eta(i - k + 0.5) * V_cold
+        e[i] = e_cold[i] + p1 * (V_cold - V) + 0.5 * j2 * (V_cold - V)**2
+        if i != cells[-1]:
+            x[i + 1] = x[i] + V * dm[i]                      # the last cell takes what is left
+    for n in range(cells[0], cells[-1] + 2):
+        if c < eta(n - k) < 1.0:
+            u[n] = u2 * (1.0 - eta(n - k)) / (1.0 - c)
+    zone = slice(cells[0], cells[-1] + 1)
+    rho[zone] = dm[zone] / np.diff(x)[zone]
+    assert np.all(np.diff(x) > 0.0)
+    return rho, e, u, x
 
 
 def _subsonic_heat_wave_cache_key(case: RadHydroCase) -> tuple[float, float, float, float, float, float, float, float, float]:

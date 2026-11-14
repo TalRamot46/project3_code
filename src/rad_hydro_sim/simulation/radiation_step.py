@@ -251,9 +251,15 @@ def conduction_radiation_step(
     rho = state_star.rho
     x_nodes = state_star.x
     geom = rad_hydro_case.geom
-    E_old = state_star.E_rad if state_star.E_rad is not None else a_Kelvin * state_star.T_material**4
-
-    T_old = (E_old / a_Kelvin) ** 0.25
+    if rad_hydro_case.scenario == "full_rad_hydro":
+        # With hydro the matter's energy after the hydro step, e*, is the state: its p dV work
+        # and shock heating are in e*, not in the flux potential carried from the last step.
+        T_old = calculate_temperature_from_specific_energy(
+            state_star.e_material, rho, f_Kelvin, beta_Rosen, mu)
+        E_old = a_Kelvin * T_old**4
+    else:
+        E_old = state_star.E_rad if state_star.E_rad is not None else a_Kelvin * state_star.T_material**4
+        T_old = (E_old / a_Kelvin) ** 0.25
     u_old = _matter_energy_density(T_old, rho)
 
     # With no drive amplitude the inner boundary becomes the symmetry (zero

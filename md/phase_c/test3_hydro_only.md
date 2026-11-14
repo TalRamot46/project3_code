@@ -1,6 +1,6 @@
 # Test 3: the shocked region as a hydro-only problem
 
-Branch `feat/patching-poc`, 2026-11-10. Test 3 is gold with ω = +0.5 under the paper bath, on its fine mesh (1237 cells). Follows [test3_fix_A.md](test3_fix_A.md).
+Branch `feat/patching-poc`, 2026-11-10. Test 3 is gold with ω = +0.5 under the paper bath, on its fine mesh (1237 cells). Follows [test3_fix_A.md](test3_fix_A.md). Continued in [test3_on_the_solver.md](test3_on_the_solver.md), which settles § 4's open question: the rest of the cold start's imprint is the mesh at the start and the two temperatures.
 
 **The question.** The semi-analytic solution assumes that no heat flux crosses the ablation front. The matter beyond it is then pure hydro, driven by the pressure at the front, p_f(t) = p₀ t^(−0.448), and the solver's shock part (`PistonShock`) is exactly that: a pressure applied at m = 0. If the assumption holds, a hydro-only run with the front's pressure (or with the piston's velocity) as its boundary condition must reproduce the shocked region of the rad-hydro runs. If it does not, heat reaches the shocked matter.
 
@@ -101,7 +101,7 @@ Entropy over the solver's at 2 ns:
 
 ## 4a. Entropy
 
-`entropy.png`: p/ρ^γ against mass at 2 ns, its ratio to the solver's, and each element's change between 1 and 2 ns.
+`entropy.png`: the entropy p/ρ^γ against mass at 2 ns with the solver's curve, and each element's change between 1 and 2 ns. (The last row of `ratio_cold.png` and `ratio_seeded.png` is this entropy too; the ratios to the solver's are in `table.md`.)
 
 ![entropy](../../results/phase_c/figures/test3_hydro_only/entropy.png)
 

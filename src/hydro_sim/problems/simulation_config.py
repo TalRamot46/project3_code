@@ -150,6 +150,17 @@ class SimulationConfig:
     # If set (g/cm^2), every cell heavier than this is split into equal-mass cells
     # (planar).  Refines the heavy cells only; the thinnest cells, which set dt, stay.
     max_cell_mass: Optional[float] = None
+    # mesh="log_mass" (planar): the first cell's mass (g/cm^2) and the segments
+    # (growth per cell, largest cell mass, cumulative mass where the segment ends); the last
+    # segment runs to the end of the domain.  max_cell_mass is not used with this mesh.
+    log_mass_first: float = 1e-8
+    log_mass_segments: tuple = ((1.02, 3e-4, float("inf")),)
+    # initial_condition="analytic_ablation": move the start time to the nearest one at which
+    # the solver's shock lies on a cell face (no half-shocked seam cell).
+    seed_shock_on_face: bool = False
+    # ... and seed that shock spread over the artificial viscosity's own shock width instead
+    # of as a sharp jump (iterator._smear_seeded_shock); needs seed_shock_on_face.
+    seed_shock_smeared: bool = False
 
     def with_output_paths(self, case_name: str) -> "SimulationConfig":
         """

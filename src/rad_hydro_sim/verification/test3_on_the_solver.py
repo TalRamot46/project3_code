@@ -63,9 +63,26 @@ RUNS = {
 CHI = {"cold_2T_30K_chi10": 10.0, "cold_2T_30K_chi100": 100.0, "cold_2T_30K_chi1000": 1000.0}
 RUNS.update({name: ("cold", "2T", 30.0) for name in CHI})
 # IMC from the recommended analytic start (smeared shock, 30 K); run with --t-end, it is slow
-IMC = {"seeded_IMC_30K_smeared_seed1": 1, "seeded_IMC_30K_smeared_seed2": 2}
+IMC = {"seeded_IMC_30K_smeared_seed1": 1, "seeded_IMC_30K_smeared_seed2": 2, "seeded_IMC_30K_smeared_seed3": 3}
 RUNS.update({name: ("seeded", "IMC", 30.0) for name in IMC})
-SMEARED = {"seeded_2T_30K_smeared", *IMC}          # the seeded shock spread over the scheme's shock width
+SMEARED = {"seeded_2T_30K_smeared", *IMC}
+# IMC from the cold start on the graded mesh (the counterpart of cold_2T_30K)
+IMC_COLD = {"cold_IMC_30K_seed1": 1, "cold_IMC_30K_seed2": 2, "cold_IMC_30K_seed3": 3}
+RUNS.update({name: ("cold", "IMC", 30.0) for name in IMC_COLD})
+# IMC from the analytic start with 4x the packets (8000 + 8000 per step, census 80 000): do
+# IMC's offsets from the solver (velocity -1%, shock -0.6%) shrink with the packet count?
+IMC_X4 = "seeded_IMC_30K_smeared_x4_seed1"
+RUNS[IMC_X4] = ("seeded", "IMC", 30.0)
+SMEARED.add(IMC_X4)
+# two checks at chi = 100: the analytic start (do the seeding's pulse marks need the two
+# temperatures?) and the cold start on a finer surface mesh (first cell 1e-4 mg/cm^2, 3% growth)
+CHI100_SEEDED = "seeded_2T_30K_smeared_chi100"
+CHI100_FINE = "cold_2T_30K_chi100_fine"
+RUNS.update({CHI100_SEEDED: ("seeded", "2T", 30.0), CHI100_FINE: ("cold", "2T", 30.0)})
+SMEARED.add(CHI100_SEEDED)
+MESH_FINE = (("mesh", "log_mass"), ("log_mass_first", 1e-7),
+             ("log_mass_segments", ((1.03, 2.16e-5, 1.5e-3), (1.003, 3e-4, float("inf")))),
+             ("dt_first_frac", 2.5e-16))          # the seeded shock spread over the scheme's shock width
 RUN_TEXT = {
     "cold_1T_30K": "1T conduction, new mesh, 30 K",
     "cold_1T_300K": "1T conduction, new mesh, 300 K",
@@ -77,6 +94,10 @@ RUN_TEXT = {
 
 
 RUN_TEXT.update({name: f"IMC seed {seed}, new mesh, smeared shock, 30 K" for name, seed in IMC.items()})
+RUN_TEXT.update({name: f"IMC seed {seed}, new mesh, 30 K" for name, seed in IMC_COLD.items()})
+RUN_TEXT[IMC_X4] = "IMC, 4x packets, seed 1, new mesh, smeared shock, 30 K"
+RUN_TEXT[CHI100_SEEDED] = r"2T diffusion, $\chi$ = 100, new mesh, smeared shock, 30 K"
+RUN_TEXT[CHI100_FINE] = r"2T diffusion, $\chi$ = 100, finer surface mesh, 30 K"
 RUN_TEXT.update({name: rf"2T diffusion, $\chi$ = {chi:g}, new mesh, 30 K" for name, chi in CHI.items()})
 
 
@@ -89,8 +110,14 @@ def case_and_config(name: str, t_end: float = 2e-9):
     cfg.update(dict(MESH_SEEDED if start == "seeded" else MESH))
     if name in CHI:
         case = replace(case, chi=CHI[name])
-    if name in IMC:
-        cfg.update(dict(spec.imc), radiation_solver="imc", imc_seed=IMC[name])
+    if name == IMC_X4:
+        cfg.update(radiation_solver="imc", imc_seed=1, imc_n_emission=8000, imc_n_bath=8000, imc_max_census=80000)
+    if name in (CHI100_SEEDED, CHI100_FINE):
+        case = replace(case, chi=100.0)
+    if name == CHI100_FINE:
+        cfg.update(dict(MESH_FINE))
+    if name in IMC or name in IMC_COLD:
+        cfg.update(dict(spec.imc), radiation_solver="imc", imc_seed={**IMC, **IMC_COLD}[name])
     if physics == "1T":
         # the solver's equation: one temperature, T(0, t) = T_s(t) on the surface, no bath
         case = replace(case, force_black="conduction")

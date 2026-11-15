@@ -22,7 +22,8 @@ K_PER_HEV = ivd.K_PER_HEV
 BLUES, INK, ORANGE = hf.BLUES, hf.INK, hf.ORANGE
 GREY = "#9aa0a6"
 COLORS = {"cold_1T_30K": "#c0392b", "cold_1T_300K": "#12305e", "cold_2T_30K": "#2f9e8f",
-          "seeded_2T_30K": "#2f9e8f", "seeded_2T_300K": "#12305e", "seeded_2T_30K_smeared": "#c0392b"}
+          "seeded_2T_30K": "#2f9e8f", "seeded_2T_300K": "#12305e", "seeded_2T_30K_smeared": "#c0392b",
+          t3.CHI100_SEEDED: "#b8860b"}
 # the runs before this work, on the old mesh at 300 K: (file stem, tags, text, colour)
 OLD = {"cold": (("test3_smooth", ["diffusion"], "2T diffusion, old mesh, 300 K", GREY),
                 ("test3_smooth", ["imc1", "imc2", "imc3"], "IMC (3 seeds), old mesh, 300 K", ORANGE)),
@@ -33,7 +34,8 @@ TABLE_MASSES = np.array([2, 3, 5, 8, 12, 20, 30, 50, 100, 150, 200]) * 1e-3
 
 def _new(start):
     return [n for n, (st, _, _) in t3.RUNS.items()
-            if st == start and n not in t3.CHI and n not in t3.IMC and (t3.OUT / f"{n}.npz").exists()]
+            if st == start and n not in t3.CHI and n not in t3.IMC and n not in t3.IMC_COLD and n != t3.CHI100_FINE and n != t3.IMC_X4
+            and (t3.OUT / f"{n}.npz").exists()]
 
 
 def _load(name):
@@ -58,12 +60,13 @@ def _mean_ratios(s, runs, t, m_lo):
 IMC_COLOR = "#8e44ad"
 
 
-def _imc_runs():
-    return [_load(n) for n in t3.IMC if (t3.OUT / f"{n}.npz").exists()]
+def _imc_runs(start="seeded"):
+    names = t3.IMC if start == "seeded" else t3.IMC_COLD
+    return [_load(n) for n in names if (t3.OUT / f"{n}.npz").exists()]
 
 
-def _imc_text():
-    return f"IMC ({len(_imc_runs())} seeds), new mesh, smeared shock, 30 K"
+def _imc_text(start="seeded"):
+    return (f"IMC ({len(_imc_runs(start))} seeds), new mesh, " + ("smeared shock, " if start == "seeded" else "") + "30 K")
 
 
 def _curves(s, start, t):
@@ -73,9 +76,12 @@ def _curves(s, start, t):
     for stem, tags, text, color in OLD[start]:
         mc, r, shock = _mean_ratios(s, [_old(stem, tag) for tag in tags], t, m_lo)
         out.append((mc, r, shock, color, text, 1.0))
-    if start == "seeded" and _imc_runs():
-        mc, r, shock = _mean_ratios(s, _imc_runs(), t, m_lo)
-        out.append((mc, r, shock, IMC_COLOR, _imc_text(), 1.2))
+    if _imc_runs(start):
+        mc, r, shock = _mean_ratios(s, _imc_runs(start), t, m_lo)
+        out.append((mc, r, shock, IMC_COLOR, _imc_text(start), 1.2))
+    if start == "seeded" and (t3.OUT / f"{t3.IMC_X4}.npz").exists():
+        mc, r, shock = _mean_ratios(s, [_load(t3.IMC_X4)], t, m_lo)
+        out.append((mc, r, shock, "#e83e8c", t3.RUN_TEXT[t3.IMC_X4], 1.2))
     for n in _new(start):
         mc, r, shock = _mean_ratios(s, [_load(n)], t, m_lo)
         out.append((mc, r, shock, COLORS[n], t3.RUN_TEXT[n], 1.7))
@@ -96,11 +102,12 @@ def plot_startup(path):
     kappa = h.front_pressure_factor("test3_smooth", ["diffusion"])
     runs.append((old["series_t"][ok], kappa * old["p_abl"][ok], old["m_heat"][ok], old["m_shock"][ok], None,
                  GREY, "2T diffusion, old mesh, 300 K"))
-    for n in _new("cold"):
+    first_imc = [n for n in t3.IMC_COLD if (t3.OUT / f"{n}.npz").exists()][:1]
+    for n in _new("cold") + first_imc:
         r = _load(n)
         ok = np.isfinite(r["p_dense"]) & (r["series_t"] > 0)
         runs.append((r["series_t"][ok], r["p_dense"][ok], r["m_heat"][ok], r["m_shock"][ok], r["T_surface"][ok],
-                     COLORS[n], t3.RUN_TEXT[n]))
+                     COLORS.get(n, IMC_COLOR), t3.RUN_TEXT[n]))
     for t, p, mh, ms, Ts, color, text in runs:
         m_f = np.array([float(hs.ablated_mass(time=x)) for x in t])
         m_s = np.array([float(np.ravel(ps.shocked_mass(time=x))[0]) for x in t])
@@ -253,8 +260,8 @@ def plot_entropy(path):
         entries = []                                       # (runs, colour, text, lw)
         for stem, tags, text, color in OLD[start]:
             entries.append(([_old(stem, tag) for tag in tags], color, text, 1.0))
-        if start == "seeded" and _imc_runs():
-            entries.append((_imc_runs(), IMC_COLOR, _imc_text(), 1.2))
+        if _imc_runs(start):
+            entries.append((_imc_runs(start), IMC_COLOR, _imc_text(start), 1.2))
         for n in _new(start):
             entries.append(([_load(n)], COLORS[n], t3.RUN_TEXT[n], 1.7))
         for runs, color, text, lw in entries:
@@ -307,7 +314,14 @@ def plot_chi(path, t=2e-9):
     m_lo = 1.05 * float(s.heat_solver.ablated_mass(time=t))
     curves = [(f"2T, $\\chi$ = {chi:g}", CHI_COLORS[chi], 1.5, _mean_ratios(s, [_load(n)], t, m_lo)) for chi, n in _chi_runs()]
     one = _mean_ratios(s, [_load("cold_1T_30K")], t, m_lo)
+    n_chi = len(curves)
+    fine = None
+    if (t3.OUT / f"{t3.CHI100_FINE}.npz").exists():
+        fine = _mean_ratios(s, [_load(t3.CHI100_FINE)], t, m_lo)
+        curves.append((r"2T, $\chi$ = 100, finer surface mesh", "#000000", 1.5, fine))
     curves.append(("1T conduction", "#c0392b", 1.5, one))
+    if _imc_runs("cold"):
+        curves.append((f"IMC ({len(_imc_runs('cold'))} seeds)", ORANGE, 1.1, _mean_ratios(s, _imc_runs("cold"), t, m_lo)))
     fig, axes = plt.subplots(2, 2, figsize=(15, 10.5))
     for ax, key, ylabel in ((axes[0, 0], "rho", r"$\rho\,/\,\rho_{\rm solver}$"), (axes[0, 1], "u", r"$u\,/\,u_{\rm solver}$"),
                             (axes[1, 0], "S", r"entropy $P/\rho^\gamma$ [cgs]")):
@@ -317,13 +331,13 @@ def plot_chi(path, t=2e-9):
         else:
             ax.axhline(1.0, color=INK, lw=1.0)
         for text, color, lw, (mc, r, _) in curves:
-            ax.semilogx(mc * 1e3, r[key], color=color, lw=lw, label=text)
+            ax.semilogx(mc * 1e3, r[key], color=color, lw=lw, label=text, ls="--" if "finer" in text else "-")
         ax.set_xlim(1.0, 330.0)
         ax.set_xlabel(r"Lagrangian mass $m$ [mg/cm$^2$]")
         ax.set_ylabel(ylabel)
         hf._style(ax)
-    axes[0, 0].set_ylim(0.9, 1.2)
-    axes[0, 1].set_ylim(0.98, 1.01)
+    axes[0, 0].set_ylim(0.9, 1.3)
+    axes[0, 1].set_ylim(0.975, 1.01)
     axes[0, 1].ticklabel_format(axis="y", useOffset=False)
     axes[1, 0].set_ylim(6e5, 9e6)
     axes[1, 0].legend(frameon=False, fontsize=10, loc="lower right")
@@ -335,7 +349,7 @@ def plot_chi(path, t=2e-9):
     masses = (5e-3, 12e-3, 30e-3, 100e-3)
     shades = ("#6ea8e5", "#2f6fc0", "#12305e", "#000000")
     chis = np.array([chi for chi, _ in _chi_runs()])
-    data = [c[3] for c in curves[:-1]]
+    data = [c[3] for c in curves[:n_chi]]
     for m, color in zip(masses, shades):
         vals = [np.interp(m, mc[np.isfinite(r["A"])], r["A"][np.isfinite(r["A"])]) for mc, r, _ in data]
         ok = np.isfinite(one[1]["A"])
@@ -353,7 +367,7 @@ def plot_chi(path, t=2e-9):
     ax.set_title(r"Convergence in $\chi$", loc="left", fontweight="bold")
     ax.legend(frameon=False, fontsize=9.5, loc="lower right")
     hf._style(ax)
-    fig.suptitle(rf"Test 3: Au ($\omega=+0.5$) · cold start, new mesh, 30 K · 2T diffusion against the coupling factor $\chi$ · {t * 1e9:g} ns",
+    fig.suptitle(rf"Test 3: Au ($\omega=+0.5$) · cold start, new mesh, 30 K · 2T diffusion against the coupling factor $\chi$, 1T and IMC · {t * 1e9:g} ns",
                  x=0.05, ha="left", fontweight="bold", fontsize=14)
     fig.tight_layout(rect=(0, 0, 1, 0.95))
     fig.savefig(path, dpi=140)
@@ -364,6 +378,9 @@ def chi_table(t=2e-9) -> str:
     s = h.solver()
     m_lo = 1.05 * float(s.heat_solver.ablated_mass(time=t))
     rows = [(f"2T, χ = {chi:g}", n) for chi, n in _chi_runs()] + [("1T conduction", "cold_1T_30K")]
+    if (t3.OUT / f"{t3.CHI100_FINE}.npz").exists():
+        rows.insert(-1, ("2T, χ = 100, finer surface mesh", t3.CHI100_FINE))
+    rows += [(t3.RUN_TEXT[n].split(",")[0], n) for n in t3.IMC_COLD if (t3.OUT / f"{n}.npz").exists()]
     lines = [f"**Cold start, new mesh, 30 K, {t * 1e9:g} ns: (p/ρ^γ) / solver's**", "",
              "| m [mg/cm²] | " + " | ".join(f"{m * 1e3:g}" for m in TABLE_MASSES)
              + " | shock mass | heat front mass | velocity (median) | steps | wall [min] |",
@@ -398,7 +415,8 @@ def table(t=2e-9) -> str:
         lines += [f"**{start_text}, {t * 1e9:g} ns: the heat front and the run**", "",
                   "| run | heat front mass / solver's | front pressure (dense side) / solver's | cells | steps | wall [min] |",
                   "|---|---|---|---|---|---|"]
-        for n in _new(start) + [n for n in t3.IMC if start == "seeded" and (t3.OUT / f"{n}.npz").exists()]:
+        extra = [*t3.IMC, t3.IMC_X4] if start == "seeded" else [t3.CHI100_FINE, *t3.IMC_COLD]
+        for n in _new(start) + [n for n in extra if (t3.OUT / f"{n}.npz").exists()]:
             r = _load(n)
             m_f = float(s.heat_solver.ablated_mass(time=t))
             lines.append(f"| {t3.RUN_TEXT[n]} | {r['m_heat'][-1] / m_f:.3f} | {r['p_dense'][-1] / (p0 * t**c3):.3f} | "
@@ -421,7 +439,7 @@ def all_figures():
     t3.FIGURES.mkdir(parents=True, exist_ok=True)
     plot_startup(t3.FIGURES / "startup.png")
     for name in t3.RUNS:
-        if name in t3.IMC and name != next(iter(t3.IMC)):
+        if name in (*t3.IMC, *t3.IMC_COLD) and not name.endswith("seed1"):
             continue                                   # one IMC seed's profiles
         if (t3.OUT / f"{name}.npz").exists():
             plot_profiles(name, t3.FIGURES / f"profiles_{name}.png")

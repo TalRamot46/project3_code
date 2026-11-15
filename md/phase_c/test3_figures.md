@@ -24,11 +24,21 @@ In the comparison figures, grey and orange are the runs before this work (2T dif
 
 ![2T 30 K, shocked region](../../results/phase_c/figures/test3_on_the_solver/profiles_cold_2T_30K.png)
 
-## 2. The 2T code against the coupling factor χ
+## 2. The 2T code against the coupling factor χ, the 1T mode and IMC
 
-Cold start, new mesh, 30 K, χ = 1, 10, 100, 1000, with the 1T run and the solver, at 2 ns. Numbers: [chi_table.md](../../results/phase_c/figures/test3_on_the_solver/chi_table.md).
+Cold start, new mesh, 30 K: χ = 1, 10, 100, 1000, χ = 100 on the finer surface mesh (dashed), the 1T run, IMC (3 seeds) and the solver, at 2 ns. Numbers: [chi_table.md](../../results/phase_c/figures/test3_on_the_solver/chi_table.md).
 
 ![chi](../../results/phase_c/figures/test3_on_the_solver/chi_convergence.png)
+
+**The closest run: 2T at χ = 100 on the finer surface mesh.**
+
+![chi 100 fine, shocked region](../../results/phase_c/figures/test3_on_the_solver/profiles_cold_2T_30K_chi100_fine.png)
+
+![chi 100 fine, full domain](../../results/phase_c/figures/test3_on_the_solver/full_cold_2T_30K_chi100_fine.png)
+
+**IMC from the cold start (seed 1).**
+
+![IMC cold, shocked region](../../results/phase_c/figures/test3_on_the_solver/profiles_cold_IMC_30K_seed1.png)
 
 ## 3. The first picoseconds
 
@@ -47,6 +57,10 @@ Front pressure, heat front mass and shock mass over the solver's against time, a
 ![2T smeared 30 K, shocked region](../../results/phase_c/figures/test3_on_the_solver/profiles_seeded_2T_30K_smeared.png)
 
 ![2T smeared 30 K, full domain](../../results/phase_c/figures/test3_on_the_solver/full_seeded_2T_30K_smeared.png)
+
+**2T at χ = 100, smeared shock, 30 K.**
+
+![2T chi 100 smeared](../../results/phase_c/figures/test3_on_the_solver/profiles_seeded_2T_30K_smeared_chi100.png)
 
 **IMC (seed 1), smeared shock, 30 K.**
 
@@ -70,7 +84,7 @@ At 2 ns against the solver's, and each element's change between 1 and 2 ns.
 uv run python -m rad_hydro_sim.verification.test3_on_the_solver --slider <run>
 ```
 
-`<run>`: `cold_1T_30K`, `cold_1T_300K`, `cold_2T_30K`, `cold_2T_30K_chi10`, `cold_2T_30K_chi100`, `cold_2T_30K_chi1000`, `seeded_2T_30K_smeared`, `seeded_2T_30K`, `seeded_2T_300K`, `seeded_IMC_30K_smeared_seed1`, `seeded_IMC_30K_smeared_seed2`. Whole profile on fixed axes, 220 frames. Keys: `f` fits the y ranges to the mass window in view, `x` and `y` switch log / linear, arrows step one frame.
+`<run>`: `cold_1T_30K`, `cold_1T_300K`, `cold_2T_30K`, `cold_2T_30K_chi10`, `cold_2T_30K_chi100`, `cold_2T_30K_chi1000`, `cold_2T_30K_chi100_fine`, `cold_IMC_30K_seed1` … `seed3`, `seeded_2T_30K_smeared`, `seeded_2T_30K_smeared_chi100`, `seeded_2T_30K`, `seeded_2T_300K`, `seeded_IMC_30K_smeared_seed1` … `seed3`, `seeded_IMC_30K_smeared_x4_seed1`. Whole profile on fixed axes, 220 frames. Keys: `f` fits the y ranges to the mass window in view, `x` and `y` switch log / linear, arrows step one frame.
 
 ## 7. Earlier stage: the shocked region as a hydro-only problem
 

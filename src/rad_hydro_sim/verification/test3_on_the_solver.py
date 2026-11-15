@@ -153,6 +153,15 @@ def run(name: str, t_end: float = 2e-9, rerun: bool = False):
         return
     OUT.mkdir(parents=True, exist_ok=True)
     case, cfg = case_and_config(name, t_end)
+    simulate_and_save(path, case, cfg, energy_tracked=RUNS[name][1] != "1T")
+
+
+def simulate_and_save(path, case, cfg, energy_tracked: bool = True):
+    """Run one case and store its snapshots, front series and slider frames in path (.npz)."""
+    from hydro_sim.problems.simulation_config import SimulationConfig
+    from rad_hydro_sim.simulation.iterator import simulate_rad_hydro
+
+    t_end = case.t_sec_end
     wall = time.time()
     _, _, meta, hist = simulate_rad_hydro(case, SimulationConfig(**cfg))
     wall = time.time() - wall
@@ -171,7 +180,7 @@ def run(name: str, t_end: float = 2e-9, rerun: bool = False):
     frames = {f"frames_{key}": getattr(hist, attr)[fr].astype(np.float32)
               for key, attr in (("rho", "rho"), ("p", "p"), ("u", "u"), ("T", "T_material"))}
     b = meta["energy_budget"]
-    err = float(np.max(np.abs(b["relative_error"]))) if RUNS[name][1] != "1T" else np.nan
+    err = float(np.max(np.abs(b["relative_error"]))) if energy_tracked else np.nan
     np.savez(path, t=hist.t[idx], m=hist.m[idx], x=hist.x[idx], rho=hist.rho[idx], p=hist.p[idx],
              u=hist.u[idx], T_material=hist.T_material[idx], T_rad=hist.T[idx],
              series_t=hist.t, m_heat=front[:, 0], p_dense=front[:, 1], m_shock=np.array(shock),

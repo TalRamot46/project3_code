@@ -97,3 +97,13 @@ Hydro only (no radiation), driven by the heat front's pressure or the solver's p
 ![the drives](../../results/phase_c/figures/test3_hydro_only/drives.png)
 
 Each hydro-only run's profiles: `results/phase_c/figures/test3_hydro_only/profiles_<start>_<drive>.png`.
+
+## 8. The cold start against the density exponent ω
+
+ω = 0.5 down to 0.05, IMC (3 seeds) and 2T diffusion (χ = 1), at 1 ns: [test3_omega_scan.md](test3_omega_scan.md).
+
+![entropy over the solver's, all omega](../../results/phase_c/figures/test3_omega_scan/convergence.png)
+
+![the ablated layer against time](../../results/phase_c/figures/test3_omega_scan/layer.png)
+
+![entropy against the solver's, per omega](../../results/phase_c/figures/test3_omega_scan/entropy_by_omega.png)

@@ -3,8 +3,8 @@ import sys
 import os
 
 # Extract bath_temperature_derivation
-bath_path = r'c:\Users\TLP-001\Documents\GitHub\project3_docs\fitting\bath_temperature_derivation (1).pdf'
-sub_path = r'c:\Users\TLP-001\Documents\GitHub\project3_docs\fitting\sub (2).pdf'
+bath_path = r'c:\Users\TLP-001\Documents\GitHub\project3_docs\fitting\references\bath_temperature_derivation.pdf'
+sub_path = r'c:\Users\TLP-001\Documents\GitHub\project3_docs\fitting\references\subsonic_heat_wave_sub.pdf'
 
 out_dir = r'c:\Users\TLP-001\Documents\GitHub\project3_code\scratch'
 

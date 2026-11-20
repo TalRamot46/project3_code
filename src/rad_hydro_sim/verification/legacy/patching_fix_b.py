@@ -1,4 +1,4 @@
-"""LEGACY (numerical): fix B of md/phase_c/why_the_solver_differs.md Sec. 3.3.
+"""LEGACY (numerical): fix B of md/misalignment/02_patching.md Sec. 5.
 
 Not an analytic benchmark: every curve here involves ``menahem_new.legacy.moving_front_shock``,
 a 1-D hydro integration of the target.  Kept to reproduce md/phase_c/legacy/patching_poc_fix_B.md

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python tests/hello_world.py)",
+      "PowerShell(python tests/hello_world.py)"
+    ]
+  }
+}

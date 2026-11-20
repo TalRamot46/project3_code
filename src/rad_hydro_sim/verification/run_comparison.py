@@ -780,7 +780,7 @@ def run_full_rad_hydro_comparison(
         sim_data = load_rad_hydro_history(history_rh, label="Simulation")
         print(f"Stored {len(sim_data.times)} time steps.")
 
-        # save the sim_data to rad_hydro_sim/data/
+        # save the sim_data to results/rad_hydro_sim/runs/
         # sim_npz = get_rad_hydro_npz_path(case_title, prefix="sim_data")
         # np.savez(
         #     str(sim_npz),

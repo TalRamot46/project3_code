@@ -1,6 +1,6 @@
 # Fixes B and C to the patching: what they do, what they assume, and why neither is a consistent improvement
 
-Extends `../why_the_solver_differs.md` §3 (the cut) and §3.3 (the suggested fixes). Both fixes are legacy: B is not analytic, and C is not consistently better. This page explains why, at the level of the equations and the code. Results tables: `patching_poc_fix_B.md`, `analytic_patching_impulse.md`.
+Extends `../../misalignment/02_patching.md` §§ 2 and 5. Both fixes are legacy: B is not analytic, and C is not consistently better. This page explains why, at the level of the equations and the code. Results tables: `patching_poc_fix_B.md`, `analytic_patching_impulse.md`.
 
 **In one paragraph.** Both fixes answer one question: what pressure does the shocked target feel at an ablation front that moves *through* the matter? Equivalently, how much momentum leaves the target with the matter that the front swallows. The original patch answers implicitly: the swallowed matter rides on with the front (a *massive* front). Fix B answers explicitly. It solves the target numerically for a chosen answer, and with the simulation's own front history it reproduces the simulated shock to 0.3–1.8%, which proves the target side. Fix C answers in closed form with the other extreme: every swallowed element keeps the velocity it had when it was swallowed (a *massless* front). The simulations sit between the two. Measured as the momentum the target carries beyond the cut, the fraction θ of the way from massless (θ = 0) to massive (θ = 1) is 1.15 at ω = 0, 0.49 at ω = −0.25, 0.37 at ω = −0.5 and 0.29 at ω = −0.75. No patch that fixes θ can be right across ω, and C adds approximations of its own on top.
 
@@ -20,7 +20,7 @@ where p_b is the pressure on the target at the front and u_f the velocity of the
 
   Π_T(t) = ∫₀ᵗ p_b dt′ − ∫₀ᵗ ṁ_f u_f dt′.                       (2)
 
-The heat solution provides p_f(t), the pressure at its own front, and m_f(t). It doesn't say what p_b is, because it has no notion of the front moving: its front is a rigid wall (ũ = ṽ = 0 at ξ_f, `why_the_solver_differs.md` §1). So equation (1) needs a **closure**, a statement of how the ablated layer reacts to the front's motion.
+The heat solution provides p_f(t), the pressure at its own front, and m_f(t). It doesn't say what p_b is, because it has no notion of the front moving: its front is a rigid wall (ũ = ṽ = 0 at ξ_f, `../../misalignment/02_patching.md` § 1). So equation (1) needs a **closure**, a statement of how the ablated layer reacts to the front's motion.
 
 ### 1.2 The two closures
 
@@ -44,7 +44,7 @@ So the gap between the closures is the time integral of the inertial pressure m_
 
   Π_T(original) = ∫₀ᵗ p_f dt′ − ∫₀^{m_f} u_PS dm,                  (4)
 
-and the slab's momentum ∫₀^{m_f} u_PS dm ≈ m_f u_f(t). That is the massive closure's budget, to the extent the slab moves uniformly. The 20% pressure jump at the cut in Test 4 (`why_the_solver_differs.md` §3.1b) is the slab's deceleration, the term m_f|a_f|. The patch was never a mass-bookkeeping error: it assumes the ablated layer decelerates with the front.
+and the slab's momentum ∫₀^{m_f} u_PS dm ≈ m_f u_f(t). That is the massive closure's budget, to the extent the slab moves uniformly. The 20% pressure jump at the cut in Test 4 (`../../misalignment/02_patching.md` § 2) is the slab's deceleration, the term m_f|a_f|. The patch was never a mass-bookkeeping error: it assumes the ablated layer decelerates with the front.
 
 ---
 

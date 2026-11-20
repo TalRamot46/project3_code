@@ -115,7 +115,7 @@ HYDRO_CASES = {
     # when the ablated layer spans ~14 surface cells, instead of a cold target at t = 0: until
     # ~0.6 ps the layer is thinner than one surface cell, and the overdriven early shock leaves
     # the matter it crosses (m < ~30 mg/cm^2) with 1.3-4x the solver's entropy for the rest of
-    # the run (md/phase_c/test3_analytic_start.md).  On the default mesh and on the fine mesh.
+    # the run (md/misalignment/04_analytic_start.md).  On the default mesh and on the fine mesh.
     "test3_analytic": HydroCase("CONSTANT_TEMPERATURE_OMEGA_0_5_FULL",
                                 r"Test 3 (Au, $\omega=+0.5$), analytic start at 0.1 ns", N=25,
                                 store_every=2000, log_mass_axis=True,
@@ -490,7 +490,7 @@ BATH_CORRECTION_DIR = REPO / "src" / "rad_hydro_sim" / "data" / "bath_correction
 
 def calibrate_bath(label: str, target: str = "temperature", iterations: int = 6, tol: float = 2e-3,
                    t_min_ns: float = 0.2, N=None) -> Path:
-    """Option (a) of md/phase_c/why_the_solver_differs.md: a bath correction c(t) for one case.
+    """Option (a) of md/misalignment/01_surface_equilibrium.md section 1: a bath correction c(t) for one case.
 
     The manuscript's bath T_bath(t) follows from the Marshak relation assuming radiation and
     matter are in equilibrium at the surface.  Where they are not (thin ablated plasma), no bath
@@ -868,7 +868,7 @@ def plot_hydro_profiles(out: Path, label: str, seeds, path: Path, solver=None, p
     md/phase_c/legacy/patching_poc_fix_B.md).  ``log_axis``: overrides the case's log_mass_axis.
 
     The layout of results/ictt/const_T/dimensional_verification/const_T_fully_patched_comparison.png
-    (src/ictt29/full_fitting.py): a 2x2 grid against mass in mg/cm^2; diffusion per time on an
+    (src/fitting/legacy_ictt29/full_fitting.py): a 2x2 grid against mass in mg/cm^2; diffusion per time on an
     ordered light-to-dark blue ramp; the semi-analytic AblationSolver in ink on a dense mass grid;
     IMC (mean of the seeds) solid orange at every time; on the linear full-domain view, zoom
     insets on the ablation layer (velocity) and on the shocked region (temperature).  One title

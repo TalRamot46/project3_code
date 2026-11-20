@@ -168,7 +168,7 @@ uv run pytest tests/imc tests/test_phase_b_diffusion.py
 
 ## 6. Phase C½ additions (Tests 3–6; plan Addendum B)
 
-Everything below is opt-in as well; the defaults are the Phase C code. Results: `md/phase_c/phase_c_tests3to6_results.md`. Why the semi-analytic solution differs: `md/phase_c/why_the_solver_differs.md`.
+Everything below is opt-in as well; the defaults are the Phase C code. Results: `md/phase_c/phase_c_tests3to6_results.md`. Why the semi-analytic solution differs: `md/misalignment/README.md`.
 
 | # | Where | What | Switch (default = Phase C) |
 |---|---|---|---|
@@ -185,7 +185,7 @@ Everything below is opt-in as well; the defaults are the Phase C code. Results: 
 - `target="temperature"` (`bath_drive="calibrated"`) matches the matter's surface temperature to T_s(t);
 - `target="flux"` (`bath_drive="calibrated_flux"`) matches the net energy flux into the slab to the solution's s(0, t) = 2σ_SB T_b⁴ B t^(4τ+p).
 
-Why there are two targets, and why the flux is the right one for copper and aluminum, is in `why_the_solver_differs.md` §2.
+Why there are two targets, and why the flux is the right one for copper and aluminum, is in `../misalignment/01_surface_equilibrium.md` § 1.
 
 Bugs found and fixed on the way:
 - The table reader was cached by path alone, so successive iterations, which rewrite one file, kept reading the first table. It is now cached by path and modification time (`test_bath_table_is_reread_after_a_rewrite`).

@@ -1,4 +1,4 @@
-"""LEGACY (numerical): fix B of md/phase_c/why_the_solver_differs.md Sec. 3.3.
+"""LEGACY (numerical): fix B of md/misalignment/02_patching.md Sec. 5.
 
 Not an analytic model.  ``MovingFrontShock.run`` integrates the Lagrangian Euler equations
 of the target in (m, t) (a 1-D hydro simulation), so a curve built on it is a hybrid of the

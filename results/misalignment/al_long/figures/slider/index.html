@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Al ablation to 50 ns</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<style>
+:root {
+  /* layout: a control bar, a front readout, then a 3 x 2 grid of profile panels */
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #1b1f27; --muted: #5d6675; --rule: #d9dde4; --accent: #2a78d6;
+  --display: "IBM Plex Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #14171c; --panel: #1b1f26; --ink: #e8ebf0; --muted: #9aa3b2; --rule: #2e343e; --accent: #5598e7; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #14171c; --panel: #1b1f26; --ink: #e8ebf0; --muted: #9aa3b2; --rule: #2e343e; --accent: #5598e7; color-scheme: dark; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--display); }
+main { max-width: 1500px; margin: 0 auto; padding: 18px 20px 28px; display: flex; flex-direction: column; gap: 14px; }
+h1 { font-size: 1.25rem; font-weight: 600; margin: 0; text-wrap: balance; }
+.sub { color: var(--muted); font-size: 0.9rem; margin: 2px 0 0; max-width: 95ch; line-height: 1.45; }
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 10px 14px; }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: transparent; color: var(--ink); font: 500 0.85rem var(--display); padding: 6px 12px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+button.ctl { border: 1px solid var(--rule); background: var(--panel); color: var(--ink); border-radius: 6px; font: 500 0.85rem var(--display); padding: 6px 10px; cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#time { flex: 1 1 320px; accent-color: var(--accent); }
+.tval { font: 500 0.95rem var(--mono); font-variant-numeric: tabular-nums; min-width: 9ch; }
+.fronts { display: flex; flex-wrap: wrap; gap: 8px; font-size: 0.82rem; }
+.chip { border: 1px solid var(--rule); border-radius: 999px; padding: 3px 10px; background: var(--panel); font-variant-numeric: tabular-nums; }
+.chip b { font-weight: 600; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.cell { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; height: 330px; }
+@media (max-width: 1100px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+#status { color: var(--muted); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Al (Test 6) to 50 ns: solver, 2T diffusion (χ = 1 and 1000) and IMC</h1>
+    <p class="sub">30 K target, paper bath. Cold start from t = 0, or the solver's profile seeded at 2 ns, the first time Al's coupling t/t<sub>eq</sub> on the solver's own profile (≈ 7.5) matches gold's at its working seed (0.1 ns). Lagrangian mass on the horizontal axis, axes fixed over all frames. Click a legend entry to hide a curve; drag to zoom, double-click to reset.</p>
+  </header>
+  <div class="bar" role="group" aria-label="Controls">
+    <div class="seg" role="group" aria-label="Start">
+      <button id="st-cold" aria-pressed="true">Cold start</button>
+      <button id="st-seeded" aria-pressed="false">Seeded at 2 ns</button>
+    </div>
+    <button class="ctl" id="play" aria-label="Play">▶ Play</button>
+    <button class="ctl" id="prev" aria-label="Previous frame">◀</button>
+    <input type="range" id="time" min="0" max="0" value="0" aria-label="Time frame">
+    <button class="ctl" id="next" aria-label="Next frame">▶</button>
+    <span class="tval" id="tval">–</span>
+    <button class="ctl" id="xscale">Mass axis: log</button>
+    <span id="status">Loading data…</span>
+  </div>
+  <div class="fronts" id="fronts" aria-live="polite"></div>
+  <div class="grid">
+    <div class="cell" id="p-rho"></div>
+    <div class="cell" id="p-p"></div>
+    <div class="cell" id="p-u"></div>
+    <div class="cell" id="p-T"></div>
+    <div class="cell" id="p-A"></div>
+    <div class="cell" id="p-eq"></div>
+  </div>
+</main>
+<script>
+const RUNS = [
+  {key: "solver", name: "Solver", color: null, dash: "solid", width: 2.2},
+  {key: "2T", name: "2T diffusion, χ = 1", color: "#2a78d6", dash: "solid", width: 1.6},
+  {key: "chi1000", name: "2T diffusion, χ = 1000", color: "#eb6834", dash: "solid", width: 1.6},
+  {key: "imc", name: "IMC, mean of seeds", color: "#1baf7a", dash: "solid", width: 1.6},
+];
+const PANELS = [
+  {id: "p-rho", qty: "rho", title: "Density ρ [g/cm³]", log: true, conv: v => v},
+  {id: "p-p", qty: "p", title: "Pressure P [Mbar]", log: true, conv: v => v - 12},
+  {id: "p-u", qty: "u", title: "Velocity u [km/s]", log: false, conv: v => v},
+  {id: "p-T", qty: "T", title: "Temperature [HeV]: matter (solid), radiation (dotted)", log: true, conv: v => v - Math.log10(1.16045e6)},
+  {id: "p-A", qty: "A", title: "Entropy P/ρ^γ over the solver's (shocked matter)", log: false, ratio: true},
+  {id: "p-eq", qty: "eq", title: "T_matter / T_rad (where T_rad > 0.01 HeV)", log: false},
+];
+let D = {grid: null, gamma: 1.3, times: {}, data: {}, fronts: {}}, start = "cold", frame = 0, timer = null, xlog = true;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+function decode(b64) {
+  const bin = atob(b64), buf = new ArrayBuffer(bin.length), u8 = new Uint8Array(buf);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return new Float32Array(buf);
+}
+function row(start, run, qty, k) {
+  const a = D.data[start + "|" + run + "|" + qty];
+  if (!a) return null;
+  const n = D.grid.length;
+  return a.subarray(k * n, (k + 1) * n);
+}
+function series(start, run, qty, k) {
+  const n = D.grid.length, out = new Array(n).fill(null);
+  const P = PANELS.find(p => p.qty === qty);
+  if (qty === "eq") {
+    const T = row(start, run, "T", k), R = row(start, run, "Trad", k);
+    if (!T) return null;
+    const lim = Math.log10(0.01 * 1.16045e6);   // only where the radiation is above 0.01 HeV (the hot plasma)
+    for (let i = 0; i < n; i++) if (isFinite(T[i]) && isFinite(R[i]) && R[i] > lim) out[i] = Math.pow(10, T[i] - R[i]);
+    return out;
+  }
+  if (qty === "A") {
+    const A = row(start, run, "A", k), S = row(start, "solver", "A", k);
+    if (!A) return null;
+    const mf = D.times[start].mf_mg[k], ms = D.times[start].ms_mg[k];
+    for (let i = 0; i < n; i++) {
+      const m = D.grid[i];
+      if (m > 1.5 * mf && m < 0.97 * ms && isFinite(A[i]) && isFinite(S[i])) out[i] = Math.pow(10, A[i] - S[i]);
+    }
+    return out;
+  }
+  const r = row(start, run, qty, k);
+  if (!r) return null;
+  for (let i = 0; i < n; i++) if (isFinite(r[i])) out[i] = P.log ? Math.pow(10, P.conv(r[i])) : r[i];
+  return out;
+}
+function tracesFor(P, k) {
+  const tr = [];
+  for (const R of RUNS) {
+    if (P.ratio && R.key === "solver") continue;
+    if (P.qty === "eq" && R.key === "solver") continue;
+    const y = series(start, R.key, P.qty, k);
+    if (!y) continue;
+    const color = R.color || css("--ink");
+    tr.push({x: D.grid, y, name: R.name, legendgroup: R.key, showlegend: P.id === "p-rho" || (P.id === "p-A" && false),
+             mode: "lines", line: {color, width: R.width, dash: R.dash}, hovertemplate: "%{y:.4g}<extra>" + R.name + "</extra>"});
+    if (P.qty === "T" && R.key !== "solver") {
+      const yr = series(start, R.key, "Trad", k);
+      if (yr) tr.push({x: D.grid, y: yr.map((v, i) => v), name: R.name + " (radiation)", legendgroup: R.key, showlegend: false,
+                       mode: "lines", line: {color, width: 1.1, dash: "dot"}, hovertemplate: "%{y:.4g}<extra>radiation</extra>"});
+    }
+  }
+  return tr;
+}
+// Trad series uses the T panel's conversion
+const _series = series;
+series = function (start, run, qty, k) {
+  if (qty === "Trad") {
+    const r = row(start, run, "Trad", k);
+    if (!r) return null;
+    return Array.from(r, v => isFinite(v) ? Math.pow(10, v - Math.log10(1.16045e6)) : null);
+  }
+  return _series(start, run, qty, k);
+};
+let ranges = {};
+function computeRanges() {
+  ranges = {};
+  for (const P of PANELS) {
+    let lo = Infinity, hi = -Infinity;
+    for (const st of ["cold", "seeded"]) {
+      const nt = D.times[st].t_ns.length;
+      for (let k = 0; k < nt; k += 2) for (const R of RUNS) {
+        for (const q of (P.qty === "T" ? ["T", "Trad"] : [P.qty])) {
+          if ((P.ratio || P.qty === "eq") && R.key === "solver") continue;
+          const y = series(st, R.key, q, k);
+          if (!y) continue;
+          for (const v of y) if (v !== null && isFinite(v) && (!P.log || v > 0)) { if (v < lo) lo = v; if (v > hi) hi = v; }
+        }
+      }
+    }
+    if (P.ratio) { lo = Math.max(lo, 0.7); hi = Math.min(hi, 1.3); }
+    if (P.qty === "eq") { lo = Math.max(lo, 0.3); hi = Math.min(Math.max(hi, 1.05), 1.3); }
+    if (P.qty === "T") { lo = Math.max(lo, 1e-5); }
+    if (P.log) ranges[P.id] = [Math.log10(lo) - 0.1, Math.log10(hi) + 0.1];
+    else { const pad = 0.05 * (hi - lo); ranges[P.id] = [lo - pad, hi + pad]; }
+  }
+}
+function layout(P) {
+  const ink = css("--ink"), muted = css("--muted"), rule = css("--rule");
+  return {
+    title: {text: P.title, font: {size: 12.5, color: ink, family: "IBM Plex Sans, system-ui, sans-serif"}, x: 0.02, xanchor: "left"},
+    margin: {l: 58, r: 12, t: 34, b: 42}, paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+    font: {family: "IBM Plex Sans, system-ui, sans-serif", color: muted, size: 11},
+    xaxis: {type: xlog ? "log" : "linear", title: {text: "m [mg/cm²]", font: {size: 11}}, gridcolor: rule, zeroline: false,
+            range: xlog ? [-2, Math.log10(190)] : [0, 190], linecolor: rule},
+    yaxis: {type: P.log ? "log" : "linear", range: ranges[P.id], gridcolor: rule, zeroline: false, linecolor: rule, exponentformat: "power"},
+    legend: {orientation: "h", y: -0.22, font: {size: 10.5}},
+    showlegend: P.id === "p-rho",
+    shapes: (P.ratio || P.qty === "eq") ? [{type: "line", xref: "paper", x0: 0, x1: 1, y0: 1, y1: 1, line: {color: muted, width: 1, dash: "dot"}}] : [],
+    uirevision: "keep-" + (xlog ? "log" : "lin"),
+  };
+}
+function draw(first) {
+  const k = frame;
+  for (const P of PANELS) {
+    const tr = tracesFor(P, k);
+    if (first) Plotly.newPlot(P.id, tr, layout(P), {displaylogo: false, responsive: true, modeBarButtonsToRemove: ["lasso2d", "select2d"]});
+    else Plotly.react(P.id, tr, layout(P));
+  }
+  const t = D.times[start].t_ns[k];
+  document.getElementById("tval").textContent = (t < 1 ? t.toFixed(3) : t.toFixed(2)) + " ns";
+  const box = document.getElementById("fronts");
+  box.innerHTML = "";
+  const head = document.createElement("span");
+  head.className = "chip";
+  head.innerHTML = "<b>Fronts over the solver's</b> (heat / shock)";
+  box.appendChild(head);
+  for (const R of RUNS.slice(1)) {
+    const f = D.fronts[start + "|" + R.key];
+    if (!f) continue;
+    const c = document.createElement("span");
+    c.className = "chip";
+    c.innerHTML = `<span class="sw" style="background:${R.color}"></span>${R.name}: <b>${f[k][0].toFixed(3)}</b> / <b>${f[k][1].toFixed(3)}</b>`;
+    box.appendChild(c);
+  }
+}
+function setStart(s) {
+  const t = D.times[start].t_ns[frame];
+  start = s;
+  document.getElementById("st-cold").setAttribute("aria-pressed", s === "cold");
+  document.getElementById("st-seeded").setAttribute("aria-pressed", s === "seeded");
+  const tt = D.times[s].t_ns;
+  let best = 0;
+  for (let i = 0; i < tt.length; i++) if (Math.abs(Math.log(tt[i] / t)) < Math.abs(Math.log(tt[best] / t))) best = i;
+  frame = best;
+  const sl = document.getElementById("time");
+  sl.max = tt.length - 1; sl.value = frame;
+  draw(false);
+}
+function step(d) {
+  const n = D.times[start].t_ns.length;
+  frame = Math.max(0, Math.min(n - 1, frame + d));
+  document.getElementById("time").value = frame;
+  draw(false);
+}
+function togglePlay() {
+  const b = document.getElementById("play");
+  if (timer) { clearInterval(timer); timer = null; b.textContent = "▶ Play"; return; }
+  if (frame >= D.times[start].t_ns.length - 1) frame = 0;
+  b.textContent = "❚❚ Pause";
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  timer = setInterval(() => {
+    if (frame >= D.times[start].t_ns.length - 1) { togglePlay(); return; }
+    step(1);
+  }, reduce ? 600 : 160);
+}
+fetch("slider_data.json").then(r => r.json()).then(recs => {
+  for (const r of recs) {
+    if (r.kind === "grid") { D.grid = r.m_mg; D.gamma = r.gamma; }
+    else if (r.kind === "times") D.times[r.start] = r;
+    else if (r.kind === "data") D.data[r.start + "|" + r.run + "|" + r.qty] = decode(r.b64);
+    else if (r.kind === "fronts") D.fronts[r.start + "|" + r.run] = r.rows;
+  }
+  computeRanges();
+  const sl = document.getElementById("time");
+  sl.max = D.times.cold.t_ns.length - 1;
+  frame = D.times.cold.t_ns.length - 1; sl.value = frame;
+  document.getElementById("status").textContent = "";
+  draw(true);
+  sl.addEventListener("input", e => { frame = +e.target.value; draw(false); });
+  document.getElementById("st-cold").onclick = () => setStart("cold");
+  document.getElementById("st-seeded").onclick = () => setStart("seeded");
+  document.getElementById("play").onclick = togglePlay;
+  document.getElementById("prev").onclick = () => step(-1);
+  document.getElementById("next").onclick = () => step(1);
+  document.getElementById("xscale").onclick = e => { xlog = !xlog; e.target.textContent = "Mass axis: " + (xlog ? "log" : "linear"); draw(false); };
+  document.addEventListener("keydown", e => {
+    if (e.target.tagName === "INPUT" && e.target.type !== "range") return;
+    if (e.key === "ArrowRight") { step(1); e.preventDefault(); }
+    if (e.key === "ArrowLeft") { step(-1); e.preventDefault(); }
+  });
+}).catch(err => { document.getElementById("status").textContent = "Could not load slider_data.json: " + err; });
+</script>
+</body>
+</html>

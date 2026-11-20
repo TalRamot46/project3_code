@@ -62,7 +62,7 @@ def initialize_problem(case: RadHydroCase, config: SimulationConfig) -> RadHydro
             refine_by_mass=case.has_ablation_surface,
         )
     elif mesh == "log_mass":
-        # A self-similar mesh for a self-similar start (md/phase_c/test3_on_the_solver.md): the
+        # A self-similar mesh for a self-similar start (md/misalignment/03_startup.md): the
         # cell mass grows by a fixed factor per cell from a very thin first cell, dm ~ (g - 1) m.
         # The ablated layer of the solution has no scale at t -> 0, so on a mesh with equal
         # surface cells it is thinner than one cell at first and the early shock is overdriven;
@@ -281,7 +281,7 @@ def _seed_ablation_profile(case: RadHydroCase, x_nodes: np.ndarray, rho_cold: np
     pressure goes as t^c3 with c3 < 0, and so does the bath), and while the ablated layer
     is thinner than a surface cell no mesh can follow it: the first cell is heated as a
     block, the early shock is overdriven, and the entropy it leaves is carried with the
-    mass for the rest of the run (md/phase_c/test3_analytic_start.md).  Seeding at a t0
+    mass for the rest of the run (md/misalignment/04_analytic_start.md).  Seeding at a t0
     where the layer spans many cells skips that start.
 
     The mesh keeps its cells' masses (the nodes of the cold mesh, in mass).  The nodes behind

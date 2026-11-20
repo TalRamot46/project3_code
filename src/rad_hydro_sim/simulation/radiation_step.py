@@ -426,6 +426,10 @@ def calculate_abcd(
     elif bc_type == "Dirichlet":
         E_left = a_Kelvin * (T_left ** 4)
         d[0] -= a[0] * E_left
+    elif bc_type == "reflective":
+        # zero radiation flux through the left face (md/phase_c/test3_transparency.md, task 2)
+        b[0] += a[0]
+        a[0] = 0.0
 
     if right_rad_bc == "marshak_vacuum":
         # Remove the ghost-cell leak and impose the vacuum Marshak flux c E / 2.
@@ -662,6 +666,7 @@ def radiation_step(
         return new_T, new_e, new_T, new_e, np.zeros_like(new_e), 0.0
 
     if mode == "conduction":
+        # for the instantaneous conduction-only update, we don't need to solve the full radiation-matter coupling; we just perform a conduction step and update the material energy accordingly.
         new_E, new_T = conduction_radiation_step(state_star, dt, rad_hydro_case)
         new_e_material = f_Kelvin * new_T**beta_Rosen * rho**(-mu)
         return new_T, new_e_material, new_T, new_E, np.zeros_like(new_E), 0.0

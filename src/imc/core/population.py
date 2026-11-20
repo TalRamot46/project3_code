@@ -27,7 +27,7 @@ def comb(census: Particles, max_packets: int) -> Particles:
         return Particles.empty()
     spacing = total / max_packets
     teeth = spacing * (np.arange(max_packets) + np.random.random(max_packets))
-    idx = np.searchsorted(np.cumsum(census.w), teeth, side="right")
+    idx = np.searchsorted(np.cumsum(census.w), teeth, side="right") #TODO: Understand how this function works a little bit.
     idx = np.minimum(idx, n - 1)
     return Particles(
         census.x[idx], census.mu[idx], np.full(max_packets, spacing),

@@ -28,7 +28,7 @@ class ProblemType(str, Enum):
 
 def get_results_dir() -> Path:
     """Base directory for simulation outputs (figures, data). All runs write under results/."""
-    root = Path(__file__).resolve().parent.parent.parent
+    root = Path(__file__).resolve().parents[3]  # repo root (parents[2] is src/: it wrote to src/results)
     out = root / "results"
     out.mkdir(parents=True, exist_ok=True)
     return out

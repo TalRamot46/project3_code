@@ -2,7 +2,8 @@
 """
 Central paths for rad_hydro_sim outputs.
 
-- NPZ and other simulation data: rad_hydro_sim/data/
+- NPZ and other simulation data: results/rad_hydro_sim/runs/ (untracked)
+  (rad_hydro_sim/data/ holds only inputs: the bath-correction tables)
 - Figures (PNG, GIF): results/rad_hydro_sim/figures/ (png and gif subdirs)
 """
 from __future__ import annotations
@@ -17,8 +18,8 @@ def get_rad_hydro_root() -> Path:
 
 
 def get_rad_hydro_data_dir() -> Path:
-    """Directory for NPZ and other simulation data (inside rad_hydro_sim)."""
-    data_dir = get_rad_hydro_root() / "data"
+    """Directory for NPZ and other simulation data: results/rad_hydro_sim/runs (was rad_hydro_sim/data until 2026-11-20)."""
+    data_dir = get_rad_hydro_results_dir() / "runs"
     data_dir.mkdir(parents=True, exist_ok=True)
     return data_dir
 
@@ -90,7 +91,7 @@ def make_rad_hydro_output_paths(case_name: str) -> Tuple[Path, Path]:
 
 
 def get_rad_hydro_npz_path(base_name: str, prefix: str = "sim_data") -> Path:
-    """Full path for an NPZ file in rad_hydro_sim/data. E.g. prefix='sim_data', base_name='fig_10' -> data/sim_data_fig_10.npz."""
+    """Full path for an NPZ file in results/rad_hydro_sim/runs. E.g. prefix='sim_data', base_name='fig_10' -> runs/sim_data_fig_10.npz."""
     safe = sanitize_filename(base_name)
     return get_rad_hydro_data_dir() / f"{prefix}_{safe}.npz"
 

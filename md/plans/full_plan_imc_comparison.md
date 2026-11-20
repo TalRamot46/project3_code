@@ -59,7 +59,7 @@
 ## Phase A: foundations
 
 > **Status (2026-10-18): Phase A code milestones done** (M0, M1, M2, M2a). The Learn exercises are still yours (the A1–A4 ↔ Wollaber map, etc.).
-> - **Code:** `src/imc/core/{material,mesh,particles,sources,transport,population,tallies,stepper}.py` (see `md/imc_code/imc_core.md`); drivers `src/imc/problems/{sio2,linear_step,zero_d}.py` (see `md/imc_code/imc_problem_*.md`); tests `tests/imc/` (27 tests, 1 marked slow; `uv run pytest tests/imc`).
+> - **Code:** `src/imc/core/{material,mesh,particles,sources,transport,population,tallies,stepper}.py` (see `md/imc_code/imc_core.md`); SiO₂ in `src/imc/sio2/` (see `md/imc_code/imc_problem_sio2.md`); drivers `src/imc/problems/{linear_step,zero_d}.py`; tests `tests/imc/` (27 tests, 1 marked slow; `uv run pytest tests/imc`).
 > - **M0:** the packaged SiO₂ run gives breakout 1.47 ns, peak 0.957 ± 0.013 (frozen: 1.47, 0.954), energy error 1.4×10⁻¹³, and per-cell ledger 1.1×10⁻¹². Against S_N: mean bias −0.04%, rms 0.3% after 1.5 ns. The "known issue" below was a stale file: re-running the frozen script gives 5.3×10⁻¹⁴. The energy error of 80 came from `sio2_1mm_gray_imc_check.npz`, written before the `np.full(1, THETA0)` fix.
 > - **M1:** census energy agrees with S_N cell by cell for σΔx ∈ {0.1, 1, 10}. Deposition is compared on sums over adjacent cell pairs, because S_N's diamond difference oscillates odd–even when σΔx ≳ 1. At σΔx = 10 the comparison is limited to cells 5–89: the boundary layers are 0.1 cell thick, and S_N's spatial error there isn't estimable on its fixed grid.
 > - **M2:** every step matches Wollaber Eq. 120 within noise (p = 3, 5). Fig. 2 is reproduced (0.90 → 1.034 → 0.990 → 1.003 → 0.999), and so is ρ = −0.2868.
@@ -308,14 +308,14 @@ You asked for this after Phase C and before Phase D, as the most important step 
   - Copper has only 4 ablated cells at N = 100 on its 0.1 g/cm² domain, so it needs N ~ 1000.
   - Aluminum's ablated layer contains cells with τ ≈ 0.05 (N = 100 diffusion), the first case where diffusion is expected to differ from transport.
 
-> **Status of Addendum B (2026-11-03): Phase C½ done** (`md/phase_c/phase_c_tests3to6_results.md`, `md/phase_c/why_the_solver_differs.md`).
+> **Status of Addendum B (2026-11-03): Phase C½ done** (`md/phase_c/phase_c_tests3to6_results.md`, `md/misalignment/README.md`).
 > - **IMC vs. diffusion:** they agree in all six tests, in the order of the hot plasma's optical depth: Au (𝒯 = 8–10) ≤ 2.3%, Cu (3.2) ≤ 4.2%, Al (2.3) ≤ 5.3%.
 > - **The semi-analytic solution:**
 >   - It agrees within ~3% in Tests 1–3.
 >   - In Cu and Al it assumes a surface in equilibrium, which the runs contradict (T_rad/T_mat = 1.05–1.07). With the bath calibrated to its energy flux (`bath_drive="calibrated_flux"`), diffusion lies within ~4% of it.
 >   - In Test 4 (ω = −0.5) its rigid-front patching costs 6–14%. The hydro code reproduces the solver's own piston shock to 0.1%, so the codes are not the cause.
 > - **New options:** `mesh="uniform_mass"` (Test 4); `bath_drive` = `"paper"` (option c, default) / `"calibrated"` / `"calibrated_flux"` (option a).
-> - **Open, for you and Menahem:** the patching fix for ω < 0 (`why_the_solver_differs.md` §3.3), and the manuscript's wording on the LTE limit for Cu and Al.
+> - **Open, for you and Menahem:** the patching fix for ω < 0 (`md/misalignment/02_patching.md` § 5), and the manuscript's wording on the LTE limit for Cu and Al.
 
 ---
 

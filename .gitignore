@@ -40,14 +40,13 @@ Thumbs.db
 !/results/README.md
 !/results/phase_b/**
 !/results/phase_c/**
+!/results/misalignment/*/figures/**
+!/results/misalignment/README.md
 !/results/imc_code/**
 !/results/hydro_sim/png/**
 !/results/hydro_sim_verification/png/**
 !/results/rad_hydro_sim/figures/png/**
 !/results/steinberg_comparison/**
-project3_code/results/
-!project3_code/results/.gitkeep
-!project3_code/results/README.md
 
 # Large binary outputs (prevent accidental commits of generated data)
 *.npz
@@ -57,3 +56,10 @@ project3_code/results/
 # Misc
 # ==============================================================================
 *.log
+
+# LaTeX build artifacts
+*.aux
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+*.synctex(busy)

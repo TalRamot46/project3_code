@@ -46,7 +46,7 @@ class PowerLawMaterial:
             )
 
     @classmethod
-    def from_case(cls, case, subtract_radiation: bool = False, T_floor: float = 1.0):
+    def from_case(cls, case, subtract_radiation: bool = False, T_floor: float = 1.0): #TODO: Understand if it's just a constructor function.
         """CGS material (K, g/cm^3, erg/cm^3, cm/s) from a rad_hydro_sim RadHydroCase.
 
         Uses the same c and a as rad_hydro_sim.simulation.radiation_step, so the
@@ -115,7 +115,7 @@ class PowerLawMaterial:
         """Fleck & Cummings beta = du_r/du_m."""
         return 4.0 * self.a * self._T(T) ** 3 / self.du_m_dT(T, rho)
 
-    def fleck(self, T, rho, dt, fleck_mode: str = "implicit"):
+    def fleck(self, T, rho, dt, fleck_mode: str = "implicit"): #TODO: Understand where this function is used.
         if fleck_mode == "explicit":
             return np.ones_like(np.asarray(T, dtype=float))
         if fleck_mode != "implicit":

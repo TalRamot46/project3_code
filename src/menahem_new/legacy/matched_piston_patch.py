@@ -6,7 +6,7 @@ current reference is the original AblationSolver (md/phase_c/bath_calibration.md
 
 ``AblationSolver`` patches two self-similar solutions: the heat wave with a rigid
 ablation front (u = 0 at m_f) and ``PistonShock``, a piston at m = 0 pushing with the
-ablation pressure p_f(t) and cut at m_f (md/phase_c/why_the_solver_differs.md, Sec. 3).
+ablation pressure p_f(t) and cut at m_f (md/misalignment/02_patching.md).
 In that construction the slab 0 < m < m_f decelerates with the piston and adds ~m_f|du/dt|
 to the pressure the target feels: to first order it is a "massive" ablation front.
 

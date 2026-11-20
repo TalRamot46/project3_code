@@ -20,7 +20,7 @@ class Particles:
     cell: np.ndarray
 
     @classmethod
-    def empty(cls, n: int = 0) -> "Particles":
+    def empty(cls, n: int = 0) -> Particles:
         return cls(
             np.empty(n), np.empty(n), np.empty(n), np.empty(n), np.empty(n, dtype=np.int64)
         )
@@ -36,7 +36,7 @@ class Particles:
         return np.bincount(self.cell, weights=self.w, minlength=n_cells)[:n_cells]
 
     @staticmethod
-    def concatenate(parts) -> "Particles":
+    def concatenate(parts: list[Particles]) -> Particles:
         parts = [p for p in parts if p.size > 0]
         if not parts:
             return Particles.empty()

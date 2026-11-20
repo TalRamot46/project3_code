@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Phase C Profile Figures</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: a quiet lab-report column of full-width figures, a sticky rail of tests on wide screens, a scrolling chip row on phones */
+  :root {
+    --bg: #f7f8f9;
+    --surface: #ffffff;
+    --fg: #1c2026;
+    --muted: #5b626c;
+    --line: #dde1e6;
+    --accent: #256abf;
+    --figure-bg: #ffffff;      /* the figures are white PNGs in both themes */
+    --diff-1: #6da7ec; --diff-2: #256abf; --diff-3: #0d366b; --imc: #eb6834; --analytic: #1f1f1d;
+    --display: "Newsreader", "Iowan Old Style", Georgia, serif;
+    --body: "Public Sans", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #13161a; --surface: #1a1e23; --fg: #e6e8eb; --muted: #a1a8b1; --line: #2b3138; --accent: #86b4ef;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #13161a; --surface: #1a1e23; --fg: #e6e8eb; --muted: #a1a8b1; --line: #2b3138; --accent: #86b4ef;
+    color-scheme: dark;
+  }
+
+  body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.6; }
+  .page {
+    display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 48px;
+    max-width: 1340px; margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 40px 72px;
+  }
+  nav.rail { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; }
+  nav.rail .label { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  nav.rail ol { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 2px; }
+  nav.rail a { display: grid; grid-template-columns: 52px 1fr; gap: 8px; padding: 6px 10px; border-radius: 6px; color: var(--fg); text-decoration: none; font-size: 14px; }
+  nav.rail a span:first-child { font-family: var(--mono); font-size: 12px; color: var(--muted); padding-top: 2px; }
+  nav.rail a:hover, nav.rail a:focus-visible { background: var(--surface); outline: none; box-shadow: inset 0 0 0 1px var(--line); }
+  nav.rail ol.sub { margin: 0 0 4px 60px; gap: 0; }
+  nav.rail ol.sub a { grid-template-columns: 1fr; padding: 2px 10px; font-size: 13px; color: var(--muted); }
+
+  main { min-width: 0; max-width: 1080px; }
+  header .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+  h1 { font-family: var(--display); font-weight: 600; font-size: clamp(30px, 4vw, 42px); line-height: 1.12; margin: 8px 0 14px; text-wrap: balance; }
+  h2 { font-family: var(--display); font-weight: 600; font-size: 28px; line-height: 1.2; margin: 0; text-wrap: balance; }
+  h3 { font-family: var(--body); font-weight: 600; font-size: 13px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  p { margin: 0; max-width: 68ch; }
+  .lede { color: var(--muted); font-size: 16px; }
+  a { color: var(--accent); }
+  code { font-family: var(--mono); font-size: .88em; }
+
+  .intro { display: grid; gap: 28px; margin-bottom: 56px; }
+  .key {
+    display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: center;
+    background: var(--figure-bg); border: 1px solid var(--line); border-radius: 8px; padding: 14px 18px;
+    color: #1f1f1d; font-size: 14px;
+  }
+  .key .item { display: flex; align-items: center; gap: 10px; }
+  .key svg { flex: none; }
+  .key .note { color: #5b626c; font-size: 13px; }
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-family: var(--mono); font-weight: 500; font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+  tr:last-child td { border-bottom: 0; }
+  td:first-child { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .defs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+  .defs dl { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; font-size: 14px; }
+  .defs dt { font-family: var(--mono); font-size: 13px; color: var(--accent); padding-top: 1px; }
+  .defs dd { margin: 0; color: var(--fg); }
+  .defs .title { grid-column: 1 / -1; }
+  .aside { color: var(--muted); font-size: 14px; }
+
+  section.test { display: grid; gap: 22px; padding-top: 40px; margin-top: 16px; border-top: 1px solid var(--line); scroll-margin-top: 16px; }
+  .test-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
+  .test-head .meta { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .group { display: grid; gap: 18px; scroll-margin-top: 16px; }
+  /* Blocks: Tests 3-4 show each region's four scales as a 2x2 block, Tests 5-6 their two baths side by side */
+  .block { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 16px; align-items: start; }
+  figure { margin: 0; display: grid; gap: 8px; }
+  figure button {
+    display: block; width: 100%; padding: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden;
+    background: var(--figure-bg); cursor: zoom-in;
+  }
+  figure button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  figure img { display: block; width: 100%; height: auto; max-width: 100%; aspect-ratio: 2800 / 1920; }
+  figcaption { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; color: var(--muted); }
+  figcaption .scale { font-family: var(--mono); font-size: 12px; color: var(--fg); }
+
+  footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+
+  .viewer[hidden] { display: none !important; }
+  .viewer {
+    position: fixed; inset: 0; z-index: 20; background: rgba(10, 12, 15, .92);
+    display: grid; grid-template-rows: auto minmax(0, 1fr);
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) max(12px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 12px) max(12px, env(safe-area-inset-left, 0px));
+  }
+  .viewer .bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: #e6e8eb; font-size: 13px; padding-bottom: 8px; }
+  .viewer .bar button { font: inherit; color: #e6e8eb; background: transparent; border: 1px solid #5b626c; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+  .viewer .bar button:focus-visible { outline: 2px solid #86b4ef; outline-offset: 2px; }
+  .viewer .stage { overflow: auto; min-height: 0; }
+  .viewer .stage img { display: block; max-width: none; width: 2800px; background: #ffffff; }
+  .viewer.fit .stage img { width: 100%; max-width: 100%; }
+
+  @media (max-width: 960px) {
+    .page { grid-template-columns: minmax(0, 1fr); gap: 20px; padding-block: 20px 56px; }
+    nav.rail { position: static; }
+    nav.rail ol { display: flex; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
+    nav.rail ol.sub { display: none; }
+    nav.rail a { grid-template-columns: auto; white-space: nowrap; border: 1px solid var(--line); background: var(--surface); }
+    nav.rail a span:last-child { display: none; }
+    nav.rail a span:first-child { color: var(--fg); padding: 0; }
+    .defs { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 720px) {
+    .block { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+
+  /* Print / PDF: light theme, no rail or viewer, the blocks as on screen, no figure split across pages */
+  @page { size: A4; margin: 12mm; }
+  @media print {
+    html:root, html:root:not([data-theme="light"]), html:root[data-theme="dark"] {
+      --bg: #ffffff; --surface: #ffffff; --fg: #1c2026; --muted: #5b626c; --line: #dde1e6; --accent: #256abf;
+      color-scheme: light;
+    }
+    body { font-size: 10.5pt; }
+    nav.rail, .viewer { display: none !important; }
+    .page { display: block; max-width: none; padding: 0; }
+    main { max-width: none; }
+    .intro { margin-bottom: 20px; }
+    .defs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .block { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    section.test { padding-top: 18px; }
+    .group, figure, .table-wrap, .key, .defs dl { break-inside: avoid; }
+    .test-head, .group h3 { break-after: avoid; }
+    #test-1, #test-2, #test-5, #test-6 { break-inside: avoid; }   /* each fits on a page: keep its heading with it */
+  }
+</style>
+<style>html, body { margin: 0 } img { max-width: 100% }</style>
+</head>
+<body>
+
+
+<div class="page">
+  <nav class="rail" aria-label="Tests">
+    <div class="label">Tests</div>
+    <ol>
+      <li><a href="#test-1"><span>Test 1</span><span>Au, const T<sub>s</sub></span></a></li>
+      <li><a href="#test-2"><span>Test 2</span><span>Au, const F<sub>s</sub></span></a></li>
+      <li><a href="#test-3"><span>Test 3</span><span>Au, ω = +0.5</span></a></li>
+      <li><ol class="sub">
+        <li><a href="#test-3-full">full domain</a></li>
+        <li><a href="#test-3-heat">heat region</a></li>
+        <li><a href="#test-3-shock">shocked region</a></li>
+      </ol></li>
+      <li><a href="#test-4"><span>Test 4</span><span>Au, ω = −0.5</span></a></li>
+      <li><ol class="sub">
+        <li><a href="#test-4-full">full domain</a></li>
+        <li><a href="#test-4-heat">heat region</a></li>
+        <li><a href="#test-4-shock">shocked region</a></li>
+      </ol></li>
+      <li><a href="#test-5"><span>Test 5</span><span>Cu</span></a></li>
+      <li><a href="#test-6"><span>Test 6</span><span>Al</span></a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="intro">
+      <div>
+        <div class="eyebrow">Phase C · subsonic ablation · IMC vs diffusion vs semi-analytic</div>
+        <h1>Profile figures: the six paper tests</h1>
+        <p class="lede">Density, pressure, velocity and temperature against Lagrangian mass at 1, 1.5 and 2 ns, for diffusion and IMC simulations of the radiation-driven ablation against the semi-analytic <code>AblationSolver</code>. Each figure's title names the test, the region, the bath and the axes.</p>
+        <p class="aside">7 November 2026: fine-mesh figures. Tests 1, 2 and 6 use 1000 cells, Tests 4 and 5 use 2500, and Test 3 uses its fine mesh; the change from the default mesh is in bath_calibration.md, Addendum 2026-11-07.</p>
+      </div>
+
+      <div class="key" aria-label="Line key">
+        <span class="item">
+          <svg width="66" height="12" viewBox="0 0 66 12" aria-hidden="true"><line x1="0" y1="6" x2="18" y2="6" stroke="var(--diff-1)" stroke-width="3"/><line x1="24" y1="6" x2="42" y2="6" stroke="var(--diff-2)" stroke-width="3"/><line x1="48" y1="6" x2="66" y2="6" stroke="var(--diff-3)" stroke-width="3"/></svg>
+          Diffusion at 1.0, 1.5, 2.0 ns
+        </span>
+        <span class="item">
+          <svg width="22" height="12" viewBox="0 0 22 12" aria-hidden="true"><line x1="0" y1="6" x2="22" y2="6" stroke="var(--imc)" stroke-width="3"/></svg>
+          IMC, mean of 3 seeds
+        </span>
+        <span class="item">
+          <svg width="22" height="12" viewBox="0 0 22 12" aria-hidden="true"><line x1="0" y1="6" x2="22" y2="6" stroke="var(--analytic)" stroke-width="3"/></svg>
+          Semi-analytic solution
+        </span>
+        <span class="note">The analytic curve leaves out the patch sliver at the ablation front (≤ 0.5% of m<sub>f</sub>).</span>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Test</th><th>Material and drive</th><th>Bath</th><th>Views</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>Au, constant T<sub>s</sub></td><td>paper</td><td>full domain, linear</td></tr>
+            <tr><td>2</td><td>Au, constant F<sub>s</sub></td><td>paper</td><td>full domain, linear</td></tr>
+            <tr><td>3</td><td>Au, ω = +0.5</td><td>paper</td><td>full domain, heat region, shocked region; each linear, semi-log (log mass), semi-log (log fields), log-log</td></tr>
+            <tr><td>4</td><td>Au, ω = −0.5</td><td>paper</td><td>as Test 3</td></tr>
+            <tr><td>5</td><td>Cu</td><td>paper and flux-calibrated</td><td>full domain, linear</td></tr>
+            <tr><td>6</td><td>Al</td><td>paper and flux-calibrated</td><td>full domain, linear</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="defs">
+        <dl>
+          <dt class="title"><h3>Regions</h3></dt>
+          <dt>full</dt><dd>the whole domain</dd>
+          <dt>heat</dt><dd>the surface to 1.3 m<sub>f</sub>: the ablated layer</dd>
+          <dt>shock</dt><dd>0.85 m<sub>f</sub> to 1.1 m<sub>s</sub> (Test 3: from 1.05 m<sub>f</sub>, past its thin ablated layer); y limits from the shocked matter alone</dd>
+        </dl>
+        <dl>
+          <dt class="title"><h3>Scales</h3></dt>
+          <dt>linear</dt><dd>linear mass, linear fields</dd>
+          <dt>semilogx</dt><dd>log mass, linear fields</dd>
+          <dt>semilogy</dt><dd>linear mass, log ρ, p and T</dd>
+          <dt>loglog</dt><dd>log mass, log ρ, p and T</dd>
+        </dl>
+      </div>
+    </header>
+
+    <section class="test" id="test-1">
+      <div class="test-head"><h2>Test 1: gold, constant surface temperature</h2><span class="meta">paper bath</span></div>
+      <figure>
+        <button type="button" data-full="../../results/phase_c/figures/paper_bath/test1_full_profiles.png" aria-label="Enlarge: Test 1, paper bath, full domain, linear"><img src="../../results/phase_c/figures/paper_bath/test1_full_profiles.png" alt="Test 1, paper bath: density, pressure, velocity and temperature against mass, full domain, linear axes" loading="lazy" width="2800" height="1920"></button>
+        <figcaption><span>Full domain</span><span class="scale">linear</span></figcaption>
+      </figure>
+    </section>
+
+    <section class="test" id="test-2">
+      <div class="test-head"><h2>Test 2: gold, constant surface flux</h2><span class="meta">paper bath</span></div>
+      <figure>
+        <button type="button" data-full="../../results/phase_c/figures/paper_bath/test2_full_profiles.png" aria-label="Enlarge: Test 2, paper bath, full domain, linear"><img src="../../results/phase_c/figures/paper_bath/test2_full_profiles.png" alt="Test 2, paper bath: density, pressure, velocity and temperature against mass, full domain, linear axes" loading="lazy" width="2800" height="1920"></button>
+        <figcaption><span>Full domain</span><span class="scale">linear</span></figcaption>
+      </figure>
+    </section>
+
+    <section class="test" id="test-3" data-views="test3_full" data-name="Test 3">
+      <div class="test-head"><h2>Test 3: gold, ω = +0.5</h2><span class="meta">paper bath · 12 views</span></div>
+    </section>
+
+    <section class="test" id="test-4" data-views="test4_full" data-name="Test 4">
+      <div class="test-head"><h2>Test 4: gold, ω = −0.5</h2><span class="meta">paper bath · 12 views</span></div>
+    </section>
+
+    <section class="test" id="test-5">
+      <div class="test-head"><h2>Test 5: copper</h2><span class="meta">paper and flux-calibrated bath</span></div>
+      <div class="block">
+      <figure>
+        <button type="button" data-full="../../results/phase_c/figures/paper_bath/test5_full_profiles.png" aria-label="Enlarge: Test 5, paper bath"><img src="../../results/phase_c/figures/paper_bath/test5_full_profiles.png" alt="Test 5, paper bath: profiles against mass, full domain, linear axes" loading="lazy" width="2800" height="1920"></button>
+        <figcaption><span>Paper bath · full domain</span><span class="scale">linear</span></figcaption>
+      </figure>
+      <figure>
+        <button type="button" data-full="../../results/phase_c/figures/calibrated_flux_bath/test5_full_profiles.png" aria-label="Enlarge: Test 5, flux-calibrated bath"><img src="../../results/phase_c/figures/calibrated_flux_bath/test5_full_profiles.png" alt="Test 5, flux-calibrated bath: profiles against mass, full domain, linear axes" loading="lazy" width="2800" height="1920"></button>
+        <figcaption><span>Flux-calibrated bath · full domain</span><span class="scale">linear</span></figcaption>
+      </figure>
+      </div>
+    </section>
+
+    <section class="test" id="test-6">
+      <div class="test-head"><h2>Test 6: aluminium</h2><span class="meta">paper and flux-calibrated bath</span></div>
+      <div class="block">
+      <figure>
+        <button type="button" data-full="../../results/phase_c/figures/paper_bath/test6_full_profiles.png" aria-label="Enlarge: Test 6, paper bath"><img src="../../results/phase_c/figures/paper_bath/test6_full_profiles.png" alt="Test 6, paper bath: profiles against mass, full domain, linear axes" loading="lazy" width="2800" height="1920"></button>
+        <figcaption><span>Paper bath · full domain</span><span class="scale">linear</span></figcaption>
+      </figure>
+      <figure>
+        <button type="button" data-full="../../results/phase_c/figures/calibrated_flux_bath/test6_full_profiles.png" aria-label="Enlarge: Test 6, flux-calibrated bath"><img src="../../results/phase_c/figures/calibrated_flux_bath/test6_full_profiles.png" alt="Test 6, flux-calibrated bath: profiles against mass, full domain, linear axes" loading="lazy" width="2800" height="1920"></button>
+        <figcaption><span>Flux-calibrated bath · full domain</span><span class="scale">linear</span></figcaption>
+      </figure>
+      </div>
+    </section>
+
+    <footer>Rendered from <code>md/phase_c/profile_figures.md</code>; the figures are those of <code>results/phase_c/figures/</code>, drawn by <code>rad_hydro_sim.verification.bath_calibration</code>.</footer>
+  </main>
+</div>
+
+<div class="viewer fit" id="viewer" hidden role="dialog" aria-modal="true" aria-label="Figure at full size">
+  <div class="bar">
+    <span id="viewer-title"></span>
+    <span>
+      <button type="button" id="viewer-zoom">Full resolution</button>
+      <button type="button" id="viewer-close">Close</button>
+    </span>
+  </div>
+  <div class="stage"><img id="viewer-img" alt=""></div>
+</div>
+
+<script>
+  // Tests 3 and 4: the twelve views, grouped by region
+  const REGIONS = [["full", "Full domain"], ["heat", "Heat region"], ["shock", "Shocked region"]];
+  const SCALES = [["linear", "linear"], ["semilogx", "semi-log (log mass)"], ["semilogy", "semi-log (log fields)"], ["loglog", "log-log"]];
+  document.querySelectorAll("section[data-views]").forEach((section) => {
+    const dir = section.dataset.views, name = section.dataset.name;
+    for (const [region, regionText] of REGIONS) {
+      const group = document.createElement("div");
+      group.className = "group";
+      group.id = section.id + "-" + region;
+      group.innerHTML = "<h3>" + regionText + "</h3>";
+      const block = document.createElement("div");      // the region's four scales, 2x2
+      block.className = "block";
+      for (const [scale, scaleText] of SCALES) {
+        const src = "../../results/phase_c/figures/paper_bath/" + dir + "/" + region + "_" + scale + ".png";
+        const label = name + ", paper bath, " + regionText.toLowerCase() + ", " + scaleText;
+        const fig = document.createElement("figure");
+        fig.innerHTML = '<button type="button" data-full="' + src + '" aria-label="Enlarge: ' + label + '">' +
+          '<img src="' + src + '" alt="' + label + '" loading="lazy" width="2800" height="1920"></button>' +
+          '<figcaption><span>' + regionText + '</span><span class="scale">' + scaleText + '</span></figcaption>';
+        block.appendChild(fig);
+      }
+      group.appendChild(block);
+      section.appendChild(group);
+    }
+  });
+
+  // Click a figure: view it over the page, fitted or at full resolution
+  const viewer = document.getElementById("viewer"), vImg = document.getElementById("viewer-img");
+  const vTitle = document.getElementById("viewer-title"), zoom = document.getElementById("viewer-zoom");
+  let opener = null;
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-full]");
+    if (!b) return;
+    opener = b;
+    vImg.src = b.dataset.full;
+    vImg.alt = b.getAttribute("aria-label").replace("Enlarge: ", "");
+    vTitle.textContent = vImg.alt;
+    viewer.classList.add("fit");
+    zoom.textContent = "Full resolution";
+    viewer.hidden = false;
+    document.getElementById("viewer-close").focus();
+  });
+  zoom.addEventListener("click", () => {
+    const fit = viewer.classList.toggle("fit");
+    zoom.textContent = fit ? "Full resolution" : "Fit to screen";
+  });
+  function closeViewer() { viewer.hidden = true; vImg.removeAttribute("src"); if (opener) opener.focus(); }
+  document.getElementById("viewer-close").addEventListener("click", closeViewer);
+  viewer.addEventListener("click", (e) => { if (e.target === viewer || e.target.classList.contains("stage")) closeViewer(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !viewer.hidden) closeViewer(); });
+</script>
+
+</body>
+</html>

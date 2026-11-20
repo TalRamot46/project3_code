@@ -9,7 +9,7 @@ _REPO_PARENT = _REPO_ROOT.parent
 sys.path.insert(0, str(_REPO_PARENT))
 sys.path.insert(0, str(_REPO_ROOT))
 sys.path.insert(0, str(_REPO_ROOT / "menahem_new"))
-sys.path.insert(0, str(_REPO_ROOT / "ictt29"))
+sys.path.insert(0, str(_REPO_ROOT / "fitting" / "core"))
 
 from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
 from project3_code.rad_hydro_sim.problems.presets_config import (

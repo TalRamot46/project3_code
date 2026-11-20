@@ -118,3 +118,4 @@ def seed_all(value: int):
     """Seed numpy's generator and numba's (they are separate)."""
     np.random.seed(value)
     transport.seed(value)
+

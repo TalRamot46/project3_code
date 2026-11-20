@@ -5,7 +5,7 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO_ROOT.parent))
 sys.path.insert(0, str(_REPO_ROOT))
-sys.path.insert(0, str(_REPO_ROOT / "ictt29"))
+sys.path.insert(0, str(_REPO_ROOT / "fitting" / "core"))
 sys.path.insert(0, str(_REPO_ROOT / "menahem_new"))
 
 from project3_code.rad_hydro_sim.problems.presets_utils import get_preset
